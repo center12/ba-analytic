@@ -34,6 +34,7 @@ model Feature {
   screenshots           Screenshot[]
   testCases             TestCase[]
   chatSessions          ChatSession[]
+  developerTasks        DeveloperTask[]
 }
 
 model BADocument {
@@ -105,4 +106,20 @@ enum TestCaseStatus {
 enum ChatMessageRole {
   USER
   ASSISTANT
+}
+
+enum DevTaskCategory {
+  API
+  FRONTEND
+  TESTING
+}
+
+model DeveloperTask {
+  id        String          @id @default(cuid())
+  featureId String
+  category  DevTaskCategory
+  title     String
+  prompt    String          @db.Text
+  createdAt DateTime        @default(now())
+  feature   Feature         @relation(fields: [featureId], references: [id], onDelete: Cascade)
 }

@@ -5,6 +5,7 @@ import { StorageModule } from './modules/storage/storage.module';
 import { AIModule } from './modules/ai/ai.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { TestCaseModule } from './modules/test-case/test-case.module';
+import { DevTaskModule } from './modules/dev-task/dev-task.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { TestCaseModule } from './modules/test-case/test-case.module';
     AIModule,
     ChatModule,
     TestCaseModule,
+    DevTaskModule,
   ],
 })
 export class AppModule {}

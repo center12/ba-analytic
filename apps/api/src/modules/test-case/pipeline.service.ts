@@ -104,6 +104,16 @@ export class PipelineService {
       },
     });
 
+    // Persist DeveloperTask records (replace any previously generated ones)
+    await this.prisma.developerTask.deleteMany({ where: { featureId } });
+    await this.prisma.developerTask.createMany({
+      data: [
+        { featureId, category: 'API',      title: `${feature.name} — API Implementation`,      prompt: devPrompt.api },
+        { featureId, category: 'FRONTEND', title: `${feature.name} — Frontend Implementation`, prompt: devPrompt.frontend },
+        { featureId, category: 'TESTING',  title: `${feature.name} — Test Automation`,          prompt: devPrompt.testing },
+      ],
+    });
+
     this.logger.log(`[Pipeline] Done — ${created.length} test cases created`);
 
     return {

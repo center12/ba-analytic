@@ -7,6 +7,7 @@ import { ChatSidebar } from '@/features/chat/ChatSidebar';
 import { ModelSelector } from '@/features/ai/ModelSelector';
 import { PipelinePanel } from './PipelinePanel';
 import { DevPromptPanel } from './DevPromptPanel';
+import { DeveloperTaskPanel } from '@/features/dev-task/DeveloperTaskPanel';
 import { useAppStore } from '@/store';
 import { useRef, useEffect, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
@@ -37,6 +38,7 @@ export function FeatureDetailPage() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['test-cases', featureId] });
       qc.invalidateQueries({ queryKey: ['features', featureId] });
+      qc.invalidateQueries({ queryKey: ['dev-tasks', featureId] });
       toast({
         variant: 'success',
         title: 'Test cases generated',
@@ -190,6 +192,9 @@ export function FeatureDetailPage() {
           testing={feature.devPromptTesting}
         />
       )}
+
+      {/* Developer tasks panel */}
+      <DeveloperTaskPanel featureId={featureId!} />
 
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">

@@ -100,6 +100,11 @@ export const api = {
   ai: {
     getProviders: () => request<AIProviderInfo[]>('/ai/providers'),
   },
+
+  devTasks: {
+    list: (featureId: string) => request<DeveloperTask[]>(`/dev-tasks/feature/${featureId}`),
+    remove: (id: string) => fetch(`${BASE_URL}/dev-tasks/${id}`, { method: 'DELETE' }),
+  },
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -197,6 +202,17 @@ export interface ChatSession {
   title: string;
   createdAt: string;
   _count?: { messages: number };
+}
+
+export type DevTaskCategory = 'API' | 'FRONTEND' | 'TESTING';
+
+export interface DeveloperTask {
+  id: string;
+  featureId: string;
+  category: DevTaskCategory;
+  title: string;
+  prompt: string;
+  createdAt: string;
 }
 
 export interface ChatMessage {
