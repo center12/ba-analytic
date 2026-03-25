@@ -7,6 +7,7 @@ import {
   AIProvider,
   buildDevPromptInput,
   ChatHistoryItem,
+  CombinedExtraction,
   DevPrompt,
   ExtractedBehaviors,
   ExtractedRequirements,
@@ -68,20 +69,107 @@ export class ClaudeProvider extends AIProvider {
     this.modelVersion = config.get<string>('CLAUDE_MODEL', 'claude-sonnet-4-6');
   }
 
-  // ── Layer 1: Requirements Extractor (cached — document is large & reusable) ──
+  private logRateLimit(label: string, headers?: Record<string, string>) {
+    if (!headers) return;
+    const limit     = headers['x-ratelimit-limit-requests']     ?? headers['ratelimit-limit']     ?? '-';
+    const remaining = headers['x-ratelimit-remaining-requests'] ?? headers['ratelimit-remaining'] ?? '-';
+    const reset     = headers['x-ratelimit-reset-requests']     ?? headers['ratelimit-reset']     ?? '-';
+    this.logger.log(`${label} rate-limit — limit: ${limit}, remaining: ${remaining}, reset: ${reset}`);
+  }
 
-  async extractRequirements(baDocumentContent: string): Promise<ExtractedRequirements> {
-    this.logger.log('[Layer 1] Extracting requirements...');
-    const { object } = await generateObject({
+  private logPromptSize(label: string, text: string) {
+    this.logger.log(`${label} prompt — chars: ${text.length}, ~tokens: ${Math.ceil(text.length / 4)}`);
+  }
+
+  // ── Layer 1 (combined): Requirements + Behaviors in one cached call ──────────
+
+  async extractAll(baDocumentContent: string): Promise<CombinedExtraction> {
+    this.logger.log('[Layer 1] Extracting requirements & behaviors (combined)...');
+    const CombinedSchema = z.object({
+      requirements: RequirementsSchema,
+      behaviors: BehaviorsSchema,
+    });
+    const text1 = `You are a senior business analyst and UX researcher. Read the following BA document and extract TWO things in a single pass.
+
+1. DOMAIN REQUIREMENTS:
+   - features: list of functional features/capabilities described
+   - businessRules: constraints, validations, and business logic rules
+   - acceptanceCriteria: specific conditions that must be met for acceptance
+   - entities: key domain objects/models mentioned (e.g. User, Order, Product)
+
+2. BEHAVIOR MODEL:
+   - feature: the primary feature name
+   - actors: users or systems involved
+   - actions: atomic steps (Actor + Verb + Object), keep only business logic, remove UI/visual details
+   - rules: validation rules, business rules, conditional logic, inferred edge cases
+
+Be thorough — missing a requirement or edge case means missing test coverage.
+
+BA Document:
+${baDocumentContent}`;
+    this.logPromptSize('[Layer 1]', text1);
+    const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
-      schema: RequirementsSchema,
+      schema: CombinedSchema,
       messages: [
         {
           role: 'user',
           content: [
             {
               type: 'text',
-              text: `You are a senior business analyst. Carefully read the following BA document and extract ALL requirements in a structured format.
+              text: text1,
+              experimental_providerMetadata: {
+                anthropic: { cacheControl: { type: 'ephemeral' } },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    this.logger.log(`[Layer 1] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Layer 1]', response.headers);
+    return object as CombinedExtraction;
+  }
+
+  // ── Layer 1 (synthesis): Consolidate near-duplicates from multi-chunk merge ───
+
+  async synthesiseExtraction(merged: CombinedExtraction): Promise<CombinedExtraction> {
+    this.logger.log('[Layer 1] Synthesising merged extraction...');
+    const CombinedSchema = z.object({ requirements: RequirementsSchema, behaviors: BehaviorsSchema });
+    const textSynth = `You are a business analyst. The arrays below were extracted from multiple chunks of the same document and may contain near-duplicate entries. Consolidate them: merge similar items into one canonical phrase, remove exact duplicates, keep the result concise.
+
+${JSON.stringify(merged, null, 0)}
+
+Return the same structure with duplicates removed.`;
+    this.logPromptSize('[Layer 1 synthesis]', textSynth);
+    const { object, usage, response } = await generateObject({
+      model: anthropic(this.modelVersion),
+      schema: CombinedSchema,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: textSynth,
+              experimental_providerMetadata: {
+                anthropic: { cacheControl: { type: 'ephemeral' } },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    this.logger.log(`[Layer 1 synthesis] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Layer 1 synthesis]', response.headers);
+    return object as CombinedExtraction;
+  }
+
+  // ── Layer 1A: Requirements Extractor (cached — document is large & reusable) ──
+
+  async extractRequirements(baDocumentContent: string): Promise<ExtractedRequirements> {
+    this.logger.log('[Layer 1] Extracting requirements...');
+    const text1a = `You are a senior business analyst. Carefully read the following BA document and extract ALL requirements in a structured format.
 
 BA Document:
 ${baDocumentContent}
@@ -92,7 +180,18 @@ Extract:
 - acceptanceCriteria: specific conditions that must be met for acceptance
 - entities: key domain objects/models mentioned (e.g. User, Order, Product)
 
-Be thorough — missing a requirement means missing test coverage.`,
+Be thorough — missing a requirement means missing test coverage.`;
+    this.logPromptSize('[Layer 1A]', text1a);
+    const { object, usage, response } = await generateObject({
+      model: anthropic(this.modelVersion),
+      schema: RequirementsSchema,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: text1a,
               // Cache the document content — it's large and reused across all 3 layers
               experimental_providerMetadata: {
                 anthropic: { cacheControl: { type: 'ephemeral' } },
@@ -102,6 +201,8 @@ Be thorough — missing a requirement means missing test coverage.`,
         },
       ],
     });
+    this.logger.log(`[Layer 1A] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Layer 1A]', response.headers);
     return object as ExtractedRequirements;
   }
 
@@ -109,16 +210,7 @@ Be thorough — missing a requirement means missing test coverage.`,
 
   async extractBehaviors(baDocumentContent: string): Promise<ExtractedBehaviors> {
     this.logger.log('[Layer 1B] Extracting behaviors...');
-    const { object } = await generateObject({
-      model: anthropic(this.modelVersion),
-      schema: BehaviorsSchema,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `## Instructions
+    const text1b = `## Instructions
 1. Clean the document:
    - Remove UI/visual details
    - Remove duplication
@@ -143,7 +235,18 @@ Be thorough — missing a requirement means missing test coverage.`,
 - Keep everything concise and atomic
 
 ## Document
-${baDocumentContent}`,
+${baDocumentContent}`;
+    this.logPromptSize('[Layer 1B]', text1b);
+    const { object, usage, response } = await generateObject({
+      model: anthropic(this.modelVersion),
+      schema: BehaviorsSchema,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: text1b,
               experimental_providerMetadata: {
                 anthropic: { cacheControl: { type: 'ephemeral' } },
               },
@@ -152,6 +255,8 @@ ${baDocumentContent}`,
         },
       ],
     });
+    this.logger.log(`[Layer 1B] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Layer 1B]', response.headers);
     return object as ExtractedBehaviors;
   }
 
@@ -162,16 +267,7 @@ ${baDocumentContent}`,
     behaviors: ExtractedBehaviors,
   ): Promise<TestScenario[]> {
     this.logger.log('[Layer 2] Planning test scenarios...');
-    const { object } = await generateObject({
-      model: anthropic(this.modelVersion),
-      schema: ScenariosSchema,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `You are a QA strategist. Using both the domain requirements and the normalized behaviors below, identify ALL test scenarios that need to be covered.
+    const text2 = `You are a QA strategist. Using both the domain requirements and the normalized behaviors below, identify ALL test scenarios that need to be covered.
 
 ## Domain Requirements (Layer 1A)
 Features: ${requirements.features.join('\n- ')}
@@ -192,7 +288,18 @@ For each scenario specify:
 - type: one of happy_path | edge_case | error | boundary | security
 - requirementRefs: which requirements or actions this scenario covers
 
-Ensure complete coverage across both layers.`,
+Ensure complete coverage across both layers. Return at most 15 scenarios. Prioritise happy_path and error scenarios. Be concise — one line per title.`;
+    this.logPromptSize('[Layer 2]', text2);
+    const { object, usage, response } = await generateObject({
+      model: anthropic(this.modelVersion),
+      schema: ScenariosSchema,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: text2,
               experimental_providerMetadata: {
                 anthropic: { cacheControl: { type: 'ephemeral' } },
               },
@@ -201,6 +308,8 @@ Ensure complete coverage across both layers.`,
         },
       ],
     });
+    this.logger.log(`[Layer 2] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Layer 2]', response.headers);
     return object.scenarios as TestScenario[];
   }
 
@@ -211,16 +320,7 @@ Ensure complete coverage across both layers.`,
     requirements: ExtractedRequirements,
   ): Promise<GeneratedTestCase[]> {
     this.logger.log(`[Layer 3] Generating ${scenarios.length} test cases...`);
-    const { object } = await generateObject({
-      model: anthropic(this.modelVersion),
-      schema: TestCasesSchema,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `You are a QA engineer. Write detailed, executable test cases for each of the following scenarios.
+    const text3 = `You are a QA engineer. Write detailed, executable test cases for each of the following scenarios.
 
 Domain context:
 Entities: ${requirements.entities.join(', ')}
@@ -229,12 +329,23 @@ Business Rules: ${requirements.businessRules.join('\n- ')}
 Scenarios to cover:
 ${scenarios.map((s, i) => `${i + 1}. [${s.type.toUpperCase()}] ${s.title}\n   Covers: ${s.requirementRefs.join('; ')}`).join('\n')}
 
-For each scenario write a test case with:
-- title: matches the scenario title
-- description: what is being tested and why
-- preconditions: system state required before test execution
+For each scenario write a concise test case:
+- title: copy exactly from the scenario title
+- description: one sentence describing what is being tested
+- preconditions: one sentence describing the required system state
 - priority: HIGH (critical path/security), MEDIUM (important features), LOW (edge cases)
-- steps: ordered list of { action, expectedResult } pairs — be precise and specific`,
+- steps: at most 6 steps, each action and expectedResult under 20 words`;
+    this.logPromptSize('[Layer 3]', text3);
+    const { object, usage, response } = await generateObject({
+      model: anthropic(this.modelVersion),
+      schema: TestCasesSchema,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: text3,
               experimental_providerMetadata: {
                 anthropic: { cacheControl: { type: 'ephemeral' } },
               },
@@ -243,6 +354,8 @@ For each scenario write a test case with:
         },
       ],
     });
+    this.logger.log(`[Layer 3] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Layer 3]', response.headers);
     return object.testCases as GeneratedTestCase[];
   }
 
@@ -254,7 +367,9 @@ For each scenario write a test case with:
     scenarios: TestScenario[],
   ): Promise<DevPrompt> {
     this.logger.log('[Layer 4] Generating dev prompts (API / Frontend / Testing)...');
-    const { object } = await generateObject({
+    const text4 = buildDevPromptInput(requirements, behaviors, scenarios);
+    this.logPromptSize('[Layer 4]', text4);
+    const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
       schema: z.object({ api: z.string(), frontend: z.string(), testing: z.string() }),
       messages: [
@@ -263,7 +378,7 @@ For each scenario write a test case with:
           content: [
             {
               type: 'text',
-              text: buildDevPromptInput(requirements, behaviors, scenarios),
+              text: text4,
               experimental_providerMetadata: {
                 anthropic: { cacheControl: { type: 'ephemeral' } },
               },
@@ -272,6 +387,8 @@ For each scenario write a test case with:
         },
       ],
     });
+    this.logger.log(`[Layer 4] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Layer 4]', response.headers);
     return object as DevPrompt;
   }
 
@@ -286,10 +403,8 @@ For each scenario write a test case with:
         ? `\n\nDesign screenshots are available at: ${screenshotPaths.join(', ')}`
         : '';
     const content = baDocumentContent + screenshotNote;
-    const [requirements, behaviors] = await Promise.all([
-      this.extractRequirements(content),
-      this.extractBehaviors(content),
-    ]);
+    const requirements = await this.extractRequirements(content);
+    const behaviors = await this.extractBehaviors(content);
     const scenarios = await this.planTestScenarios(requirements, behaviors);
     return this.generateTestCasesFromScenarios(scenarios, requirements);
   }

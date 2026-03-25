@@ -17,18 +17,22 @@ model Project {
 }
 
 model Feature {
-  id                    String        @id @default(cuid())
+  id                    String         @id @default(cuid())
   projectId             String
   name                  String
   description           String?
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
   extractedRequirements Json?
   extractedBehaviors    Json?
   testScenarios         Json?
   devPromptApi          String?
   devPromptFrontend     String?
   devPromptTesting      String?
+  pipelineStatus        PipelineStatus @default(IDLE)
+  pipelineStep          Int?
+  pipelineFailedAt      Int?
+  pipelinePartial       Json?
   project               Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   baDocument            BADocument?
   screenshots           Screenshot[]
@@ -106,6 +110,13 @@ enum TestCaseStatus {
 enum ChatMessageRole {
   USER
   ASSISTANT
+}
+
+enum PipelineStatus {
+  IDLE
+  RUNNING
+  FAILED
+  COMPLETED
 }
 
 enum DevTaskCategory {

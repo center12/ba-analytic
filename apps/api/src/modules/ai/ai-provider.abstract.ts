@@ -36,6 +36,12 @@ export interface ExtractedBehaviors {
   rules: string[];
 }
 
+/** Layer 1 (combined) — Both domain requirements and behaviors in one pass */
+export interface CombinedExtraction {
+  requirements: ExtractedRequirements;
+  behaviors: ExtractedBehaviors;
+}
+
 /** Layer 4 — Dev Prompts (4A API · 4B Frontend · 4C Testing) */
 export interface DevPrompt {
   api: string;       // 4A — backend/API implementation prompt
@@ -113,7 +119,9 @@ Generate:
 - **frontend**: Prompt for implementing the frontend UI. Must include: component signatures, API integration hooks, form validation (from rules), error state handling (from test scenarios), UI logic stubs with TODO comments.
 - **testing**: Prompt for writing fully implemented automated tests. Must include: one test per scenario listed above, assertions for both success and error paths, setup/teardown, no stubs — all test bodies must be complete.
 
-Each prompt must start with "You are an expert [role]." and embed all relevant context so it is fully self-contained.`;
+Each prompt must start with "You are an expert [role]." and embed all relevant context so it is fully self-contained.
+
+Keep each output prompt under 800 words. Use placeholders for boilerplate code — do not write full implementations.`;
 }
 
 /**
@@ -123,6 +131,18 @@ Each prompt must start with "You are an expert [role]." and embed all relevant c
 export abstract class AIProvider {
   abstract readonly providerName: string;
   abstract readonly modelVersion: string;
+
+  /**
+   * Layer 1 (combined) — Extract both domain requirements and behaviors in a single API call.
+   * Preferred over the separate methods to avoid sending the BA document twice.
+   */
+  abstract extractAll(baDocumentContent: string): Promise<CombinedExtraction>;
+
+  /**
+   * Layer 1 (synthesis) — Consolidates near-duplicate items from multi-chunk merges.
+   * Only called by PipelineService when the document was split into more than one chunk.
+   */
+  abstract synthesiseExtraction(merged: CombinedExtraction): Promise<CombinedExtraction>;
 
   /**
    * Layer 1A — Extract structured domain requirements from the BA document.

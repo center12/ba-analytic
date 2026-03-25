@@ -74,6 +74,26 @@ export const api = {
         `/test-cases/feature/${featureId}/generate${provider ? `?provider=${provider}` : ''}`,
         { method: 'POST' },
       ),
+    resume: (featureId: string, provider?: string) =>
+      request<{ generated: number; testCases: TestCase[]; pipeline: { requirementsCount: number; scenariosCount: number } }>(
+        `/test-cases/feature/${featureId}/resume${provider ? `?provider=${provider}` : ''}`,
+        { method: 'POST' },
+      ),
+    runStep: (featureId: string, step: number, provider?: string, override?: unknown) =>
+      request<unknown>(
+        `/test-cases/feature/${featureId}/run-step/${step}${provider ? `?provider=${provider}` : ''}`,
+        { method: 'POST', body: override ? JSON.stringify({ override }) : undefined },
+      ),
+    resumeStep1: (featureId: string, provider?: string) =>
+      request<unknown>(
+        `/test-cases/feature/${featureId}/resume-step1${provider ? `?provider=${provider}` : ''}`,
+        { method: 'POST' },
+      ),
+    saveStepResults: (featureId: string, data: Partial<{ extractedRequirements: ExtractedRequirements; extractedBehaviors: ExtractedBehaviors; testScenarios: TestScenario[] }>) =>
+      request<unknown>(
+        `/test-cases/feature/${featureId}/step-results`,
+        { method: 'PATCH', body: JSON.stringify(data) },
+      ),
   },
 
   chat: {
@@ -156,6 +176,9 @@ export interface Feature {
   devPromptApi?: string;
   devPromptFrontend?: string;
   devPromptTesting?: string;
+  pipelineStatus?: 'IDLE' | 'RUNNING' | 'FAILED' | 'COMPLETED';
+  pipelineStep?: number | null;
+  pipelineFailedAt?: number | null;
 }
 
 export interface BADocument {

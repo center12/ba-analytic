@@ -36,4 +36,26 @@ export class TestCaseService {
   async generateForFeature(featureId: string, providerName?: string) {
     return this.pipeline.run(featureId, providerName);
   }
+
+  async resumeForFeature(featureId: string, providerName?: string) {
+    return this.pipeline.resume(featureId, providerName);
+  }
+
+  async runStepForFeature(featureId: string, step: number, providerName?: string, override?: unknown) {
+    switch (step) {
+      case 1: return this.pipeline.runStep1(featureId, providerName);
+      case 2: return this.pipeline.runStep2(featureId, providerName, override as any);
+      case 3: return this.pipeline.runStep3(featureId, providerName);
+      case 4: return this.pipeline.runStep4(featureId, providerName);
+      default: throw new Error(`Invalid pipeline step: ${step}`);
+    }
+  }
+
+  async resumeStep1ForFeature(featureId: string, providerName?: string) {
+    return this.pipeline.resumeStep1(featureId, providerName);
+  }
+
+  async saveStepResults(featureId: string, data: unknown) {
+    return this.pipeline.saveStepResults(featureId, data as any);
+  }
 }
