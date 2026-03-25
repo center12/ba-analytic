@@ -80,24 +80,34 @@ pnpm install
 
 ### 2. Configure environment
 
-Create `apps/api/.env`:
+Copy `.env.example` (repo root) to `apps/api/.env` and fill in your values:
 
 ```env
 # Database
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ba_analytic"
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=ba_analytic
 
-# AI — set at least one
-GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_key
-ANTHROPIC_API_KEY=your_anthropic_key
-OPENAI_API_KEY=your_openai_key
+# AI Providers (set the key for whichever provider you use)
+GOOGLE_GENERATIVE_AI_API_KEY=
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
 
-# Default provider and model
+# Default AI provider: gemini | claude | openai
 AI_PROVIDER=gemini
-AI_MODEL=gemini-2.0-flash
 
-# Optional
-PORT=3000
+# Model to use per provider (optional — falls back to the defaults below)
+GEMINI_MODEL=gemini-2.0-flash
+CLAUDE_MODEL=claude-sonnet-4-6
+OPENAI_MODEL=gpt-4o
+
+# Storage
 UPLOAD_DIR=./uploads
+
+# App
+PORT=3000
+CORS_ORIGIN=http://localhost:5173
 ```
 
 ### 3. Start the database
