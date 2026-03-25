@@ -1,3 +1,4 @@
+import { readFile } from 'fs/promises';
 import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { AIProviderFactory, ProviderName } from '../ai/ai-provider.factory';
@@ -23,19 +24,16 @@ export class PipelineService {
       throw new BadRequestException(`Feature ${featureId} has no BA document uploaded`);
     }
 
-    // Resolve storage paths
+    // Resolve storage paths — screenshots are optional
     const baDocumentPath = await this.storage.getSignedUrl(feature.baDocument.storageKey);
     const screenshotPaths = await Promise.all(
-      feature.screenshots.map((s: { storageKey: string }) =>
-        this.storage.getSignedUrl(s.storageKey),
-      ),
+      feature.screenshots.map((s) => this.storage.getSignedUrl(s.storageKey)),
     );
 
     // Read document content
-    const fs = await import('fs/promises');
     let baContent: string;
     try {
-      baContent = await fs.readFile(baDocumentPath, 'utf-8');
+      baContent = await readFile(baDocumentPath, 'utf-8');
     } catch {
       baContent = `[Binary document at path: ${baDocumentPath}]`;
     }
@@ -90,7 +88,7 @@ export class PipelineService {
     );
 
     // ── Layer 4: Generate dev prompts (4A API · 4B Frontend · 4C Testing) ────────
-    this.logger.log(`[Pipeline] Layer 4 — generating dev prompts`);
+    this.logger.log('[Pipeline] Layer 4 — generating dev prompts');
     const devPrompt = await provider.generateDevPrompt(
       extractedRequirements,
       extractedBehaviors,
