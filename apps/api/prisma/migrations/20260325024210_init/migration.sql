@@ -26,6 +26,9 @@ CREATE TABLE "Feature" (
     "description" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "extractedRequirements" JSONB,
+    "extractedBehaviors" JSONB,
+    "testScenarios" JSONB,
 
     CONSTRAINT "Feature_pkey" PRIMARY KEY ("id")
 );

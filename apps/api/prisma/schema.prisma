@@ -17,17 +17,23 @@ model Project {
 }
 
 model Feature {
-  id           String        @id @default(cuid())
-  projectId    String
-  name         String
-  description  String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  baDocument   BADocument?
-  screenshots  Screenshot[]
-  testCases    TestCase[]
-  chatSessions ChatSession[]
+  id                    String        @id @default(cuid())
+  projectId             String
+  name                  String
+  description           String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  extractedRequirements Json?
+  extractedBehaviors    Json?
+  testScenarios         Json?
+  devPromptApi          String?
+  devPromptFrontend     String?
+  devPromptTesting      String?
+  project               Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  baDocument            BADocument?
+  screenshots           Screenshot[]
+  testCases             TestCase[]
+  chatSessions          ChatSession[]
 }
 
 model BADocument {

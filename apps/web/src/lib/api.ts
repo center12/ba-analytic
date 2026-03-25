@@ -70,7 +70,7 @@ export const api = {
       request<TestCase>(`/test-cases/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => fetch(`${BASE_URL}/test-cases/${id}`, { method: 'DELETE' }),
     generate: (featureId: string, provider?: string) =>
-      request<{ generated: number; testCases: TestCase[] }>(
+      request<{ generated: number; testCases: TestCase[]; pipeline: { requirementsCount: number; scenariosCount: number } }>(
         `/test-cases/feature/${featureId}/generate${provider ? `?provider=${provider}` : ''}`,
         { method: 'POST' },
       ),
@@ -113,6 +113,29 @@ export interface Project {
   _count?: { features: number };
 }
 
+export type ScenarioType = 'happy_path' | 'edge_case' | 'error' | 'boundary' | 'security';
+
+/** Layer 1B — Behavior Extraction */
+export interface ExtractedBehaviors {
+  feature: string;
+  actors: string[];
+  actions: string[];
+  rules: string[];
+}
+
+export interface ExtractedRequirements {
+  features: string[];
+  businessRules: string[];
+  acceptanceCriteria: string[];
+  entities: string[];
+}
+
+export interface TestScenario {
+  title: string;
+  type: ScenarioType;
+  requirementRefs: string[];
+}
+
 export interface Feature {
   id: string;
   projectId: string;
@@ -122,6 +145,12 @@ export interface Feature {
   updatedAt: string;
   baDocument?: BADocument;
   screenshots?: Screenshot[];
+  extractedRequirements?: ExtractedRequirements;
+  extractedBehaviors?: ExtractedBehaviors;
+  testScenarios?: TestScenario[];
+  devPromptApi?: string;
+  devPromptFrontend?: string;
+  devPromptTesting?: string;
 }
 
 export interface BADocument {

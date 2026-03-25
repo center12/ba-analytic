@@ -1,13 +1,22 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { ArrowLeft, Sparkles, Upload } from 'lucide-react';
+import { ArrowLeft, Sparkles, Upload, CheckCircle2, Loader2 } from 'lucide-react';
 import { TestCaseDashboard } from '@/components/TestCaseDashboard';
 import { ChatSidebar } from '@/components/ChatSidebar';
 import { ModelSelector } from '@/components/ModelSelector';
+import { PipelinePanel } from '@/components/PipelinePanel';
+import { DevPromptPanel } from '@/components/DevPromptPanel';
 import { useAppStore } from '@/store';
-import { useRef } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
+
+const PIPELINE_STEPS = [
+  'Extracting requirements...',
+  'Planning scenarios...',
+  'Writing test cases...',
+  'Composing dev prompts...',
+];
 
 export function FeatureDetailPage() {
   const { projectId, featureId } = useParams<{ projectId: string; featureId: string }>();
@@ -15,6 +24,7 @@ export function FeatureDetailPage() {
   const qc = useQueryClient();
   const baInputRef = useRef<HTMLInputElement>(null);
   const ssInputRef = useRef<HTMLInputElement>(null);
+  const [pipelineStep, setPipelineStep] = useState<number>(-1);
 
   const { data: feature } = useQuery({
     queryKey: ['features', featureId],
@@ -24,17 +34,53 @@ export function FeatureDetailPage() {
 
   const generateMutation = useMutation({
     mutationFn: () => api.testCases.generate(featureId!, activeProvider),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['test-cases', featureId] }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['test-cases', featureId] });
+      qc.invalidateQueries({ queryKey: ['features', featureId] });
+      toast({
+        variant: 'success',
+        title: 'Test cases generated',
+        description: `${data.generated} test case(s) from ${data.pipeline.scenariosCount} scenarios.`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ variant: 'destructive', title: 'Generation failed', description: err.message });
+    },
   });
+
+  // Advance progress steps on a timer while the single POST is in-flight
+  useEffect(() => {
+    if (!generateMutation.isPending) {
+      setPipelineStep(-1);
+      return;
+    }
+    setPipelineStep(0);
+    const t1 = setTimeout(() => setPipelineStep(1), 8000);
+    const t2 = setTimeout(() => setPipelineStep(2), 18000);
+    const t3 = setTimeout(() => setPipelineStep(3), 28000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [generateMutation.isPending]);
 
   const uploadBAMutation = useMutation({
     mutationFn: (file: File) => api.features.uploadBADocument(featureId!, file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['features', featureId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['features', featureId] });
+      toast({ variant: 'success', title: 'BA document uploaded' });
+    },
+    onError: (err: Error) => {
+      toast({ variant: 'destructive', title: 'Upload failed', description: err.message });
+    },
   });
 
   const uploadSSMutation = useMutation({
     mutationFn: (file: File) => api.features.uploadScreenshot(featureId!, file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['features', featureId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['features', featureId] });
+      toast({ variant: 'success', title: 'Screenshot uploaded' });
+    },
+    onError: (err: Error) => {
+      toast({ variant: 'destructive', title: 'Upload failed', description: err.message });
+    },
   });
 
   return (
@@ -54,7 +100,7 @@ export function FeatureDetailPage() {
           )}
         </div>
 
-        {/* Upload controls */}
+        {/* Upload + generate controls */}
         <div className="flex items-center gap-2">
           <ModelSelector />
           <input
@@ -102,6 +148,48 @@ export function FeatureDetailPage() {
           </button>
         </div>
       </header>
+
+      {/* 3-step pipeline progress */}
+      {generateMutation.isPending && (
+        <div className="border-b bg-muted/30 px-6 py-2 flex items-center gap-6">
+          {PIPELINE_STEPS.map((label, i) => {
+            const done = i < pipelineStep;
+            const active = i === pipelineStep;
+            return (
+              <div key={i} className="flex items-center gap-1.5 text-xs">
+                {done ? (
+                  <CheckCircle2 size={13} className="text-green-600 shrink-0" />
+                ) : active ? (
+                  <Loader2 size={13} className="animate-spin text-primary shrink-0" />
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full border border-muted-foreground/40 shrink-0" />
+                )}
+                <span className={done ? 'text-green-700' : active ? 'text-foreground font-medium' : 'text-muted-foreground'}>
+                  {label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pipeline results panel */}
+      {feature?.extractedRequirements && feature.testScenarios && (
+        <PipelinePanel
+          extractedRequirements={feature.extractedRequirements}
+          extractedBehaviors={feature.extractedBehaviors}
+          testScenarios={feature.testScenarios}
+        />
+      )}
+
+      {/* Dev prompts panel */}
+      {feature?.devPromptApi && feature.devPromptFrontend && feature.devPromptTesting && (
+        <DevPromptPanel
+          api={feature.devPromptApi}
+          frontend={feature.devPromptFrontend}
+          testing={feature.devPromptTesting}
+        />
+      )}
 
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
