@@ -1,6 +1,6 @@
 import { readFile } from 'fs/promises';
 import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
-import { PrismaService } from '../prisma.service';
+import { PrismaService } from '../../prisma.service';
 import { AIProviderFactory, ProviderName } from '../ai/ai-provider.factory';
 import { STORAGE_PROVIDER, IStorageProvider } from '../storage/storage.interface';
 

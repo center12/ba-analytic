@@ -3,7 +3,7 @@ import { MulterModule } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { ProjectController } from './project.controller';
 import { ProjectService } from './project.service';
-import { PrismaService } from '../prisma.service';
+import { PrismaService } from '../../prisma.service';
 import { StorageModule } from '../storage/storage.module';
 
 @Module({

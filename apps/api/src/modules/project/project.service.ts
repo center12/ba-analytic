@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, Inject } from '@nestjs/common';
-import { PrismaService } from '../prisma.service';
+import { PrismaService } from '../../prisma.service';
 import { StorageModule } from '../storage/storage.module';
 import { STORAGE_PROVIDER, IStorageProvider } from '../storage/storage.interface';
 import { CreateProjectDto } from './dto/create-project.dto';

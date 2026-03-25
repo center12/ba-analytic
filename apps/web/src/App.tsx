@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { ProjectsPage } from '@/pages/ProjectsPage';
-import { ProjectDetailPage } from '@/pages/ProjectDetailPage';
-import { FeatureDetailPage } from '@/pages/FeatureDetailPage';
+import { ProjectsPage } from '@/features/project/ProjectsPage';
+import { ProjectDetailPage } from '@/features/project/ProjectDetailPage';
+import { FeatureDetailPage } from '@/features/feature/FeatureDetailPage';
 import { Toaster } from '@/components/ui/toaster';
 
 export default function App() {

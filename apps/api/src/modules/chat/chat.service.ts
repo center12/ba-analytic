@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma.service';
+import { PrismaService } from '../../prisma.service';
 import { AIProviderFactory, ProviderName } from '../ai/ai-provider.factory';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { Observable } from 'rxjs';
