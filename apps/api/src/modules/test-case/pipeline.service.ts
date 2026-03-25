@@ -161,6 +161,8 @@ function compressForDownstream(
   };
 }
 
+const retryLogger = new Logger('withRetry');
+
 async function withRetry<T>(
   fn: () => Promise<T>,
   retries = 3,
@@ -175,6 +177,10 @@ async function withRetry<T>(
         (err.message.includes('429') || err.message.toLowerCase().includes('quota'));
       if (!isQuota || attempt === retries) throw err;
       const delay = baseDelayMs * 2 ** (attempt - 1); // 30s → 60s → 120s
+      retryLogger.warn(
+        `Rate-limit / quota hit (attempt ${attempt}/${retries}) — waiting ${delay / 1000}s before retry. ` +
+        `Error: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`,
+      );
       await new Promise(r => setTimeout(r, delay));
     }
   }
