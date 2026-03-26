@@ -6,7 +6,7 @@ import { ChatSidebar } from '@/features/chat/ChatSidebar';
 import { ModelSelector } from '@/features/ai/ModelSelector';
 import { DeveloperTaskPanel } from '@/features/dev-task/DeveloperTaskPanel';
 import { PipelineWizard } from './PipelineWizard';
-import { BADocFormatGuide } from './components/BADocFormatGuide';
+import { BADocFormatGuide } from './components/feature-detail/BADocFormatGuide';
 import { useRef } from 'react';
 import { toast } from '@/hooks/use-toast';
 
