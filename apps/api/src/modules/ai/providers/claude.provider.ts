@@ -6,6 +6,9 @@ import { z } from 'zod';
 import {
   AIProvider,
   buildDevPromptInput,
+  buildExtractAllPrompt,
+  buildGenerateTestCasesPrompt,
+  buildPlanScenariosPrompt,
   ChatHistoryItem,
   CombinedExtraction,
   DevPrompt,
@@ -58,6 +61,13 @@ const TestCasesSchema = z.object({
   ),
 });
 
+const DevTaskItemSchema = z.object({ title: z.string(), prompt: z.string() });
+const DevPromptSchema = z.object({
+  api:      z.array(DevTaskItemSchema),
+  frontend: z.array(DevTaskItemSchema),
+  testing:  z.array(DevTaskItemSchema),
+});
+
 @Injectable()
 export class ClaudeProvider extends AIProvider {
   private readonly logger = new Logger(ClaudeProvider.name);
@@ -89,24 +99,7 @@ export class ClaudeProvider extends AIProvider {
       requirements: RequirementsSchema,
       behaviors: BehaviorsSchema,
     });
-    const text1 = `You are a senior business analyst and UX researcher. Read the following BA document and extract TWO things in a single pass.
-
-1. DOMAIN REQUIREMENTS:
-   - features: list of functional features/capabilities described
-   - businessRules: constraints, validations, and business logic rules
-   - acceptanceCriteria: specific conditions that must be met for acceptance
-   - entities: key domain objects/models mentioned (e.g. User, Order, Product)
-
-2. BEHAVIOR MODEL:
-   - feature: the primary feature name
-   - actors: users or systems involved
-   - actions: atomic steps (Actor + Verb + Object), keep only business logic, remove UI/visual details
-   - rules: validation rules, business rules, conditional logic, inferred edge cases
-
-Be thorough — missing a requirement or edge case means missing test coverage.
-
-BA Document:
-${baDocumentContent}`;
+    const text1 = buildExtractAllPrompt(baDocumentContent);
     this.logPromptSize('[Layer 1]', text1);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
@@ -267,28 +260,7 @@ ${baDocumentContent}`;
     behaviors: ExtractedBehaviors,
   ): Promise<TestScenario[]> {
     this.logger.log('[Layer 2] Planning test scenarios...');
-    const text2 = `You are a QA strategist. Using both the domain requirements and the normalized behaviors below, identify ALL test scenarios that need to be covered.
-
-## Domain Requirements (Layer 1A)
-Features: ${requirements.features.join('\n- ')}
-Business Rules: ${requirements.businessRules.join('\n- ')}
-Acceptance Criteria: ${requirements.acceptanceCriteria.join('\n- ')}
-Entities: ${requirements.entities.join(', ')}
-
-## Behaviors (Layer 1B)
-Feature: ${behaviors.feature}
-Actors: ${behaviors.actors.join(', ')}
-Actions:
-- ${behaviors.actions.join('\n- ')}
-Rules:
-- ${behaviors.rules.join('\n- ')}
-
-For each scenario specify:
-- title: short descriptive name
-- type: one of happy_path | edge_case | error | boundary | security
-- requirementRefs: which requirements or actions this scenario covers
-
-Ensure complete coverage across both layers. Return at most 15 scenarios. Prioritise happy_path and error scenarios. Be concise — one line per title.`;
+    const text2 = buildPlanScenariosPrompt(requirements, behaviors);
     this.logPromptSize('[Layer 2]', text2);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
@@ -320,21 +292,7 @@ Ensure complete coverage across both layers. Return at most 15 scenarios. Priori
     requirements: ExtractedRequirements,
   ): Promise<GeneratedTestCase[]> {
     this.logger.log(`[Layer 3] Generating ${scenarios.length} test cases...`);
-    const text3 = `You are a QA engineer. Write detailed, executable test cases for each of the following scenarios.
-
-Domain context:
-Entities: ${requirements.entities.join(', ')}
-Business Rules: ${requirements.businessRules.join('\n- ')}
-
-Scenarios to cover:
-${scenarios.map((s, i) => `${i + 1}. [${s.type.toUpperCase()}] ${s.title}\n   Covers: ${s.requirementRefs.join('; ')}`).join('\n')}
-
-For each scenario write a concise test case:
-- title: copy exactly from the scenario title
-- description: one sentence describing what is being tested
-- preconditions: one sentence describing the required system state
-- priority: HIGH (critical path/security), MEDIUM (important features), LOW (edge cases)
-- steps: at most 6 steps, each action and expectedResult under 20 words`;
+    const text3 = buildGenerateTestCasesPrompt(scenarios, requirements);
     this.logPromptSize('[Layer 3]', text3);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
@@ -371,7 +329,7 @@ For each scenario write a concise test case:
     this.logPromptSize('[Layer 4]', text4);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
-      schema: z.object({ api: z.string(), frontend: z.string(), testing: z.string() }),
+      schema: DevPromptSchema,
       messages: [
         {
           role: 'user',

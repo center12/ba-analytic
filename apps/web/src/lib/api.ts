@@ -89,11 +89,20 @@ export const api = {
         `/test-cases/feature/${featureId}/resume-step1${provider ? `?provider=${provider}` : ''}`,
         { method: 'POST' },
       ),
-    saveStepResults: (featureId: string, data: Partial<{ extractedRequirements: ExtractedRequirements; extractedBehaviors: ExtractedBehaviors; testScenarios: TestScenario[] }>) =>
+    saveStepResults: (featureId: string, data: {
+      step: 1 | 2 | 3 | 4;
+      extractedRequirements?: ExtractedRequirements;
+      extractedBehaviors?: ExtractedBehaviors;
+      testScenarios?: TestScenario[];
+      generatedTestCases?: GeneratedTestCase[];
+      devPrompt?: DevPrompt;
+    }) =>
       request<unknown>(
         `/test-cases/feature/${featureId}/step-results`,
         { method: 'PATCH', body: JSON.stringify(data) },
       ),
+    getStepPrompt: (featureId: string, step: number) =>
+      request<{ prompt: string }>(`/test-cases/feature/${featureId}/step-prompt/${step}`),
   },
 
   chat: {
@@ -202,6 +211,25 @@ export interface Screenshot {
 export interface TestCaseStep {
   action: string;
   expectedResult: string;
+}
+
+export interface GeneratedTestCase {
+  title: string;
+  description: string;
+  preconditions: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  steps: TestCaseStep[];
+}
+
+export interface DevTaskItem {
+  title: string;
+  prompt: string;
+}
+
+export interface DevPrompt {
+  api:      DevTaskItem[];
+  frontend: DevTaskItem[];
+  testing:  DevTaskItem[];
 }
 
 export interface TestCase {

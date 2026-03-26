@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Loader2, XCircle, Circle, ChevronDown, ChevronRight,
-  Pencil, Save, X, RefreshCw, Play,
+  Pencil, Save, X, RefreshCw, Play, FileText, Copy, Check,
 } from 'lucide-react';
-import { api, Feature, ExtractedRequirements, ExtractedBehaviors, TestScenario, ScenarioType } from '@/lib/api';
+import {
+  api, Feature, ExtractedRequirements, ExtractedBehaviors, TestScenario,
+  ScenarioType, GeneratedTestCase, DevPrompt,
+} from '@/lib/api';
 import { useAppStore } from '@/store';
 import { toast } from '@/hooks/use-toast';
 import { TestCaseDashboard } from '@/features/test-case/TestCaseDashboard';
@@ -44,10 +47,146 @@ function deriveStatus(
   return 'idle';
 }
 
+// ── Manual mode JSON templates ────────────────────────────────────────────────
+
+const MANUAL_TEMPLATES: Record<number, string> = {
+  1: JSON.stringify({
+    extractedRequirements: {
+      features: ['Feature description 1', 'Feature description 2'],
+      businessRules: ['Rule 1', 'Rule 2'],
+      acceptanceCriteria: ['Criterion 1', 'Criterion 2'],
+      entities: ['Entity1', 'Entity2'],
+    },
+    extractedBehaviors: {
+      feature: 'Feature name',
+      actors: ['User', 'Admin'],
+      actions: ['User submits form', 'System validates input'],
+      rules: ['Field X is required', 'Value must be positive'],
+    },
+  }, null, 2),
+  2: JSON.stringify([
+    { title: 'User successfully completes happy path', type: 'happy_path', requirementRefs: ['Feature description 1'] },
+    { title: 'User submits with missing required field', type: 'error', requirementRefs: ['Field X is required'] },
+  ], null, 2),
+  3: JSON.stringify([
+    {
+      title: 'User successfully completes happy path',
+      description: 'Verifies that a valid user can complete the flow end-to-end',
+      preconditions: 'User is logged in and all required data is present',
+      priority: 'HIGH',
+      steps: [
+        { action: 'User navigates to the page', expectedResult: 'Page loads successfully' },
+        { action: 'User submits the form', expectedResult: 'Success message is shown' },
+      ],
+    },
+  ], null, 2),
+  4: JSON.stringify({
+    api:      [{ title: 'API — Core endpoints',    prompt: 'You are an expert backend engineer. Implement the API for...' }],
+    frontend: [{ title: 'Frontend — Core UI',      prompt: 'You are an expert frontend engineer. Implement the UI for...' }],
+    testing:  [{ title: 'Testing — Core flows',    prompt: 'You are an expert QA engineer. Write automated tests for...' }],
+  }, null, 2),
+};
+
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
 function arrToText(arr: string[]) { return arr.join('\n'); }
 function textToArr(text: string)  { return text.split('\n').map(s => s.trim()).filter(Boolean); }
+
+// ── Manual input panel ────────────────────────────────────────────────────────
+
+function ManualPanel({
+  step, featureId, templateJson, manualJson, jsonError, isSaving,
+  onJsonChange, onSave, onCancel,
+}: {
+  step: number; featureId: string; templateJson: string;
+  manualJson: string; jsonError: string | null; isSaving: boolean;
+  onJsonChange: (v: string) => void; onSave: () => void; onCancel: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [copyingPrompt, setCopyingPrompt] = useState(false);
+
+  async function copyPrompt() {
+    setCopyingPrompt(true);
+    try {
+      const { prompt } = await api.testCases.getStepPrompt(featureId, step);
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Could not get prompt', description: (err as Error).message });
+    } finally {
+      setCopyingPrompt(false);
+    }
+  }
+
+  return (
+    <div className="border rounded-lg bg-muted/30 p-4 space-y-4 mt-2">
+      {/* Copy prompt button */}
+      <div className="flex items-start gap-3">
+        <button
+          onClick={copyPrompt}
+          disabled={copyingPrompt}
+          className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50 shrink-0"
+        >
+          {copyingPrompt
+            ? <Loader2 size={13} className="animate-spin" />
+            : copied ? <Check size={13} className="text-green-600" /> : <Copy size={13} />}
+          {copied ? 'Copied!' : 'Copy prompt'}
+        </button>
+        <p className="text-xs text-muted-foreground pt-1.5">
+          Paste this prompt into Claude, ChatGPT, or any AI tool, then paste the JSON response below.
+        </p>
+      </div>
+
+      {/* Expected format reference */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs font-semibold text-muted-foreground">Expected output format</p>
+          <button
+            onClick={() => { navigator.clipboard.writeText(templateJson); }}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+          >
+            <Copy size={11} /> Copy template
+          </button>
+        </div>
+        <pre className="text-[11px] bg-muted/60 rounded p-2 overflow-x-auto max-h-36 font-mono leading-relaxed">
+          {templateJson}
+        </pre>
+      </div>
+
+      {/* Editable JSON input */}
+      <div>
+        <p className="text-xs font-semibold mb-1">Paste AI response here</p>
+        <textarea
+          className={`w-full text-xs border rounded p-2 font-mono resize-y min-h-[180px] bg-background ${jsonError ? 'border-red-400' : ''}`}
+          value={manualJson}
+          onChange={e => onJsonChange(e.target.value)}
+          placeholder="Paste the JSON result from your AI tool…"
+          spellCheck={false}
+        />
+        {jsonError && <p className="text-xs text-red-500 mt-1">{jsonError}</p>}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onSave}
+          disabled={!!jsonError || isSaving}
+          className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-1.5 rounded text-sm hover:opacity-90 disabled:opacity-50"
+        >
+          {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+          Save
+        </button>
+        <button
+          onClick={onCancel}
+          className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted"
+        >
+          <X size={13} /> Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ── Step header component ─────────────────────────────────────────────────────
 
@@ -152,9 +291,50 @@ export function PipelineWizard({ featureId }: Props) {
   const [editingStep, setEditingStep] = useState<number | null>(null);
   // Draft values for editing
   const [draft, setDraft] = useState<Record<string, string>>({});
+  // Manual input mode
+  const [manualStep, setManualStep] = useState<number | null>(null);
+  const [manualJson, setManualJson] = useState('');
+  const [manualJsonError, setManualJsonError] = useState<string | null>(null);
 
   function toggleStep(n: number) {
     setOpenStep(v => v === n ? 0 : n);
+  }
+
+  function openManual(step: number) {
+    setEditingStep(null);
+    setDraft({});
+    setManualStep(step);
+    setManualJson(MANUAL_TEMPLATES[step] ?? '');
+    setManualJsonError(null);
+  }
+
+  function closeManual() {
+    setManualStep(null);
+    setManualJson('');
+    setManualJsonError(null);
+  }
+
+  function handleManualJsonChange(v: string) {
+    setManualJson(v);
+    try { JSON.parse(v); setManualJsonError(null); }
+    catch (e) { setManualJsonError((e as Error).message); }
+  }
+
+  function handleManualSave(step: number) {
+    try {
+      const parsed = JSON.parse(manualJson);
+      if (step === 1) {
+        manualSaveMutation.mutate({ step: 1, extractedRequirements: parsed.extractedRequirements as ExtractedRequirements, extractedBehaviors: parsed.extractedBehaviors as ExtractedBehaviors });
+      } else if (step === 2) {
+        manualSaveMutation.mutate({ step: 2, testScenarios: parsed as TestScenario[] });
+      } else if (step === 3) {
+        manualSaveMutation.mutate({ step: 3, generatedTestCases: parsed as GeneratedTestCase[] });
+      } else if (step === 4) {
+        manualSaveMutation.mutate({ step: 4, devPrompt: parsed as DevPrompt });
+      }
+    } catch {
+      toast({ variant: 'destructive', title: 'Invalid JSON' });
+    }
   }
 
   function startEdit(step: number, feature: Feature) {
@@ -179,7 +359,7 @@ export function PipelineWizard({ featureId }: Props) {
     setEditingStep(step);
   }
 
-  function cancelEdit() { setEditingStep(null); setDraft({}); }
+  function cancelEdit() { setEditingStep(null); setDraft({}); setManualStep(null); setManualJson(''); setManualJsonError(null); }
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 
@@ -230,9 +410,24 @@ export function PipelineWizard({ featureId }: Props) {
     },
   });
 
+  const manualSaveMutation = useMutation({
+    mutationFn: (data: Parameters<typeof api.testCases.saveStepResults>[1]) =>
+      api.testCases.saveStepResults(featureId, data),
+    onSuccess: (_, vars) => {
+      invalidate();
+      toast({ variant: 'success', title: `Step ${vars.step} saved manually` });
+      closeManual();
+      setOpenStep((vars.step as number) + 1);
+    },
+    onError: (err: Error) => {
+      toast({ variant: 'destructive', title: 'Save failed', description: err.message });
+    },
+  });
+
   function handleSave(step: number, f: Feature) {
     if (step === 1 && f.extractedRequirements && f.extractedBehaviors) {
       saveMutation.mutate({
+        step: 1,
         extractedRequirements: {
           features:           textToArr(draft.features           ?? arrToText(f.extractedRequirements.features)),
           businessRules:      textToArr(draft.businessRules      ?? arrToText(f.extractedRequirements.businessRules)),
@@ -250,7 +445,7 @@ export function PipelineWizard({ featureId }: Props) {
     if (step === 2) {
       try {
         const parsed = JSON.parse(draft.scenariosJson ?? '[]') as TestScenario[];
-        saveMutation.mutate({ testScenarios: parsed });
+        saveMutation.mutate({ step: 2, testScenarios: parsed });
       } catch {
         toast({ variant: 'destructive', title: 'Invalid JSON', description: 'Fix the scenarios JSON and try again.' });
       }
@@ -282,13 +477,23 @@ export function PipelineWizard({ featureId }: Props) {
         {/* Action bar */}
         <div className="flex items-center gap-2 flex-wrap">
           {st === 'idle' && (
-            <button
-              disabled={!canRun}
-              onClick={() => runMutation.mutate({ step: 1 })}
-              className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-1.5 rounded text-sm hover:opacity-90 disabled:opacity-50"
-            >
-              <Play size={13} /> Run Step 1
-            </button>
+            <>
+              <button
+                disabled={!canRun}
+                onClick={() => runMutation.mutate({ step: 1 })}
+                className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-1.5 rounded text-sm hover:opacity-90 disabled:opacity-50"
+              >
+                <Play size={13} /> Run Step 1
+              </button>
+              {manualStep !== 1 && (
+                <button
+                  onClick={() => openManual(1)}
+                  className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted"
+                >
+                  <FileText size={13} /> Manual
+                </button>
+              )}
+            </>
           )}
           {st === 'running' && (
             <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -312,6 +517,14 @@ export function PipelineWizard({ featureId }: Props) {
               >
                 <RefreshCw size={13} /> Restart from scratch
               </button>
+              {manualStep !== 1 && (
+                <button
+                  onClick={() => openManual(1)}
+                  className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted"
+                >
+                  <FileText size={13} /> Manual
+                </button>
+              )}
             </>
           )}
           {st === 'completed' && !isEditing && (
@@ -401,6 +614,19 @@ export function PipelineWizard({ featureId }: Props) {
           </div>
         )}
 
+        {/* Manual input panel */}
+        {manualStep === 1 && (
+          <ManualPanel
+            step={1} featureId={featureId}
+            templateJson={MANUAL_TEMPLATES[1]}
+            manualJson={manualJson} jsonError={manualJsonError}
+            isSaving={manualSaveMutation.isPending}
+            onJsonChange={handleManualJsonChange}
+            onSave={() => handleManualSave(1)}
+            onCancel={closeManual}
+          />
+        )}
+
         {/* Proceed button */}
         {st === 'completed' && !isEditing && (
           <div className="flex justify-end">
@@ -426,21 +652,32 @@ export function PipelineWizard({ featureId }: Props) {
       <div className="border-t px-4 py-4 space-y-4">
         <div className="flex items-center gap-2 flex-wrap">
           {(st === 'idle' || st === 'failed') && (
-            <button
-              disabled={!canRun}
-              onClick={() => runMutation.mutate({ step: 2 })}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm disabled:opacity-50 ${
-                st === 'failed'
-                  ? 'border border-yellow-500 text-yellow-700 hover:bg-yellow-50'
-                  : 'bg-primary text-primary-foreground hover:opacity-90'
-              }`}
-            >
-              {runMutation.isPending && runMutation.variables?.step === 2
-                ? <Loader2 size={13} className="animate-spin" />
-                : st === 'failed' ? <RefreshCw size={13} /> : <Play size={13} />
-              }
-              {st === 'failed' ? 'Retry Step 2' : 'Run Step 2'}
-            </button>
+            <>
+              <button
+                disabled={!canRun}
+                onClick={() => runMutation.mutate({ step: 2 })}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm disabled:opacity-50 ${
+                  st === 'failed'
+                    ? 'border border-yellow-500 text-yellow-700 hover:bg-yellow-50'
+                    : 'bg-primary text-primary-foreground hover:opacity-90'
+                }`}
+              >
+                {runMutation.isPending && runMutation.variables?.step === 2
+                  ? <Loader2 size={13} className="animate-spin" />
+                  : st === 'failed' ? <RefreshCw size={13} /> : <Play size={13} />
+                }
+                {st === 'failed' ? 'Retry Step 2' : 'Run Step 2'}
+              </button>
+              {manualStep !== 2 && (
+                <button
+                  disabled={!canRun}
+                  onClick={() => openManual(2)}
+                  className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50"
+                >
+                  <FileText size={13} /> Manual
+                </button>
+              )}
+            </>
           )}
           {st === 'running' && (
             <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -499,6 +736,18 @@ export function PipelineWizard({ featureId }: Props) {
           </div>
         )}
 
+        {manualStep === 2 && (
+          <ManualPanel
+            step={2} featureId={featureId}
+            templateJson={MANUAL_TEMPLATES[2]}
+            manualJson={manualJson} jsonError={manualJsonError}
+            isSaving={manualSaveMutation.isPending}
+            onJsonChange={handleManualJsonChange}
+            onSave={() => handleManualSave(2)}
+            onCancel={closeManual}
+          />
+        )}
+
         {st === 'completed' && !isEditing && (
           <div className="flex justify-end">
             <button onClick={() => setOpenStep(3)} className="text-sm text-primary hover:underline">
@@ -518,21 +767,32 @@ export function PipelineWizard({ featureId }: Props) {
       <div className="border-t px-4 py-4 space-y-4">
         <div className="flex items-center gap-2">
           {(st === 'idle' || st === 'failed') && (
-            <button
-              disabled={!canRun}
-              onClick={() => runMutation.mutate({ step: 3 })}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm disabled:opacity-50 ${
-                st === 'failed'
-                  ? 'border border-yellow-500 text-yellow-700 hover:bg-yellow-50'
-                  : 'bg-primary text-primary-foreground hover:opacity-90'
-              }`}
-            >
-              {runMutation.isPending && runMutation.variables?.step === 3
-                ? <Loader2 size={13} className="animate-spin" />
-                : st === 'failed' ? <RefreshCw size={13} /> : <Play size={13} />
-              }
-              {st === 'failed' ? 'Retry Step 3' : 'Run Step 3'}
-            </button>
+            <>
+              <button
+                disabled={!canRun}
+                onClick={() => runMutation.mutate({ step: 3 })}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm disabled:opacity-50 ${
+                  st === 'failed'
+                    ? 'border border-yellow-500 text-yellow-700 hover:bg-yellow-50'
+                    : 'bg-primary text-primary-foreground hover:opacity-90'
+                }`}
+              >
+                {runMutation.isPending && runMutation.variables?.step === 3
+                  ? <Loader2 size={13} className="animate-spin" />
+                  : st === 'failed' ? <RefreshCw size={13} /> : <Play size={13} />
+                }
+                {st === 'failed' ? 'Retry Step 3' : 'Run Step 3'}
+              </button>
+              {manualStep !== 3 && (
+                <button
+                  disabled={!canRun}
+                  onClick={() => openManual(3)}
+                  className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50"
+                >
+                  <FileText size={13} /> Manual
+                </button>
+              )}
+            </>
           )}
           {st === 'running' && (
             <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -549,6 +809,18 @@ export function PipelineWizard({ featureId }: Props) {
             </>
           )}
         </div>
+
+        {manualStep === 3 && (
+          <ManualPanel
+            step={3} featureId={featureId}
+            templateJson={MANUAL_TEMPLATES[3]}
+            manualJson={manualJson} jsonError={manualJsonError}
+            isSaving={manualSaveMutation.isPending}
+            onJsonChange={handleManualJsonChange}
+            onSave={() => handleManualSave(3)}
+            onCancel={closeManual}
+          />
+        )}
 
         {st === 'completed' && (
           <>
@@ -572,21 +844,32 @@ export function PipelineWizard({ featureId }: Props) {
       <div className="border-t px-4 py-4 space-y-4">
         <div className="flex items-center gap-2">
           {(st === 'idle' || st === 'failed') && (
-            <button
-              disabled={!canRun}
-              onClick={() => runMutation.mutate({ step: 4 })}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm disabled:opacity-50 ${
-                st === 'failed'
-                  ? 'border border-yellow-500 text-yellow-700 hover:bg-yellow-50'
-                  : 'bg-primary text-primary-foreground hover:opacity-90'
-              }`}
-            >
-              {runMutation.isPending && runMutation.variables?.step === 4
-                ? <Loader2 size={13} className="animate-spin" />
-                : st === 'failed' ? <RefreshCw size={13} /> : <Play size={13} />
-              }
-              {st === 'failed' ? 'Retry Step 4' : 'Run Step 4'}
-            </button>
+            <>
+              <button
+                disabled={!canRun}
+                onClick={() => runMutation.mutate({ step: 4 })}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm disabled:opacity-50 ${
+                  st === 'failed'
+                    ? 'border border-yellow-500 text-yellow-700 hover:bg-yellow-50'
+                    : 'bg-primary text-primary-foreground hover:opacity-90'
+                }`}
+              >
+                {runMutation.isPending && runMutation.variables?.step === 4
+                  ? <Loader2 size={13} className="animate-spin" />
+                  : st === 'failed' ? <RefreshCw size={13} /> : <Play size={13} />
+                }
+                {st === 'failed' ? 'Retry Step 4' : 'Run Step 4'}
+              </button>
+              {manualStep !== 4 && (
+                <button
+                  disabled={!canRun}
+                  onClick={() => openManual(4)}
+                  className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50"
+                >
+                  <FileText size={13} /> Manual
+                </button>
+              )}
+            </>
           )}
           {st === 'running' && (
             <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -600,6 +883,18 @@ export function PipelineWizard({ featureId }: Props) {
             </button>
           )}
         </div>
+
+        {manualStep === 4 && (
+          <ManualPanel
+            step={4} featureId={featureId}
+            templateJson={MANUAL_TEMPLATES[4]}
+            manualJson={manualJson} jsonError={manualJsonError}
+            isSaving={manualSaveMutation.isPending}
+            onJsonChange={handleManualJsonChange}
+            onSave={() => handleManualSave(4)}
+            onCancel={closeManual}
+          />
+        )}
 
         {feature!.devPromptApi && feature!.devPromptFrontend && feature!.devPromptTesting && (
           <DevPromptPanel

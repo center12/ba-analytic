@@ -58,4 +58,8 @@ export class TestCaseService {
   async saveStepResults(featureId: string, data: unknown) {
     return this.pipeline.saveStepResults(featureId, data as any);
   }
+
+  async getStepPrompt(featureId: string, step: number) {
+    return this.pipeline.getStepPrompt(featureId, step);
+  }
 }

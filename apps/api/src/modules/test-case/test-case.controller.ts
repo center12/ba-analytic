@@ -19,6 +19,18 @@ import { UpdateTestCaseDto } from './dto/update-test-case.dto';
 export class TestCaseController {
   constructor(private readonly service: TestCaseService) {}
 
+  /**
+   * GET /api/test-cases/feature/:featureId/step-prompt/:step
+   * Returns the prompt that would be sent to AI for the given step, without calling AI.
+   */
+  @Get('feature/:featureId/step-prompt/:step')
+  getStepPrompt(
+    @Param('featureId') featureId: string,
+    @Param('step', ParseIntPipe) step: number,
+  ) {
+    return this.service.getStepPrompt(featureId, step);
+  }
+
   @Get('feature/:featureId')
   findByFeature(@Param('featureId') featureId: string) {
     return this.service.findByFeature(featureId);

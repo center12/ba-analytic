@@ -42,11 +42,17 @@ export interface CombinedExtraction {
   behaviors: ExtractedBehaviors;
 }
 
-/** Layer 4 — Dev Prompts (4A API · 4B Frontend · 4C Testing) */
+/** A single focused developer sub-task produced by Layer 4 */
+export interface DevTaskItem {
+  title: string;   // e.g. "API — Authentication endpoints"
+  prompt: string;  // self-contained implementation prompt for this sub-task
+}
+
+/** Layer 4 — Dev Prompts (4A API · 4B Frontend · 4C Testing), each broken into 1..N sub-tasks */
 export interface DevPrompt {
-  api: string;       // 4A — backend/API implementation prompt
-  frontend: string;  // 4B — frontend/UI implementation prompt
-  testing: string;   // 4C — test automation / QA implementation prompt
+  api:      DevTaskItem[];   // 4A — backend sub-tasks
+  frontend: DevTaskItem[];   // 4B — frontend sub-tasks
+  testing:  DevTaskItem[];   // 4C — test automation sub-tasks
 }
 
 export type ScenarioType = 'happy_path' | 'edge_case' | 'error' | 'boundary' | 'security';
@@ -58,6 +64,132 @@ export interface TestScenario {
 }
 
 /**
+ * Builds the prompt for Layer 1 combined extraction (requirements + behaviors).
+ * Shared across all provider implementations.
+ */
+export function buildExtractAllPrompt(baDocumentContent: string): string {
+  return `You are a senior business analyst and UX researcher. Read the following BA document and extract TWO things in a single pass.
+
+1. DOMAIN REQUIREMENTS:
+   - features: list of functional features/capabilities described
+   - businessRules: constraints, validations, and business logic rules
+   - acceptanceCriteria: specific conditions that must be met for acceptance
+   - entities: key domain objects/models mentioned (e.g. User, Order, Product)
+
+2. BEHAVIOR MODEL:
+   - feature: the primary feature name
+   - actors: users or systems involved
+   - actions: atomic steps (Actor + Verb + Object), keep only business logic, remove UI/visual details
+   - rules: validation rules, business rules, conditional logic, inferred edge cases
+
+Be thorough — missing a requirement or edge case means missing test coverage.
+
+BA Document:
+${baDocumentContent}
+
+---
+
+Return ONLY valid JSON matching this exact structure (no markdown, no explanation):
+{
+  "requirements": {
+    "features": ["string"],
+    "businessRules": ["string"],
+    "acceptanceCriteria": ["string"],
+    "entities": ["string"]
+  },
+  "behaviors": {
+    "feature": "string",
+    "actors": ["string"],
+    "actions": ["string"],
+    "rules": ["string"]
+  }
+}`;
+}
+
+/**
+ * Builds the prompt for Layer 2 scenario planning.
+ * Shared across all provider implementations.
+ */
+export function buildPlanScenariosPrompt(
+  requirements: ExtractedRequirements,
+  behaviors: ExtractedBehaviors,
+): string {
+  return `You are a QA strategist. Using both the domain requirements and the normalized behaviors below, identify ALL test scenarios that need to be covered.
+
+## Domain Requirements (Layer 1A)
+Features: ${requirements.features.join('\n- ')}
+Business Rules: ${requirements.businessRules.join('\n- ')}
+Acceptance Criteria: ${requirements.acceptanceCriteria.join('\n- ')}
+Entities: ${requirements.entities.join(', ')}
+
+## Behaviors (Layer 1B)
+Feature: ${behaviors.feature}
+Actors: ${behaviors.actors.join(', ')}
+Actions:
+- ${behaviors.actions.join('\n- ')}
+Rules:
+- ${behaviors.rules.join('\n- ')}
+
+For each scenario specify:
+- title: short descriptive name
+- type: one of happy_path | edge_case | error | boundary | security
+- requirementRefs: which requirements or actions this scenario covers
+
+Ensure complete coverage across both layers. Return at most 15 scenarios. Prioritise happy_path and error scenarios. Be concise — one line per title.
+
+---
+
+Return ONLY valid JSON — a plain array matching this exact structure (no markdown, no explanation):
+[
+  {
+    "title": "string",
+    "type": "happy_path | edge_case | error | boundary | security",
+    "requirementRefs": ["string"]
+  }
+]`;
+}
+
+/**
+ * Builds the prompt for Layer 3 test case generation.
+ * Shared across all provider implementations.
+ */
+export function buildGenerateTestCasesPrompt(
+  scenarios: TestScenario[],
+  requirements: ExtractedRequirements,
+): string {
+  return `You are a QA engineer. Write detailed, executable test cases for each of the following scenarios.
+
+Domain context:
+Entities: ${requirements.entities.join(', ')}
+Business Rules: ${requirements.businessRules.join('\n- ')}
+
+Scenarios to cover:
+${scenarios.map((s, i) => `${i + 1}. [${s.type.toUpperCase()}] ${s.title}\n   Covers: ${s.requirementRefs.join('; ')}`).join('\n')}
+
+For each scenario write a concise test case:
+- title: copy exactly from the scenario title
+- description: one sentence describing what is being tested
+- preconditions: one sentence describing the required system state
+- priority: HIGH (critical path/security), MEDIUM (important features), LOW (edge cases)
+- steps: at most 6 steps, each action and expectedResult under 20 words
+
+---
+
+Return ONLY valid JSON — a plain array matching this exact structure (no markdown, no explanation):
+[
+  {
+    "title": "string",
+    "description": "string",
+    "preconditions": "string",
+    "priority": "HIGH | MEDIUM | LOW",
+    "steps": [
+      { "action": "string", "expectedResult": "string" }
+    ]
+  }
+]`;
+}
+
+/**
  * Builds the input prompt for Layer 4 dev prompt generation.
  * Shared across all provider implementations.
  */
@@ -66,11 +198,14 @@ export function buildDevPromptInput(
   behaviors: ExtractedBehaviors,
   scenarios: TestScenario[],
 ): string {
+  const scenarioCount = scenarios.length;
+  const subTaskCount  = Math.min(Math.ceil(scenarioCount / 4), 5); // 1 for ≤4, up to 5 for large features
+
   const scenarioList = scenarios
     .map((s, i) => `${i + 1}. [${s.type.toUpperCase()}] ${s.title}`)
     .join('\n');
 
-  return `You are a senior software architect. Based on the feature analysis below, generate THREE separate implementation prompts — one for API/backend (4A), one for frontend/UI (4B), and one for test automation (4C). Each prompt must be self-contained and ready to paste into an AI coding tool (Cursor, Copilot, Claude, etc.).
+  return `You are a senior software architect. Based on the feature analysis below, generate developer implementation prompts split into sub-tasks — one set for API/backend (4A), one for frontend/UI (4B), and one for test automation (4C).
 
 ## Feature: ${behaviors.feature}
 
@@ -89,39 +224,45 @@ ${requirements.entities.join(', ')}
 ## Acceptance Criteria
 ${requirements.acceptanceCriteria.map((c) => `- ${c}`).join('\n')}
 
-## Test Scenarios to Cover
+## Test Scenarios to Cover (${scenarioCount} total)
 ${scenarioList}
 
 ---
 
-## Generation Rules (MUST be embedded in every generated prompt)
+## Sub-Task Breakdown Rules
 
-**ALWAYS generate** (complete, working code):
+- Produce exactly **${subTaskCount} sub-task(s) per category** (api, frontend, testing).
+- Group logically related scenarios together into each sub-task (e.g. "Authentication flows", "Data CRUD", "Error handling").
+- Title pattern: \`"API — [theme]"\`, \`"Frontend — [theme]"\`, \`"Testing — [theme]"\`.
+- Each sub-task prompt must be **fully self-contained** (embed all context needed to implement that slice).
+- Keep each sub-task prompt under **400 words**. Use placeholders for boilerplate — do not write full implementations.
+- Always return arrays — for simple features (1 sub-task), still return an array with one element.
+
+## Prompt Quality Rules (apply to every sub-task prompt)
+
+**ALWAYS include** (complete, working code):
 - Function/method signatures with correct types
 - API routes with HTTP methods, paths, and response shapes
-- Input validation derived from the business rules above
-- Error handling derived from the error/boundary test scenarios above
+- Input validation derived from the business rules relevant to this sub-task
+- Error handling derived from the error/boundary scenarios relevant to this sub-task
 
-**PARTIALLY generate** (scaffold only):
-- Business logic → output a stub with a clear \`// TODO: implement [specific rule]\` comment for each rule
+**PARTIALLY include** (scaffold only):
+- Business logic → stub with \`// TODO: implement [specific rule]\` for each rule
 
-**NEVER skip**:
-- Test files — the testing prompt (4C) must produce fully implemented test cases, not stubs
+**NEVER skip** (testing sub-tasks):
+- Each testing sub-task must produce fully implemented test cases, not stubs
+- One test per scenario covered by that sub-task
 
-**Always ensure**:
-- Generated code is logically consistent with the test cases (the implementation must be able to pass them)
-- Structure is clean and modular (separate concerns: routes, validation, business logic, data access)
+Each prompt must start with "You are an expert [role]." and embed all relevant context.
 
 ---
 
-Generate:
-- **api**: Prompt for implementing the backend API. Must include: function signatures, route definitions, input validation (from rules), error handling (from test scenarios), business logic stubs with TODO comments.
-- **frontend**: Prompt for implementing the frontend UI. Must include: component signatures, API integration hooks, form validation (from rules), error state handling (from test scenarios), UI logic stubs with TODO comments.
-- **testing**: Prompt for writing fully implemented automated tests. Must include: one test per scenario listed above, assertions for both success and error paths, setup/teardown, no stubs — all test bodies must be complete.
-
-Each prompt must start with "You are an expert [role]." and embed all relevant context so it is fully self-contained.
-
-Keep each output prompt under 800 words. Use placeholders for boilerplate code — do not write full implementations.`;
+Return ONLY valid JSON matching this exact structure (no markdown, no explanation):
+{
+  "api":      [{ "title": "API — [theme]",      "prompt": "string" }],
+  "frontend": [{ "title": "Frontend — [theme]", "prompt": "string" }],
+  "testing":  [{ "title": "Testing — [theme]",  "prompt": "string" }]
+}`;
 }
 
 /**

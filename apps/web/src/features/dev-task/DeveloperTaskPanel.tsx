@@ -10,7 +10,7 @@ const CATEGORY_STYLES: Record<DevTaskCategory, { label: string; badge: string }>
   TESTING:  { label: '4C — Testing',  badge: 'bg-green-100 text-green-700' },
 };
 
-function TaskCard({ task, onDeleted }: { task: DeveloperTask; onDeleted: () => void }) {
+function TaskCard({ task, onDeleted, hideCategory = false }: { task: DeveloperTask; onDeleted: () => void; hideCategory?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -37,9 +37,11 @@ function TaskCard({ task, onDeleted }: { task: DeveloperTask; onDeleted: () => v
   return (
     <div className="border rounded-lg bg-card text-sm">
       <div className="flex items-center gap-3 px-4 py-3">
-        <span className={`px-2 py-0.5 rounded text-xs font-medium ${style.badge}`}>
-          {style.label}
-        </span>
+        {!hideCategory && (
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${style.badge}`}>
+            {style.label}
+          </span>
+        )}
         <span className="font-medium flex-1 truncate">{task.title}</span>
         <div className="flex items-center gap-1 shrink-0">
           <button
@@ -89,6 +91,12 @@ export function DeveloperTaskPanel({ featureId }: { featureId: string }) {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['dev-tasks', featureId] });
 
+  const CATEGORY_ORDER: DevTaskCategory[] = ['API', 'FRONTEND', 'TESTING'];
+  const grouped = CATEGORY_ORDER.reduce((acc, cat) => {
+    acc[cat] = tasks.filter((t) => t.category === cat);
+    return acc;
+  }, {} as Record<DevTaskCategory, DeveloperTask[]>);
+
   return (
     <div className="border rounded-lg mx-6 mt-3 bg-card text-sm">
       <button
@@ -100,13 +108,29 @@ export function DeveloperTaskPanel({ featureId }: { featureId: string }) {
         <span className="ml-1 bg-primary/10 text-primary text-xs px-1.5 py-0.5 rounded-full">
           {tasks.length}
         </span>
-        <span className="ml-auto text-xs text-muted-foreground">API · Frontend · Testing</span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {tasks.length} task{tasks.length !== 1 ? 's' : ''} · API · Frontend · Testing
+        </span>
       </button>
 
       {open && (
-        <div className="border-t p-4 flex flex-col gap-3">
-          {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onDeleted={invalidate} />
+        <div className="border-t p-4 flex flex-col gap-4">
+          {CATEGORY_ORDER.filter((cat) => grouped[cat].length > 0).map((cat) => (
+            <div key={cat}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${CATEGORY_STYLES[cat].badge}`}>
+                  {CATEGORY_STYLES[cat].label}
+                </span>
+                {grouped[cat].length > 1 && (
+                  <span className="text-xs text-muted-foreground">{grouped[cat].length} tasks</span>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                {grouped[cat].map((task) => (
+                  <TaskCard key={task.id} task={task} onDeleted={invalidate} hideCategory />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
