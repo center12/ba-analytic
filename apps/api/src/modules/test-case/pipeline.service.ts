@@ -677,7 +677,8 @@ export class PipelineService {
       this.logger.log(`[Pipeline] Layer 1 — chunk ${i + 1}/${chunks.length} (~${estimateTokens(chunks[i])} tokens)`);
       if (i > startChunk) await new Promise(r => setTimeout(r, CHUNK_DELAY_MS));
       try {
-        const part = await withRetry(() => provider.extractAll(chunks[i]));
+        const chunkWithContext = `[Chunk ${i + 1} of ${chunks.length} — partial section of a larger document. Extract every item present; similar items from other chunks will be merged.]\n\n${chunks[i]}`;
+        const part = await withRetry(() => provider.extractAll(chunkWithContext));
         completedParts.push(part);
         const runningMerge = mergeExtractions(completedParts);
         await this.prisma.feature.update({
@@ -758,7 +759,8 @@ export class PipelineService {
         if (i > startChunk) await new Promise(r => setTimeout(r, CHUNK_DELAY_MS));
 
         try {
-          const part = await withRetry(() => provider.extractAll(chunks[i]));
+          const chunkWithContext = `[Chunk ${i + 1} of ${chunks.length} — partial section of a larger document. Extract every item present; similar items from other chunks will be merged.]\n\n${chunks[i]}`;
+          const part = await withRetry(() => provider.extractAll(chunkWithContext));
           completedParts.push(part);
 
           // Save running partial after every successful chunk

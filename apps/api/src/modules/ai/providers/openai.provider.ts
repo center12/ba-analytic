@@ -9,6 +9,7 @@ import {
   buildExtractAllPrompt,
   buildGenerateTestCasesPrompt,
   buildPlanScenariosPrompt,
+  buildSynthesisPrompt,
   ChatHistoryItem,
   CombinedExtraction,
   DevPrompt,
@@ -117,11 +118,7 @@ export class OpenAIProvider extends AIProvider {
   async synthesiseExtraction(merged: CombinedExtraction): Promise<CombinedExtraction> {
     this.logger.log('[Layer 1] Synthesising merged extraction...');
     const CombinedSchema = z.object({ requirements: RequirementsSchema, behaviors: BehaviorsSchema });
-    const promptSynth = `You are a business analyst. The arrays below were extracted from multiple chunks of the same document and may contain near-duplicate entries. Consolidate them: merge similar items into one canonical phrase, remove exact duplicates, keep the result concise.
-
-${JSON.stringify(merged, null, 0)}
-
-Return the same structure with duplicates removed.`;
+    const promptSynth = buildSynthesisPrompt(merged);
     this.logPromptSize('[Layer 1 synthesis]', promptSynth);
     const { object, usage, response } = await generateObject({
       model: openai(this.modelVersion),

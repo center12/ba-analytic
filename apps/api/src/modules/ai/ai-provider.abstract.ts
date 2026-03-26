@@ -66,26 +66,44 @@ export interface TestScenario {
 /**
  * Builds the prompt for Layer 1 combined extraction (requirements + behaviors).
  * Shared across all provider implementations.
+ *
+ * @param baDocumentContent - Raw Markdown content (or a single chunk of it).
+ * @param chunkInfo - When the document is split into multiple chunks, pass the
+ *   current chunk index (0-based) and the total count so the AI knows it is
+ *   seeing a partial view of a larger document.
  */
-export function buildExtractAllPrompt(baDocumentContent: string): string {
+export function buildExtractAllPrompt(
+  baDocumentContent: string,
+  chunkInfo?: { index: number; total: number },
+): string {
+  const chunkHeader = chunkInfo && chunkInfo.total > 1
+    ? `[Chunk ${chunkInfo.index + 1} of ${chunkInfo.total} — this is a partial section of a larger document. Extract every item present; similar items from other chunks will be merged later.]\n\n`
+    : '';
+
   return `You are a senior business analyst and UX researcher. Read the following BA document and extract TWO things in a single pass.
+
+Document format notes:
+- The document is structured Markdown with ## section headings (e.g. ## Functional Requirements, ## Business Rules, ## Acceptance Criteria).
+- List items may carry ID prefixes such as FR-01, BR-03, AC-02, VR-01, US-01. Preserve these IDs verbatim in every extracted string so they can be cross-referenced downstream.
+- Acceptance Criteria appear as Markdown tables (columns: ID | Given | When | Then). Extract each row as a single string in the format: "AC-01: Given [..], When [..], Then [..]".
+- Data Entities appear as Markdown tables under ### sub-headings. Extract each entity name into the entities list.
 
 1. DOMAIN REQUIREMENTS:
    - features: list of functional features/capabilities described
-   - businessRules: constraints, validations, and business logic rules
-   - acceptanceCriteria: specific conditions that must be met for acceptance
-   - entities: key domain objects/models mentioned (e.g. User, Order, Product)
+   - businessRules: constraints, validations, and business logic rules — preserve IDs (BR-xx)
+   - acceptanceCriteria: specific conditions that must be met — preserve IDs (AC-xx), use Given/When/Then format
+   - entities: key domain objects/models mentioned
 
 2. BEHAVIOR MODEL:
-   - feature: the primary feature name
-   - actors: users or systems involved
+   - feature: the primary feature name (from the # title)
+   - actors: users or systems involved (from ## Actors table)
    - actions: atomic steps (Actor + Verb + Object), keep only business logic, remove UI/visual details
-   - rules: validation rules, business rules, conditional logic, inferred edge cases
+   - rules: validation and business rules — preserve IDs (FR-xx, VR-xx) where present
 
 Be thorough — missing a requirement or edge case means missing test coverage.
 
 BA Document:
-${baDocumentContent}
+${chunkHeader}${baDocumentContent}
 
 ---
 
@@ -104,6 +122,25 @@ Return ONLY valid JSON matching this exact structure (no markdown, no explanatio
     "rules": ["string"]
   }
 }`;
+}
+
+/**
+ * Builds the prompt for the Layer 1 synthesis step.
+ * Called when a document was split into multiple chunks — merges near-duplicate
+ * extraction results from all chunks into a single canonical set.
+ */
+export function buildSynthesisPrompt(merged: CombinedExtraction): string {
+  return `You are a business analyst. The arrays below were extracted from multiple chunks of the same Markdown BA document and may contain near-duplicate or split entries.
+
+Consolidation rules:
+- Items carrying ID prefixes (FR-01, BR-01, AC-01, VR-01, US-01) are DISTINCT by definition — preserve each ID and its text unchanged. Never merge two items with different IDs.
+- Items without IDs: merge only if they describe exactly the same concept; otherwise keep both.
+- Remove exact string duplicates.
+- Keep the result concise; do not reword or paraphrase.
+
+${JSON.stringify(merged, null, 0)}
+
+Return the same JSON structure with duplicates removed. Preserve all IDs verbatim.`;
 }
 
 /**
@@ -133,7 +170,7 @@ Rules:
 For each scenario specify:
 - title: short descriptive name
 - type: one of happy_path | edge_case | error | boundary | security
-- requirementRefs: which requirements or actions this scenario covers
+- requirementRefs: which requirements or actions this scenario covers — use the item's ID when one is present (e.g. "FR-01", "BR-03", "AC-02"); use a short phrase only when there is no ID
 
 Ensure complete coverage across both layers. Return at most 15 scenarios. Prioritise happy_path and error scenarios. Be concise — one line per title.
 
