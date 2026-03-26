@@ -38,6 +38,27 @@ This is a **pnpm monorepo** with two apps:
 
 All NestJS modules live under `src/modules/`. Each is self-contained with controller/service/module files.
 
+#### Required API module layout (prompt-safe)
+
+For all backend modules under `apps/api/src/modules/*`, use:
+
+```
+<module-name>/
+  constants/                 # module constants
+  helpers/                   # pure helper utilities
+  dto/                       # DTO classes
+  <module-name>.controller.ts
+  <module-name>.service.ts
+  <module-name>.module.ts
+```
+
+API naming convention uses **kebab-case**:
+- `constants/<domain>.constants.ts` (example: `constants/test-case.constants.ts`)
+- `helpers/<domain>.helpers.ts` (example: `helpers/pipeline.helpers.ts`)
+- DTOs: `create-*.dto.ts`, `update-*.dto.ts`
+
+Avoid generic root-level names like `constants.ts` or `utils.ts` for new code; prefer domain-scoped filenames in `constants/` and `helpers/`.
+
 | Module | Responsibility |
 |---|---|
 | `project` | CRUD for `Project` and `Feature`; file uploads via `MulterModule` (memory storage). BA document upload restricted to `.md` only (enforced in `FileInterceptor` options on the controller and as a guard in the service). Screenshots accept any image type. |
@@ -84,6 +105,25 @@ Feature-based structure:
 | `lib/api.ts` | All typed `fetch` wrappers + shared TS interfaces |
 | `store/index.ts` | Zustand — active AI provider |
 | `hooks/use-toast.ts` | Toast notifications |
+
+#### Required feature folder layout (prompt-safe)
+
+For all frontend features under `apps/web/src/features/*`, always use this structure:
+
+```
+<feature>/
+  components/   # all .tsx components
+  helpers/      # helper utilities only
+  constants/    # constants only
+  types/        # type definitions only
+```
+
+File naming convention for shared feature files:
+- `<domain>.constants.ts` (e.g. `pipeline-wizard.constants.ts`)
+- `<domain>.helpers.ts` (e.g. `pipeline-wizard.helpers.ts`)
+- `<domain>.types.ts` (e.g. `pipeline-wizard.types.ts`)
+
+When generating code from prompts, do not mix helpers/constants/types into component files unless there is a strong reason.
 
 Data fetching uses **TanStack Query** with query keys:
 - `['projects']`, `['features', projectId]`

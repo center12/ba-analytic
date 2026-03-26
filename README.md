@@ -62,6 +62,46 @@ ba-analytic/
 └── docker-compose.yml
 ```
 
+## Frontend Feature Folder Convention
+
+When creating or refactoring code with AI prompts, keep **all feature folders** consistent:
+
+```
+apps/web/src/features/<feature-name>/
+├── components/   # all .tsx UI components
+├── helpers/      # pure helper functions / mappers / transforms
+├── constants/    # static config values and UI constants
+├── types/        # feature-local TypeScript types
+└── *.tsx         # feature entry/container pages (optional)
+```
+
+Naming convention for shared files:
+- `constants/<domain>.constants.ts` (example: `constants/pipeline-wizard.constants.ts`)
+- `helpers/<domain>.helpers.ts` (example: `helpers/pipeline-wizard.helpers.ts`)
+- `types/<domain>.types.ts` (example: `types/pipeline-wizard.types.ts`)
+
+Use this pattern for every new feature to keep prompt-driven code generation predictable and maintainable.
+
+## API Module Folder Convention
+
+When creating or refactoring backend modules with AI prompts, keep API modules consistent:
+
+```
+apps/api/src/modules/<module-name>/
+├── constants/    # module constants
+├── helpers/      # pure helper functions
+├── dto/          # request/response DTOs
+├── <module-name>.controller.ts
+├── <module-name>.service.ts
+└── <module-name>.module.ts
+```
+
+Naming convention (API uses kebab-case):
+- `constants/<domain>.constants.ts` (example: `constants/test-case.constants.ts`)
+- `helpers/<domain>.helpers.ts` (example: `helpers/pipeline.helpers.ts`)
+- DTOs: `create-*.dto.ts`, `update-*.dto.ts`
+- Keep controller/service/module filenames in kebab-case to match route/module names.
+
 ## Getting Started
 
 ### Prerequisites

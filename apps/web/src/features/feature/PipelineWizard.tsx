@@ -11,8 +11,8 @@ import {
 } from '@/lib/api';
 import { useAppStore } from '@/store';
 import { toast } from '@/hooks/use-toast';
-import { MANUAL_TEMPLATES } from './constants/pipelineWizard.constants';
-import { arrToText, deriveStatus, textToArr } from './helpers/pipelineWizard.helpers';
+import { MANUAL_TEMPLATES } from './constants/pipeline-wizard.constants';
+import { arrToText, deriveStatus, textToArr } from './helpers/pipeline-wizard.helpers';
 import { StepHeader } from './components/pipeline-wizard/StepHeader';
 import { PipelineStep1 } from './components/pipeline-wizard/PipelineStep1';
 import { PipelineStep2 } from './components/pipeline-wizard/PipelineStep2';

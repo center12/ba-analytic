@@ -1,5 +1,5 @@
 import { Feature } from '@/lib/api';
-import { StepStatus } from '../types/pipelineWizard.types';
+import { StepStatus } from '../types/pipeline-wizard.types';
 
 export function deriveStatus(
   stepNum: number,

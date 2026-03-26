@@ -1,5 +1,5 @@
 import { CheckCircle2, ChevronDown, ChevronRight, Circle, Loader2, XCircle } from 'lucide-react';
-import { StepStatus } from '../../types/pipelineWizard.types';
+import { StepStatus } from '../../types/pipeline-wizard.types';
 
 interface StepHeaderProps {
   num: number;

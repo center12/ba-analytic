@@ -1,7 +1,7 @@
 import { FileText, Loader2, Pencil, Play, RefreshCw, Save, X } from 'lucide-react';
 import { Dispatch, SetStateAction } from 'react';
 import { Feature } from '@/lib/api';
-import { BADGE, MANUAL_TEMPLATES } from '../../constants/pipelineWizard.constants';
+import { BADGE, MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
 import { ManualPanel } from './ManualPanel';
 
 interface PipelineStep2Props {

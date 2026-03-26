@@ -1,5 +1,5 @@
 import { FileText, Loader2, Play, RefreshCw } from 'lucide-react';
-import { MANUAL_TEMPLATES } from '../../constants/pipelineWizard.constants';
+import { MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
 import { ManualPanel } from './ManualPanel';
 import { TestCaseDashboard } from '@/features/test-case/TestCaseDashboard';
 

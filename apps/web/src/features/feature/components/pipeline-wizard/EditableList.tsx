@@ -1,4 +1,4 @@
-import { arrToText } from '../../helpers/pipelineWizard.helpers';
+import { arrToText } from '../../helpers/pipeline-wizard.helpers';
 
 interface EditableListProps {
   label: string;

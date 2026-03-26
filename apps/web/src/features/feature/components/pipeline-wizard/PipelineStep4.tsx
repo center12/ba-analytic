@@ -1,6 +1,6 @@
 import { FileText, Loader2, Play, RefreshCw } from 'lucide-react';
 import { Feature } from '@/lib/api';
-import { MANUAL_TEMPLATES } from '../../constants/pipelineWizard.constants';
+import { MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
 import { ManualPanel } from './ManualPanel';
 import { DevPromptPanel } from './DevPromptPanel';
 

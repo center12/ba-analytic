@@ -1,7 +1,7 @@
 import { FileText, Loader2, Pencil, Play, RefreshCw, Save, X } from 'lucide-react';
 import { Dispatch, SetStateAction } from 'react';
 import { Feature } from '@/lib/api';
-import { MANUAL_TEMPLATES } from '../../constants/pipelineWizard.constants';
+import { MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
 import { EditableList } from './EditableList';
 import { ManualPanel } from './ManualPanel';
 
