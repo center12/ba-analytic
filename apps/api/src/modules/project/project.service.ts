@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import * as path from 'path';
+import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { StorageModule } from '../storage/storage.module';
 import { STORAGE_PROVIDER, IStorageProvider } from '../storage/storage.interface';
@@ -92,7 +93,9 @@ export class ProjectService {
 
   async uploadBADocument(featureId: string, file: Express.Multer.File) {
     await this.findOneFeature(featureId);
-    const ext = mime.extension(file.mimetype) || 'bin';
+    if (path.extname(file.originalname).toLowerCase() !== '.md')
+      throw new BadRequestException('Only Markdown (.md) files are accepted');
+    const ext = 'md';
     const key = `features/${featureId}/ba-document/${uuidv4()}.${ext}`;
     await this.storage.upload(file.buffer, key, file.mimetype);
 

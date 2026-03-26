@@ -6,6 +6,7 @@ import { ChatSidebar } from '@/features/chat/ChatSidebar';
 import { ModelSelector } from '@/features/ai/ModelSelector';
 import { DeveloperTaskPanel } from '@/features/dev-task/DeveloperTaskPanel';
 import { PipelineWizard } from './PipelineWizard';
+import { BADocFormatGuide } from './components/BADocFormatGuide';
 import { useRef } from 'react';
 import { toast } from '@/hooks/use-toast';
 
@@ -66,7 +67,7 @@ export function FeatureDetailPage() {
           <input
             ref={baInputRef}
             type="file"
-            accept=".pdf,.doc,.docx,.txt,.md"
+            accept=".md"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -80,6 +81,7 @@ export function FeatureDetailPage() {
             <Upload size={14} />
             {feature?.baDocument ? 'Replace BA Doc' : 'Upload BA Doc'}
           </button>
+          <BADocFormatGuide />
 
           <input
             ref={ssInputRef}

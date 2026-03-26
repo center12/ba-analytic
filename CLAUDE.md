@@ -40,7 +40,7 @@ All NestJS modules live under `src/modules/`. Each is self-contained with contro
 
 | Module | Responsibility |
 |---|---|
-| `project` | CRUD for `Project` and `Feature`; file uploads (BA docs, screenshots) via `MulterModule` with memory storage |
+| `project` | CRUD for `Project` and `Feature`; file uploads via `MulterModule` (memory storage). BA document upload restricted to `.md` only (enforced in `FileInterceptor` options on the controller and as a guard in the service). Screenshots accept any image type. |
 | `storage` | `IStorageProvider` interface + `LocalStorageAdapter` (saves to `./uploads/`). Swap for S3 by implementing the interface and rebinding `STORAGE_PROVIDER` token |
 | `ai` | `AIProvider` abstract class + `AIProviderFactory`. Concrete providers: `GeminiProvider`, `ClaudeProvider`, `OpenAIProvider`, all using **Vercel AI SDK** (`ai`, `@ai-sdk/*`) |
 | `chat` | `ChatSession` + `ChatMessage` CRUD; SSE streaming via NestJS `@Sse()` decorator |
@@ -63,7 +63,7 @@ Triggered by `POST /api/test-cases/feature/:id/generate`. Runs in sequence:
 | 1B | Behavior Extraction | `ExtractedBehaviors` (actors, actions, rules) — runs in parallel with 1A |
 | 2 | Scenario Planning | `TestScenario[]` (happy path, edge cases, errors, boundary, security) |
 | 3 | Test Case Generation | `TestCase[]` persisted to DB |
-| 4 | Dev Prompt Generation | `DevPrompt { api, frontend, testing }` → saved to Feature + 3 `DeveloperTask` records |
+| 4 | Dev Prompt Generation | `DevPrompt { api: DevTaskItem[], frontend: DevTaskItem[], testing: DevTaskItem[] }` → saved to Feature + N `DeveloperTask` records (1 per sub-task; count scales with scenario complexity) |
 
 Each re-run deletes existing `DeveloperTask` records for the feature before creating fresh ones.
 
@@ -74,7 +74,8 @@ Feature-based structure:
 | Folder | Contents |
 |---|---|
 | `features/project/` | `ProjectsPage`, `ProjectDetailPage` |
-| `features/feature/` | `FeatureDetailPage`, `PipelinePanel`, `DevPromptPanel` |
+| `features/feature/` | `FeatureDetailPage`, `PipelinePanel`, `DevPromptPanel`, `PipelineWizard` |
+| `features/feature/components/` | Feature-scoped components — `BADocFormatGuide` |
 | `features/test-case/` | `TestCaseDashboard` |
 | `features/chat/` | `ChatSidebar` |
 | `features/ai/` | `ModelSelector` (provider selector) |

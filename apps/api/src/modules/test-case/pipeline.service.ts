@@ -128,6 +128,77 @@ function chunkText(
   return chunks;
 }
 
+/**
+ * Markdown-aware chunker.
+ *
+ * Splits the document at `##` section boundaries so that no heading is ever
+ * orphaned from its content.  Each chunk is prefixed with the document title
+ * (`# ...`) so the AI always has feature context regardless of which chunk it
+ * is processing.
+ *
+ * Fallback: if a single `##` section exceeds `maxChars` it is split further at
+ * paragraph boundaries (`\n\n`), still prepending the title + section heading.
+ *
+ * If no `##` sections are found (non-Markdown file), falls back to `chunkText`.
+ */
+function chunkMarkdown(text: string, maxChars = CHUNK_MAX_CHARS): string[] {
+  const lines = text.split('\n');
+
+  // Extract the # title line (if present) as a shared header prepended to every chunk
+  let header = '';
+  let bodyStart = 0;
+  if (lines[0]?.startsWith('# ')) {
+    header = lines[0];
+    bodyStart = 1;
+  }
+  const body = lines.slice(bodyStart).join('\n');
+
+  // Split at ## headings
+  const rawSections = body.split(/(?=^## )/m).map(s => s.trim()).filter(Boolean);
+  if (rawSections.length === 0) return chunkText(text, maxChars); // no ## — plain text fallback
+
+  const chunks: string[] = [];
+  let current = header;
+
+  const flush = () => {
+    if (current && current !== header) { chunks.push(current.trim()); current = header; }
+  };
+
+  for (const section of rawSections) {
+    const candidate = current ? `${current}\n\n${section}` : section;
+
+    if (candidate.length <= maxChars) {
+      current = candidate;
+    } else {
+      flush();
+
+      const standalone = header ? `${header}\n\n${section}` : section;
+      if (standalone.length <= maxChars) {
+        current = standalone;
+      } else {
+        // Section alone too big → split by paragraphs
+        const headingMatch = section.match(/^(## [^\n]+)\n/);
+        const sectionHeading = headingMatch ? headingMatch[1] : '';
+        const sectionBody    = headingMatch ? section.slice(headingMatch[0].length) : section;
+        const paragraphs     = sectionBody.split(/\n\n+/);
+        let subChunk = header ? `${header}\n\n${sectionHeading}` : sectionHeading;
+        for (const para of paragraphs) {
+          const next = subChunk ? `${subChunk}\n\n${para}` : para;
+          if (next.length <= maxChars) {
+            subChunk = next;
+          } else {
+            if (subChunk) chunks.push(subChunk.trim());
+            subChunk = header ? `${header}\n\n${sectionHeading}\n\n${para}` : `${sectionHeading}\n\n${para}`;
+          }
+        }
+        current = subChunk;
+      }
+    }
+  }
+  flush();
+  return chunks.length ? chunks : [text];
+}
+
 function mergeExtractions(extractions: CombinedExtraction[]): CombinedExtraction {
   const dedup = (arr: string[]) => [...new Set(arr)];
   return {
@@ -593,9 +664,9 @@ export class PipelineService {
     }
 
     const provider = this.aiFactory.getProvider(providerName as ProviderName | undefined);
-    const chunks   = chunkText(baContent);
+    const chunks   = chunkMarkdown(baContent);
 
-    this.logger.log(`[Pipeline] Layer 1 — ${chunks.length} chunk(s), ~${estimateTokens(baContent)} tokens (provider: ${provider.providerName}, starting at chunk ${startChunk})`);
+    this.logger.log(`[Pipeline] Layer 1 — ${chunks.length} chunk(s) from ${(baContent.match(/^## /gm) ?? []).length} section(s), ~${estimateTokens(baContent)} tokens (provider: ${provider.providerName}, starting at chunk ${startChunk})`);
 
     if (chunks.length === 1 && startChunk === 0) {
       return withRetry(() => provider.extractAll(chunks[0]));
@@ -670,7 +741,7 @@ export class PipelineService {
     const chunks = chunkText(baContent);
 
     this.logger.log(
-      `[Pipeline] Layer 1 — ${chunks.length} chunk(s), ~${estimateTokens(baContent)} tokens (provider: ${provider.providerName}, starting at chunk ${startChunk})`,
+      `[Pipeline] Layer 1 — ${chunks.length} chunk(s) from ${(baContent.match(/^## /gm) ?? []).length} section(s), ~${estimateTokens(baContent)} tokens (provider: ${provider.providerName}, starting at chunk ${startChunk})`,
     );
 
     // ── Layer 1: Combined extraction (chunked, resumable) ─────────────────────

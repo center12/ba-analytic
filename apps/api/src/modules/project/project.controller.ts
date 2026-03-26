@@ -1,3 +1,4 @@
+import * as path from 'path';
 import {
   Controller,
   Get,
@@ -12,6 +13,17 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+
+const mdOnlyFilter: Parameters<typeof FileInterceptor>[1] = {
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const ok  = ext === '.md'
+      || file.mimetype === 'text/markdown'
+      || file.mimetype === 'text/x-markdown';
+    cb(ok ? null : new Error('Only Markdown (.md) files are allowed'), ok);
+  },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB for BA docs
+};
 import { ProjectService } from './project.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateFeatureDto } from './dto/create-feature.dto';
@@ -85,7 +97,7 @@ export class ProjectController {
   // ── File Uploads ──────────────────────────────────────────────────────────
 
   @Post('features/:featureId/upload/ba-document')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', mdOnlyFilter))
   uploadBADocument(
     @Param('featureId') featureId: string,
     @UploadedFile() file: Express.Multer.File,

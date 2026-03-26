@@ -4,13 +4,13 @@ An AI-powered platform that transforms Business Analyst documents into test case
 
 ## What It Does
 
-Upload a BA specification document (PDF, Word, or plain text), optionally attach design screenshots, then click **Generate**. The platform runs a 4-layer AI pipeline that produces:
+Upload a BA specification document as a **Markdown (`.md`) file**, optionally attach design screenshots, then click **Generate**. The platform runs a 4-layer AI pipeline that produces:
 
 - **Extracted Requirements** — domain features, business rules, acceptance criteria
 - **Extracted Behaviors** — actors, user actions, behavioral rules
 - **Test Scenarios** — categorized scenarios (happy path, edge cases, errors, boundary, security)
 - **Test Cases** — fully written test cases with steps and expected results, persisted to the database
-- **Developer Tasks** — three ready-to-copy implementation prompts: API, Frontend, and Testing
+- **Developer Tasks** — focused implementation prompts split into sub-tasks per category (API, Frontend, Testing); number of sub-tasks scales with feature complexity
 
 An AI chat sidebar lets you ask questions about the feature in the context of all uploaded documents.
 
@@ -52,6 +52,7 @@ ba-analytic/
 │           │   ├── chat/           # Chat sidebar (SSE)
 │           │   ├── dev-task/       # Developer task panel
 │           │   ├── feature/        # Feature detail page + pipeline panels
+│           │   │   └── components/ # Feature-scoped components (BADocFormatGuide, …)
 │           │   ├── project/        # Project list + detail pages
 │           │   └── test-case/      # Test case dashboard
 │           ├── components/ui/      # Shared Shadcn/UI primitives
@@ -129,6 +130,34 @@ pnpm dev
 ```
 
 The web app is at [http://localhost:5173](http://localhost:5173). All `/api` requests are proxied to the NestJS server on `:3000`.
+
+## BA Document Format
+
+BA documents must be uploaded as **Markdown (`.md`) files**. Binary formats (PDF, DOCX) are not supported — the pipeline reads the document as plain text and chunks it section-by-section for the AI.
+
+A **Format Guide** button is available in the UI next to the upload button. It provides:
+- A downloadable Markdown template (`ba-document-template.md`)
+- A copy-ready AI conversion prompt for converting existing documents via ChatGPT/Claude
+
+### Recommended structure
+
+```markdown
+# Feature Name
+
+## Overview        — short description
+## Actors          — Markdown table: Actor | Role
+## User Stories    — bullet list with IDs: US-01, US-02, …
+## Functional Requirements  — FR-01, FR-02, …
+## Business Rules  — BR-01, BR-02, …
+## Acceptance Criteria      — table: ID | Given | When | Then
+## Data Entities   — ### sub-section per entity with field table
+## User Flows / Actions     — numbered steps
+## Validation Rules         — VR-01, VR-02, …
+## Out of Scope
+## Assumptions & Dependencies
+```
+
+The pipeline chunks large documents at `##` section boundaries so no heading is ever separated from its content. Screenshots can still be uploaded separately for additional visual context.
 
 ## AI Pipeline
 
