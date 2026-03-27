@@ -4,8 +4,8 @@ import {
   CombinedExtraction,
   ExtractedBehaviors,
   ExtractedRequirements,
-} from '../ai/ai-provider.abstract';
-import { AI_CONFIG } from './constants';
+} from '../../ai/ai-provider.abstract';
+import { AI_CONFIG } from '../constants';
 
 const {
   CHUNK_MAX_CHARS,

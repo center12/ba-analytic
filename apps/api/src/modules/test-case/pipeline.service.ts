@@ -24,7 +24,7 @@ import {
   mergeExtractions,
   readDocumentContent,
   withRetry,
-} from './pipeline.utils';
+} from './helpers/pipeline.utils';
 
 const {
   MAX_DOC_CHARS,
