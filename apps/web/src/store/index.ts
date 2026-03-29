@@ -17,7 +17,7 @@ export const useAppStore = create<AppState>((set) => ({
   selectedProject: null,
   selectedFeature: null,
   selectedChatSession: null,
-  activeProvider: 'gemini',
+  activeProvider: 'openai',
 
   setSelectedProject: (project) =>
     set({ selectedProject: project, selectedFeature: null, selectedChatSession: null }),

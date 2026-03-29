@@ -110,9 +110,6 @@ export function FeatureDetailPage() {
           )}
           <DeveloperTaskPanel featureId={featureId!} />
         </main>
-        <aside className="w-96 border-l shrink-0 flex flex-col">
-          <ChatSidebar featureId={featureId!} />
-        </aside>
       </div>
     </div>
   );

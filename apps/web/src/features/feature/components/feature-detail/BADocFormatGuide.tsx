@@ -90,12 +90,13 @@ Use exactly these sections (include only those with relevant content):
 ## Assumptions & Dependencies
 
 Rules:
+- Preserve the original document language (English or Vietnamese) — do not translate any content.
 - Assign sequential IDs to every requirement, rule, and criterion (FR-01, BR-01, AC-01, VR-01, US-01).
 - Preserve all requirements, rules, and criteria — do not omit or summarize.
 - Acceptance Criteria MUST use the Given/When/Then table format.
 - Data Entities MUST use Markdown tables with Field, Type, Description, and Constraints columns.
 - Remove images, screenshots, headers/footers, and page numbers.
-- Output plain Markdown only — no HTML, no LaTeX.
+- Output the result inside a single \`\`\`markdown code block so it can be copied and saved directly as a .md file.
 
 Document to convert:
 [paste your document here]`;

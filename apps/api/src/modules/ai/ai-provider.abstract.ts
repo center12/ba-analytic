@@ -82,8 +82,10 @@ export function buildExtractAllPrompt(
 
   return `You are a senior business analyst and UX researcher. Read the following BA document and extract TWO things in a single pass.
 
+LANGUAGE RULE: Detect the primary language of the BA document (English or Vietnamese). Write ALL extracted string values in that same language. Do not translate or mix languages within a single response.
+
 Document format notes:
-- The document is structured Markdown with ## section headings (e.g. ## Functional Requirements, ## Business Rules, ## Acceptance Criteria).
+- The document is structured Markdown with ## section headings (e.g. ## Functional Requirements, ## Business Rules, ## Acceptance Criteria / ## Yêu cầu chức năng, ## Quy tắc nghiệp vụ, ## Tiêu chí chấp nhận).
 - List items may carry ID prefixes such as FR-01, BR-03, AC-02, VR-01, US-01. Preserve these IDs verbatim in every extracted string so they can be cross-referenced downstream.
 - Acceptance Criteria appear as Markdown tables (columns: ID | Given | When | Then). Extract each row as a single string in the format: "AC-01: Given [..], When [..], Then [..]".
 - Data Entities appear as Markdown tables under ### sub-headings. Extract each entity name into the entities list.
@@ -98,7 +100,7 @@ Document format notes:
    - feature: the primary feature name (from the # title)
    - actors: users or systems involved (from ## Actors table)
    - actions: atomic steps (Actor + Verb + Object), keep only business logic, remove UI/visual details
-   - rules: validation and business rules — preserve IDs (FR-xx, VR-xx) where present
+   - rules: full text of each functional/validation rule — format as "FR-01: [full rule text]" when an ID is present; never extract IDs without their accompanying description
 
 Be thorough — missing a requirement or edge case means missing test coverage.
 
@@ -132,6 +134,8 @@ Return ONLY valid JSON matching this exact structure (no markdown, no explanatio
 export function buildSynthesisPrompt(merged: CombinedExtraction): string {
   return `You are a business analyst. The arrays below were extracted from multiple chunks of the same Markdown BA document and may contain near-duplicate or split entries.
 
+LANGUAGE RULE: Preserve the language of each string value as-is (English or Vietnamese). Do not translate any text during consolidation.
+
 Consolidation rules:
 - Items carrying ID prefixes (FR-01, BR-01, AC-01, VR-01, US-01) are DISTINCT by definition — preserve each ID and its text unchanged. Never merge two items with different IDs.
 - Items without IDs: merge only if they describe exactly the same concept; otherwise keep both.
@@ -152,6 +156,8 @@ export function buildPlanScenariosPrompt(
   behaviors: ExtractedBehaviors,
 ): string {
   return `You are a QA strategist. Using both the domain requirements and the normalized behaviors below, identify ALL test scenarios that need to be covered.
+
+LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values — titles and requirementRefs phrases — in that same language. Do not translate or mix languages.
 
 ## Domain Requirements (Layer 1A)
 Features: ${requirements.features.join('\n- ')}
@@ -195,6 +201,8 @@ export function buildGenerateTestCasesPrompt(
   requirements: ExtractedRequirements,
 ): string {
   return `You are a QA engineer. Write detailed, executable test cases for each of the following scenarios.
+
+LANGUAGE RULE: Detect the primary language of the input scenarios and domain context (English or Vietnamese). Write ALL output string values — title, description, preconditions, action, expectedResult — in that same language. Do not translate or mix languages.
 
 Domain context:
 Entities: ${requirements.entities.join(', ')}
@@ -243,6 +251,9 @@ export function buildDevPromptInput(
     .join('\n');
 
   return `You are a senior software architect. Based on the feature analysis below, generate developer implementation prompts split into sub-tasks — one set for API/backend (4A), one for frontend/UI (4B), and one for test automation (4C).
+
+LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values — titles and prompts — in that same language. Do not translate or mix languages.
+
 
 ## Feature: ${behaviors.feature}
 

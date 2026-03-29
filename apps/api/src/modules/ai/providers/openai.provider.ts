@@ -89,7 +89,6 @@ export class OpenAIProvider extends AIProvider {
   }
 
   private logPromptSize(label: string, prompt: string) {
-    console.log('prompt', prompt);
     this.logger.log(`${label} prompt — chars: ${prompt.length}, ~tokens: ${Math.ceil(prompt.length / 4)}`);
   }
 
