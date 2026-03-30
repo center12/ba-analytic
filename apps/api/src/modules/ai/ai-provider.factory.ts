@@ -18,7 +18,7 @@ export class AIProviderFactory {
     private readonly openAI: OpenAIProvider,
     private readonly config: ConfigService,
   ) {
-    this.defaultProvider = (config.get<string>('AI_PROVIDER', 'gemini') as ProviderName);
+    this.defaultProvider = (config.get<string>('AI_PROVIDER', 'openai') as ProviderName);
   }
 
   getProvider(name?: ProviderName, model?: string): AIProvider {

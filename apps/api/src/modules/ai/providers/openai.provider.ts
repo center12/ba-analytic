@@ -77,7 +77,7 @@ export class OpenAIProvider extends AIProvider {
 
   constructor(private readonly config: ConfigService) {
     super();
-    this.modelVersion = config.get<string>('OPENAI_MODEL', 'gpt-4o');
+    this.modelVersion = config.get<string>('OPENAI_MODEL', 'gpt-4.1-mini');
   }
 
   private logRateLimit(label: string, headers?: Record<string, string>) {
