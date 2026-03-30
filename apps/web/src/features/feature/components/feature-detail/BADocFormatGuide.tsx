@@ -113,23 +113,14 @@ export function BADocFormatGuide() {
     URL.revokeObjectURL(url);
   };
 
-  const handleCopyPrompt = () => {
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(CONVERSION_PROMPT).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      });
-    } else {
-      const el = document.createElement('textarea');
-      el.value = CONVERSION_PROMPT;
-      el.style.position = 'fixed';
-      el.style.opacity = '0';
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
+  const handleCopyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(CONVERSION_PROMPT);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback without deprecated execCommand (best-effort).
+      window.prompt('Copy to clipboard:', CONVERSION_PROMPT);
     }
   };
 
