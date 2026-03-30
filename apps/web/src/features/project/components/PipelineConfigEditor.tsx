@@ -88,7 +88,7 @@ export function PipelineConfigEditor({ projectId }: Props) {
     if (!savedRow && !draft) return false;
     if (!savedRow && draft) return true;
     if (savedRow && !draft) return true;
-    return savedRow.provider !== draft!.provider || (savedRow.model ?? '') !== draft!.model;
+    return savedRow?.provider !== draft?.provider || (savedRow?.model ?? '') !== draft?.model;
   });
 
   return (

@@ -2,7 +2,6 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { ArrowLeft, Upload } from 'lucide-react';
-import { ChatSidebar } from '@/features/chat/ChatSidebar';
 import { ModelSelector } from '@/features/ai/ModelSelector';
 import { DeveloperTaskPanel } from '@/features/dev-task/DeveloperTaskPanel';
 import { PipelineWizard } from './PipelineWizard';
