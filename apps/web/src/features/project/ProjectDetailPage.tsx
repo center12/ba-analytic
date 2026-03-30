@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type Feature } from '@/lib/api';
 import { ArrowLeft, PlusCircle, Layers, Trash2 } from 'lucide-react';
+import { PipelineConfigEditor } from './components/PipelineConfigEditor';
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -59,6 +60,15 @@ export function ProjectDetailPage() {
           <PlusCircle size={18} /> New Feature
         </button>
       </div>
+
+      <details className="border rounded-lg mb-6">
+        <summary className="px-5 py-3 font-semibold cursor-pointer select-none text-sm">
+          Pipeline AI Configuration
+        </summary>
+        <div className="px-5 pb-4 pt-2">
+          <PipelineConfigEditor projectId={projectId!} />
+        </div>
+      </details>
 
       {showForm && (
         <div className="bg-card border rounded-lg p-6 mb-6 space-y-4">

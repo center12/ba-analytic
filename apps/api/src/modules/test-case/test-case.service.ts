@@ -33,26 +33,26 @@ export class TestCaseService {
     return this.prisma.testCase.delete({ where: { id } });
   }
 
-  async generateForFeature(featureId: string, providerName?: string) {
-    return this.pipeline.run(featureId, providerName);
+  async generateForFeature(featureId: string, providerName?: string, model?: string) {
+    return this.pipeline.run(featureId, providerName, model);
   }
 
-  async resumeForFeature(featureId: string, providerName?: string) {
-    return this.pipeline.resume(featureId, providerName);
+  async resumeForFeature(featureId: string, providerName?: string, model?: string) {
+    return this.pipeline.resume(featureId, providerName, model);
   }
 
-  async runStepForFeature(featureId: string, step: number, providerName?: string, override?: unknown) {
+  async runStepForFeature(featureId: string, step: number, providerName?: string, model?: string, override?: unknown) {
     switch (step) {
-      case 1: return this.pipeline.runStep1(featureId, providerName);
-      case 2: return this.pipeline.runStep2(featureId, providerName, override as any);
-      case 3: return this.pipeline.runStep3(featureId, providerName);
-      case 4: return this.pipeline.runStep4(featureId, providerName);
+      case 1: return this.pipeline.runStep1(featureId, providerName, model);
+      case 2: return this.pipeline.runStep2(featureId, providerName, model, override as any);
+      case 3: return this.pipeline.runStep3(featureId, providerName, model);
+      case 4: return this.pipeline.runStep4(featureId, providerName, model);
       default: throw new Error(`Invalid pipeline step: ${step}`);
     }
   }
 
-  async resumeStep1ForFeature(featureId: string, providerName?: string) {
-    return this.pipeline.resumeStep1(featureId, providerName);
+  async resumeStep1ForFeature(featureId: string, providerName?: string, model?: string) {
+    return this.pipeline.resumeStep1(featureId, providerName, model);
   }
 
   async saveStepResults(featureId: string, data: unknown) {

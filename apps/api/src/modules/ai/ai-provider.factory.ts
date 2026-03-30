@@ -21,19 +21,25 @@ export class AIProviderFactory {
     this.defaultProvider = (config.get<string>('AI_PROVIDER', 'gemini') as ProviderName);
   }
 
-  getProvider(name?: ProviderName): AIProvider {
+  getProvider(name?: ProviderName, model?: string): AIProvider {
     const target = name ?? this.defaultProvider;
-    this.logger.log(`Using AI provider: ${target}`);
+    this.logger.log(`Using AI provider: ${target}${model ? ` (model: ${model})` : ''}`);
 
+    let provider: AIProvider;
     switch (target) {
       case 'gemini':
-        return this.gemini;
+        provider = this.gemini;
+        break;
       case 'claude':
-        return this.claude;
+        provider = this.claude;
+        break;
       case 'openai':
-        return this.openAI;
+        provider = this.openAI;
+        break;
       default:
         throw new Error(`Unknown AI provider: ${target}`);
     }
+
+    return model ? provider.withModel(model) : provider;
   }
 }

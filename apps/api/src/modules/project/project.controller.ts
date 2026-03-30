@@ -11,6 +11,7 @@ import {
   UseInterceptors,
   HttpCode,
   HttpStatus,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 
@@ -27,6 +28,7 @@ const mdOnlyFilter: Parameters<typeof FileInterceptor>[1] = {
 import { ProjectService } from './project.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateFeatureDto } from './dto/create-feature.dto';
+import { UpsertPipelineConfigDto } from './dto/upsert-pipeline-config.dto';
 
 @Controller('projects')
 export class ProjectController {
@@ -112,5 +114,29 @@ export class ProjectController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     return this.service.uploadScreenshot(featureId, file);
+  }
+
+  // ── Pipeline Config ───────────────────────────────────────────────────────
+
+  @Get(':projectId/pipeline-config')
+  getPipelineConfig(@Param('projectId') projectId: string) {
+    return this.service.getProjectPipelineConfig(projectId);
+  }
+
+  @Put(':projectId/pipeline-config')
+  upsertPipelineConfig(
+    @Param('projectId') projectId: string,
+    @Body() dto: UpsertPipelineConfigDto,
+  ) {
+    return this.service.upsertProjectPipelineConfig(projectId, dto);
+  }
+
+  @Delete(':projectId/pipeline-config/:step')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deletePipelineConfigStep(
+    @Param('projectId') projectId: string,
+    @Param('step', ParseIntPipe) step: number,
+  ) {
+    return this.service.deleteProjectPipelineConfigStep(projectId, step);
   }
 }

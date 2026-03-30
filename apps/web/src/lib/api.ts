@@ -1,8 +1,22 @@
 const BASE_URL = '/api';
 
+export interface AIModelInfo {
+  id: string;
+  label: string;
+}
+
+export interface ProjectStepConfig {
+  id: string;
+  projectId: string;
+  step: 1 | 2 | 3 | 4;
+  provider: 'gemini' | 'claude' | 'openai';
+  model: string | null;
+}
+
 export interface AIProviderInfo {
   provider: string;
   label: string;
+  models: AIModelInfo[];
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -29,6 +43,18 @@ export const api = {
       request<Project>(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) =>
       fetch(`${BASE_URL}/projects/${id}`, { method: 'DELETE' }),
+
+    getPipelineConfig: (projectId: string) =>
+      request<ProjectStepConfig[]>(`/projects/${projectId}/pipeline-config`),
+
+    upsertPipelineConfig: (projectId: string, configs: Array<{ step: number; provider: string; model?: string }>) =>
+      request<ProjectStepConfig[]>(`/projects/${projectId}/pipeline-config`, {
+        method: 'PUT',
+        body: JSON.stringify({ configs }),
+      }),
+
+    deletePipelineConfigStep: (projectId: string, step: number) =>
+      fetch(`${BASE_URL}/projects/${projectId}/pipeline-config/${step}`, { method: 'DELETE' }),
   },
 
   features: {
@@ -69,26 +95,46 @@ export const api = {
     update: (id: string, data: Partial<TestCase>) =>
       request<TestCase>(`/test-cases/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => fetch(`${BASE_URL}/test-cases/${id}`, { method: 'DELETE' }),
-    generate: (featureId: string, provider?: string) =>
-      request<{ generated: number; testCases: TestCase[]; pipeline: { requirementsCount: number; scenariosCount: number } }>(
-        `/test-cases/feature/${featureId}/generate${provider ? `?provider=${provider}` : ''}`,
+    generate: (featureId: string, provider?: string, model?: string) => {
+      const params = new URLSearchParams();
+      if (provider) params.set('provider', provider);
+      if (model) params.set('model', model);
+      const qs = params.toString();
+      return request<{ generated: number; testCases: TestCase[]; pipeline: { requirementsCount: number; scenariosCount: number } }>(
+        `/test-cases/feature/${featureId}/generate${qs ? `?${qs}` : ''}`,
         { method: 'POST' },
-      ),
-    resume: (featureId: string, provider?: string) =>
-      request<{ generated: number; testCases: TestCase[]; pipeline: { requirementsCount: number; scenariosCount: number } }>(
-        `/test-cases/feature/${featureId}/resume${provider ? `?provider=${provider}` : ''}`,
+      );
+    },
+    resume: (featureId: string, provider?: string, model?: string) => {
+      const params = new URLSearchParams();
+      if (provider) params.set('provider', provider);
+      if (model) params.set('model', model);
+      const qs = params.toString();
+      return request<{ generated: number; testCases: TestCase[]; pipeline: { requirementsCount: number; scenariosCount: number } }>(
+        `/test-cases/feature/${featureId}/resume${qs ? `?${qs}` : ''}`,
         { method: 'POST' },
-      ),
-    runStep: (featureId: string, step: number, provider?: string, override?: unknown) =>
-      request<unknown>(
-        `/test-cases/feature/${featureId}/run-step/${step}${provider ? `?provider=${provider}` : ''}`,
+      );
+    },
+    runStep: (featureId: string, step: number, provider?: string, model?: string, override?: unknown) => {
+      const params = new URLSearchParams();
+      if (provider) params.set('provider', provider);
+      if (model) params.set('model', model);
+      const qs = params.toString();
+      return request<unknown>(
+        `/test-cases/feature/${featureId}/run-step/${step}${qs ? `?${qs}` : ''}`,
         { method: 'POST', body: override ? JSON.stringify({ override }) : undefined },
-      ),
-    resumeStep1: (featureId: string, provider?: string) =>
-      request<unknown>(
-        `/test-cases/feature/${featureId}/resume-step1${provider ? `?provider=${provider}` : ''}`,
+      );
+    },
+    resumeStep1: (featureId: string, provider?: string, model?: string) => {
+      const params = new URLSearchParams();
+      if (provider) params.set('provider', provider);
+      if (model) params.set('model', model);
+      const qs = params.toString();
+      return request<unknown>(
+        `/test-cases/feature/${featureId}/resume-step1${qs ? `?${qs}` : ''}`,
         { method: 'POST' },
-      ),
+      );
+    },
     saveStepResults: (featureId: string, data: {
       step: 1 | 2 | 3 | 4;
       extractedRequirements?: ExtractedRequirements;

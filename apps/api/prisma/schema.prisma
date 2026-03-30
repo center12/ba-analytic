@@ -8,12 +8,27 @@ datasource db {
 }
 
 model Project {
-  id          String    @id @default(cuid())
-  name        String
-  description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  features    Feature[]
+  id              String                  @id @default(cuid())
+  name            String
+  description     String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  features        Feature[]
+  pipelineConfigs ProjectPipelineConfig[]
+}
+
+model ProjectPipelineConfig {
+  id        String   @id @default(cuid())
+  projectId String
+  step      Int      // 1 | 2 | 3 | 4
+  provider  String   // 'gemini' | 'claude' | 'openai'
+  model     String?  // null = provider default
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, step])
 }
 
 model Feature {

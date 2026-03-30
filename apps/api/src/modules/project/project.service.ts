@@ -5,6 +5,7 @@ import { StorageModule } from '../storage/storage.module';
 import { STORAGE_PROVIDER, IStorageProvider } from '../storage/storage.interface';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateFeatureDto } from './dto/create-feature.dto';
+import { UpsertPipelineConfigDto } from './dto/upsert-pipeline-config.dto';
 import { v4 as uuidv4 } from 'uuid';
 import * as mime from 'mime-types';
 
@@ -115,5 +116,33 @@ export class ProjectService {
     return this.prisma.screenshot.create({
       data: { featureId, originalName: file.originalname, storageKey: key, mimeType: file.mimetype },
     });
+  }
+
+  // ── Pipeline Config ───────────────────────────────────────────────────────
+
+  async getProjectPipelineConfig(projectId: string) {
+    await this.findOneProject(projectId);
+    return this.prisma.projectPipelineConfig.findMany({
+      where: { projectId },
+      orderBy: { step: 'asc' },
+    });
+  }
+
+  async upsertProjectPipelineConfig(projectId: string, dto: UpsertPipelineConfigDto) {
+    await this.findOneProject(projectId);
+    return this.prisma.$transaction(
+      dto.configs.map((c) =>
+        this.prisma.projectPipelineConfig.upsert({
+          where: { projectId_step: { projectId, step: c.step } },
+          create: { projectId, step: c.step, provider: c.provider, model: c.model ?? null },
+          update: { provider: c.provider, model: c.model ?? null },
+        }),
+      ),
+    );
+  }
+
+  async deleteProjectPipelineConfigStep(projectId: string, step: number) {
+    await this.findOneProject(projectId);
+    return this.prisma.projectPipelineConfig.deleteMany({ where: { projectId, step } });
   }
 }

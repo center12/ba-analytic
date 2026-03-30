@@ -322,6 +322,18 @@ export abstract class AIProvider {
   abstract readonly modelVersion: string;
 
   /**
+   * Returns a shallow clone of this provider with `modelVersion` overridden.
+   * All method calls on the clone use the new model string since they reference
+   * `this.modelVersion` at call time.
+   */
+  withModel(model: string): AIProvider {
+    const clone = Object.create(Object.getPrototypeOf(this)) as this;
+    Object.assign(clone, this);
+    (clone as any).modelVersion = model;
+    return clone;
+  }
+
+  /**
    * Layer 1 (combined) — Extract both domain requirements and behaviors in a single API call.
    * Preferred over the separate methods to avoid sending the BA document twice.
    */

@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma.service';
 import { AIProviderFactory, ProviderName } from '../ai/ai-provider.factory';
 import { STORAGE_PROVIDER, IStorageProvider } from '../storage/storage.interface';
 import {
+  AIProvider,
   buildDevPromptInput,
   buildExtractAllPrompt,
   buildGenerateTestCasesPrompt,
@@ -18,7 +19,6 @@ import {
 import { AI_CONFIG } from '@/modules/test-case/constants';
 import {
   chunkMarkdown,
-  chunkText,
   compressForDownstream,
   estimateTokens,
   mergeExtractions,
@@ -47,7 +47,7 @@ export class PipelineService {
   // ── Individual step runners ────────────────────────────────────────────────
 
   /** Step 1: Run Layer 1 extraction and save results to Feature */
-  async runStep1(featureId: string, providerName?: string) {
+  async runStep1(featureId: string, providerName?: string, model?: string) {
     await this.prisma.feature.update({
       where: { id: featureId },
       // prisma client types may lag behind schema migrations in editor/tsserver;
@@ -55,7 +55,8 @@ export class PipelineService {
       data: ({ pipelineStatus: 'RUNNING', pipelineStep: 1, pipelineFailedAt: null, pipelinePartial: Prisma.JsonNull } as any),
     });
     try {
-      const extraction = await this._layer1Extraction(featureId, providerName, 0, null);
+      const provider = await this._resolveProvider(featureId, 1, providerName, model);
+      const extraction = await this._layer1Extraction(featureId, provider, 0, null);
       await this.prisma.feature.update({
         where: { id: featureId },
         data: {
@@ -81,7 +82,7 @@ export class PipelineService {
   }
 
   /** Resume Step 1 from failed chunk */
-  async resumeStep1(featureId: string, providerName?: string) {
+  async resumeStep1(featureId: string, providerName?: string, model?: string) {
     const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
     if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
     if (feature.pipelineStatus !== 'FAILED' || (feature as any).pipelineStep !== 1) {
@@ -91,7 +92,8 @@ export class PipelineService {
     const partial = feature.pipelinePartial as CombinedExtraction | null;
     await this.prisma.feature.update({ where: { id: featureId }, data: { pipelineStatus: 'RUNNING' } });
     try {
-      const extraction = await this._layer1Extraction(featureId, providerName, resumeFromChunk, partial);
+      const provider = await this._resolveProvider(featureId, 1, providerName, model);
+      const extraction = await this._layer1Extraction(featureId, provider, resumeFromChunk, partial);
       await this.prisma.feature.update({
         where: { id: featureId },
         data: {
@@ -115,7 +117,7 @@ export class PipelineService {
   }
 
   /** Step 2: Run Layer 2 scenario planning using saved Layer 1 results (or override) */
-  async runStep2(featureId: string, providerName?: string, override?: CombinedExtraction) {
+  async runStep2(featureId: string, providerName?: string, model?: string, override?: CombinedExtraction) {
     await this.prisma.feature.update({
       where: { id: featureId },
       data: ({ pipelineStatus: 'RUNNING', pipelineStep: 2 } as any),
@@ -128,7 +130,7 @@ export class PipelineService {
       const beh  = (override?.behaviors    ?? feature.extractedBehaviors)    as ExtractedBehaviors    | null;
       if (!req || !beh) throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
 
-      const provider = this.aiFactory.getProvider(providerName as ProviderName | undefined);
+      const provider = await this._resolveProvider(featureId, 2, providerName, model);
       const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
 
       this.logger.log(`[Pipeline] Step 2 — planning scenarios`);
@@ -149,7 +151,7 @@ export class PipelineService {
   }
 
   /** Step 3: Run Layer 3 test case generation using saved Layer 2 results */
-  async runStep3(featureId: string, providerName?: string) {
+  async runStep3(featureId: string, providerName?: string, model?: string) {
     await this.prisma.feature.update({
       where: { id: featureId },
       data: ({ pipelineStatus: 'RUNNING', pipelineStep: 3 } as any),
@@ -164,7 +166,7 @@ export class PipelineService {
       const req = feature.extractedRequirements as ExtractedRequirements | null;
       if (!req) throw new BadRequestException(`Feature ${featureId} has no requirements — run Step 1 first`);
 
-      const provider = this.aiFactory.getProvider(providerName as ProviderName | undefined);
+      const provider = await this._resolveProvider(featureId, 3, providerName, model);
       const { req: compReq } = compressForDownstream(req, { feature: '', actors: [], actions: [], rules: [] });
 
       const totalBatches = Math.ceil(testScenarios.length / SCENARIO_BATCH);
@@ -204,7 +206,7 @@ export class PipelineService {
   }
 
   /** Step 4: Run Layer 4 dev prompt generation using saved Layer 1+2 results */
-  async runStep4(featureId: string, providerName?: string) {
+  async runStep4(featureId: string, providerName?: string, model?: string) {
     await this.prisma.feature.update({
       where: { id: featureId },
       data: ({ pipelineStatus: 'RUNNING', pipelineStep: 4 } as any),
@@ -219,7 +221,7 @@ export class PipelineService {
       if (!req || !beh)         throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
       if (!testScenarios?.length) throw new BadRequestException(`Feature ${featureId} has no scenarios — run Step 2 first`);
 
-      const provider = this.aiFactory.getProvider(providerName as ProviderName | undefined);
+      const provider = await this._resolveProvider(featureId, 4, providerName, model);
       const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
 
       this.logger.log('[Pipeline] Step 4 — generating dev prompts');
@@ -376,17 +378,17 @@ export class PipelineService {
   // ── Full pipeline (kept for backward compat) ───────────────────────────────
 
   /** Fresh run — always starts from chunk 0 */
-  async run(featureId: string, providerName?: string) {
+  async run(featureId: string, providerName?: string, model?: string) {
     // Reset pipeline state for a fresh start
     await this.prisma.feature.update({
       where: { id: featureId },
       data: ({ pipelineStatus: 'RUNNING', pipelineStep: null, pipelineFailedAt: null, pipelinePartial: Prisma.JsonNull } as any),
     });
-    return this.runLayer1(featureId, providerName, 0, null);
+    return this.runLayer1(featureId, providerName, model, 0, null);
   }
 
   /** Resume — continues from the chunk that previously failed */
-  async resume(featureId: string, providerName?: string) {
+  async resume(featureId: string, providerName?: string, model?: string) {
     const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
     if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
     if (feature.pipelineStatus !== 'FAILED') {
@@ -403,13 +405,13 @@ export class PipelineService {
     });
 
     this.logger.log(`[Pipeline] Resuming from chunk ${resumeFromChunk}`);
-    return this.runLayer1(featureId, providerName, resumeFromChunk, partial);
+    return this.runLayer1(featureId, providerName, model, resumeFromChunk, partial);
   }
 
   /** Shared Layer 1 extraction logic — used by runStep1 and runLayer1 */
   private async _layer1Extraction(
     featureId: string,
-    providerName: string | undefined,
+    provider: AIProvider,
     startChunk: number,
     previousPartial: CombinedExtraction | null,
   ): Promise<CombinedExtraction> {
@@ -432,8 +434,7 @@ export class PipelineService {
       baContent = baContent.slice(0, MAX_DOC_CHARS);
     }
 
-    const provider = this.aiFactory.getProvider(providerName as ProviderName | undefined);
-    const chunks   = chunkMarkdown(baContent);
+    const chunks = chunkMarkdown(baContent);
 
     this.logger.log(`[Pipeline] Layer 1 — ${chunks.length} chunk(s) from ${(baContent.match(/^## /gm) ?? []).length} section(s), ~${estimateTokens(baContent)} tokens (provider: ${provider.providerName}, starting at chunk ${startChunk})`);
 
@@ -476,88 +477,20 @@ export class PipelineService {
   private async runLayer1(
     featureId: string,
     providerName: string | undefined,
+    model: string | undefined,
     startChunk: number,
     previousPartial: CombinedExtraction | null,
   ) {
-    const feature = await this.prisma.feature.findUnique({
-      where: { id: featureId },
-      include: { baDocument: true, screenshots: true },
-    });
-    if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
-    if (!feature.baDocument) {
-      throw new BadRequestException(`Feature ${featureId} has no BA document uploaded`);
-    }
-
-    const baDocumentPath = await this.storage.getSignedUrl(feature.baDocument.storageKey);
-    const screenshotPaths = await Promise.all(
-      feature.screenshots.map((s) => this.storage.getSignedUrl(s.storageKey)),
-    );
-
-    let baContent = await readDocumentContent(baDocumentPath);
-    this.logger.log(`[Pipeline] Document read — ${baContent.length} chars (~${estimateTokens(baContent)} tokens)`);
-    if (screenshotPaths.length > 0) {
-      baContent += `\n\nDesign screenshots are available at: ${screenshotPaths.join(', ')}`;
-    }
-
-    // Hard-cap to keep total token spend within free-tier quota
-    if (baContent.length > MAX_DOC_CHARS) {
-      this.logger.warn(
-        `[Pipeline] Document truncated from ${baContent.length} to ${MAX_DOC_CHARS} chars (~${estimateTokens(baContent)} → ~${Math.ceil(MAX_DOC_CHARS / 4)} tokens)`,
-      );
-      baContent = baContent.slice(0, MAX_DOC_CHARS);
-    }
-
-    const provider = this.aiFactory.getProvider(providerName as ProviderName | undefined);
-    const chunks = chunkText(baContent);
-
-    this.logger.log(
-      `[Pipeline] Layer 1 — ${chunks.length} chunk(s) from ${(baContent.match(/^## /gm) ?? []).length} section(s), ~${estimateTokens(baContent)} tokens (provider: ${provider.providerName}, starting at chunk ${startChunk})`,
-    );
+    // Resolve per-step providers — each step independently consults saved project config
+    const [provider1, provider2, provider3, provider4] = await Promise.all([
+      this._resolveProvider(featureId, 1, providerName, model),
+      this._resolveProvider(featureId, 2, providerName, model),
+      this._resolveProvider(featureId, 3, providerName, model),
+      this._resolveProvider(featureId, 4, providerName, model),
+    ]);
 
     // ── Layer 1: Combined extraction (chunked, resumable) ─────────────────────
-    let combinedExtraction: CombinedExtraction;
-
-    if (chunks.length === 1 && startChunk === 0) {
-      combinedExtraction = await withRetry(() => provider.extractAll(chunks[0]));
-    } else {
-      // Seed with previously completed chunks (may be null for a fresh single-chunk run)
-      const completedParts: CombinedExtraction[] = previousPartial ? [previousPartial] : [];
-
-      for (let i = startChunk; i < chunks.length; i++) {
-        this.logger.log(`[Pipeline] Layer 1 — chunk ${i + 1}/${chunks.length} (~${estimateTokens(chunks[i])} tokens)`);
-        if (i > startChunk) await new Promise(r => setTimeout(r, CHUNK_DELAY_MS));
-
-        try {
-          const chunkWithContext = `[Chunk ${i + 1} of ${chunks.length} — partial section of a larger document. Extract every item present; similar items from other chunks will be merged.]\n\n${chunks[i]}`;
-          const part = await withRetry(() => provider.extractAll(chunkWithContext));
-          completedParts.push(part);
-
-          // Save running partial after every successful chunk
-          const runningMerge = mergeExtractions(completedParts);
-          await this.prisma.feature.update({
-            where: { id: featureId },
-            data: { pipelinePartial: JSON.parse(JSON.stringify(runningMerge)) },
-          });
-        } catch (err) {
-          // Mark as failed at this chunk index so resume() knows where to start
-          await this.prisma.feature.update({
-            where: { id: featureId },
-            data: { pipelineStatus: 'FAILED', pipelineFailedAt: i },
-          });
-          this.logger.error(`[Pipeline] Layer 1 failed at chunk ${i} — progress saved, use resume to continue`);
-          throw err;
-        }
-      }
-
-      const merged = mergeExtractions(completedParts);
-
-      if (chunks.length > 1) {
-        this.logger.log('[Pipeline] Layer 1 — synthesising merged extraction');
-        combinedExtraction = await withRetry(() => provider.synthesiseExtraction(merged));
-      } else {
-        combinedExtraction = merged;
-      }
-    }
+    const combinedExtraction = await this._layer1Extraction(featureId, provider1, startChunk, previousPartial);
 
     const extractedRequirements = combinedExtraction.requirements;
     const extractedBehaviors    = combinedExtraction.behaviors;
@@ -565,7 +498,7 @@ export class PipelineService {
 
     // ── Layer 2: Plan scenarios ───────────────────────────────────────────────
     this.logger.log(`[Pipeline] Layer 2 — planning scenarios from ${compReq.features.length} features + ${compBeh.actions.length} actions`);
-    const testScenarios = await withRetry(() => provider.planTestScenarios(compReq, compBeh));
+    const testScenarios = await withRetry(() => provider2.planTestScenarios(compReq, compBeh));
 
     await this.prisma.feature.update({
       where: { id: featureId },
@@ -583,7 +516,7 @@ export class PipelineService {
     for (let i = 0; i < testScenarios.length; i += SCENARIO_BATCH) {
       const batch = testScenarios.slice(i, i + SCENARIO_BATCH);
       this.logger.log(`[Pipeline] Layer 3 — batch ${Math.floor(i / SCENARIO_BATCH) + 1}/${totalBatches}`);
-      const cases = await withRetry(() => provider.generateTestCasesFromScenarios(batch, compReq));
+      const cases = await withRetry(() => provider3.generateTestCasesFromScenarios(batch, compReq));
       allGenerated.push(...cases);
     }
 
@@ -598,8 +531,8 @@ export class PipelineService {
             priority:      tc.priority,
             status:        'DRAFT',
             steps:         JSON.parse(JSON.stringify(tc.steps)),
-            aiProvider:    provider.providerName,
-            modelVersion:  provider.modelVersion,
+            aiProvider:    provider3.providerName,
+            modelVersion:  provider3.modelVersion,
           },
         }),
       ),
@@ -608,7 +541,7 @@ export class PipelineService {
     // ── Layer 4: Generate dev prompts ─────────────────────────────────────────
     this.logger.log('[Pipeline] Layer 4 — generating dev prompts');
     const devPrompt = await withRetry(() =>
-      provider.generateDevPrompt(compReq, compBeh, testScenarios),
+      provider4.generateDevPrompt(compReq, compBeh, testScenarios),
     );
 
     await this.prisma.feature.update({
@@ -645,5 +578,40 @@ export class PipelineService {
         scenariosCount: testScenarios.length,
       },
     };
+  }
+
+  // ── Provider resolution ────────────────────────────────────────────────────
+
+  /**
+   * Resolve the effective AI provider for a pipeline step.
+   * Priority: runtime arg (tier 1) > saved project config (tier 2) > env default (tier 3).
+   */
+  private async _resolveProvider(
+    featureId: string,
+    step: number,
+    runtimeProvider: string | undefined,
+    runtimeModel: string | undefined,
+  ): Promise<AIProvider> {
+    // Tier 1: explicit runtime override
+    if (runtimeProvider) {
+      return this.aiFactory.getProvider(runtimeProvider as ProviderName, runtimeModel);
+    }
+
+    // Tier 2: saved project config for this step
+    const feature = await this.prisma.feature.findUnique({
+      where: { id: featureId },
+      select: { projectId: true },
+    });
+    if (feature) {
+      const saved = await this.prisma.projectPipelineConfig.findUnique({
+        where: { projectId_step: { projectId: feature.projectId, step } },
+      });
+      if (saved) {
+        return this.aiFactory.getProvider(saved.provider as ProviderName, saved.model ?? undefined);
+      }
+    }
+
+    // Tier 3: factory / env default
+    return this.aiFactory.getProvider(undefined, runtimeModel);
   }
 }

@@ -60,24 +60,26 @@ export class TestCaseController {
   generate(
     @Param('featureId') featureId: string,
     @Query('provider') provider?: string,
+    @Query('model') model?: string,
   ) {
-    return this.service.generateForFeature(featureId, provider);
+    return this.service.generateForFeature(featureId, provider, model);
   }
 
   /**
-   * POST /api/test-cases/feature/:featureId/resume?provider=gemini
+   * POST /api/test-cases/feature/:featureId/resume?provider=gemini&model=gemini-2.0-flash
    * Continues a FAILED pipeline run from the chunk that failed.
    */
   @Post('feature/:featureId/resume')
   resume(
     @Param('featureId') featureId: string,
     @Query('provider') provider?: string,
+    @Query('model') model?: string,
   ) {
-    return this.service.resumeForFeature(featureId, provider);
+    return this.service.resumeForFeature(featureId, provider, model);
   }
 
   /**
-   * POST /api/test-cases/feature/:featureId/run-step/:step?provider=gemini
+   * POST /api/test-cases/feature/:featureId/run-step/:step?provider=gemini&model=gemini-2.0-flash
    * Runs a single pipeline step (1–4) independently.
    */
   @Post('feature/:featureId/run-step/:step')
@@ -85,21 +87,23 @@ export class TestCaseController {
     @Param('featureId') featureId: string,
     @Param('step', ParseIntPipe) step: number,
     @Query('provider') provider?: string,
+    @Query('model') model?: string,
     @Body() body?: { override?: unknown },
   ) {
-    return this.service.runStepForFeature(featureId, step, provider, body?.override);
+    return this.service.runStepForFeature(featureId, step, provider, model, body?.override);
   }
 
   /**
-   * POST /api/test-cases/feature/:featureId/resume-step1?provider=gemini
+   * POST /api/test-cases/feature/:featureId/resume-step1?provider=gemini&model=gemini-2.0-flash
    * Resumes Step 1 from the failed chunk.
    */
   @Post('feature/:featureId/resume-step1')
   resumeStep1(
     @Param('featureId') featureId: string,
     @Query('provider') provider?: string,
+    @Query('model') model?: string,
   ) {
-    return this.service.resumeStep1ForFeature(featureId, provider);
+    return this.service.resumeStep1ForFeature(featureId, provider, model);
   }
 
   /**

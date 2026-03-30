@@ -27,6 +27,7 @@ interface Props {
 
 export function PipelineWizard({ featureId }: Props) {
   const activeProvider = useAppStore(s => s.activeProvider);
+  const activeModel = useAppStore(s => s.activeModel);
   const qc = useQueryClient();
 
   const { data: feature } = useQuery({
@@ -127,7 +128,7 @@ export function PipelineWizard({ featureId }: Props) {
 
   const runMutation = useMutation({
     mutationFn: ({ step }: { step: number }) =>
-      api.testCases.runStep(featureId, step, activeProvider ?? undefined),
+      api.testCases.runStep(featureId, step, activeProvider ?? undefined, activeModel),
     onSuccess: (_, { step }) => {
       invalidate();
       toast({ variant: 'success', title: `Step ${step} completed` });
@@ -140,7 +141,7 @@ export function PipelineWizard({ featureId }: Props) {
   });
 
   const resumeMutation = useMutation({
-    mutationFn: () => api.testCases.resumeStep1(featureId, activeProvider ?? undefined),
+    mutationFn: () => api.testCases.resumeStep1(featureId, activeProvider ?? undefined, activeModel),
     onSuccess: () => {
       invalidate();
       toast({ variant: 'success', title: 'Step 1 resumed' });
