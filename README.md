@@ -36,6 +36,8 @@ ba-analytic/
 │   │   │   └── schema.prisma
 │   │   └── src/
 │   │       ├── modules/
+│   │       │   ├── auth/           # JWT auth — login, guard, admin seeder
+│   │       │   ├── user/           # User CRUD
 │   │       │   ├── ai/             # AI providers + factory
 │   │       │   ├── chat/           # Chat sessions + SSE streaming
 │   │       │   ├── dev-task/       # Developer task CRUD
@@ -48,6 +50,8 @@ ba-analytic/
 │   └── web/                        # Vite + React frontend (:5173)
 │       └── src/
 │           ├── features/
+│           │   ├── auth/           # Login page + auth helpers/types
+│           │   ├── user/           # User management page
 │           │   ├── ai/             # Provider selector
 │           │   ├── chat/           # Chat sidebar (SSE)
 │           │   ├── dev-task/       # Developer task panel
@@ -55,10 +59,12 @@ ba-analytic/
 │           │   │   └── components/ # Feature-scoped components (BADocFormatGuide, …)
 │           │   ├── project/        # Project list + detail pages
 │           │   └── test-case/      # Test case dashboard
-│           ├── components/ui/      # Shared Shadcn/UI primitives
+│           ├── components/
+│           │   ├── ui/             # Shared Shadcn/UI primitives
+│           │   └── ProtectedRoute.tsx
 │           ├── hooks/
 │           ├── lib/api.ts          # Typed fetch wrappers
-│           └── store/              # Zustand global state
+│           └── store/              # Zustand global state (app + auth)
 └── docker-compose.yml
 ```
 
@@ -149,7 +155,14 @@ UPLOAD_DIR=./uploads
 # App
 PORT=3000
 CORS_ORIGIN=http://localhost:5173
+
+# Auth
+JWT_SECRET=change-me-to-a-long-random-secret-in-production
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=changeme123
 ```
+
+The admin account is created automatically on first startup if no user with that username exists. Change the credentials before deploying.
 
 ### 3. Start the database
 
@@ -222,24 +235,48 @@ Layers 1A and 1B run in parallel. Each layer's output is saved to the database i
 
 **Supported providers**: Gemini (`gemini-2.0-flash`), Claude (`claude-sonnet-4-6`), OpenAI (`gpt-4o`). The active provider is selectable in the UI at runtime.
 
+## Authentication
+
+All API routes (except `POST /api/auth/login`) require a Bearer token:
+
+```
+Authorization: Bearer <token>
+```
+
+Login to obtain a token:
+
+```bash
+curl -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"changeme123"}'
+# → { "accessToken": "..." }
+```
+
+Tokens expire after **7 days**. The frontend stores the token in `localStorage` and automatically includes it on every request. On token expiry the user is redirected to `/login`.
+
+The SSE chat stream (`/api/chat/sessions/:id/stream`) passes the token as a query param (`?token=<jwt>`) because the browser `EventSource` API does not support custom headers.
+
 ## API Reference
 
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/ai/providers` | List available providers (those with API keys configured) |
-| GET | `/api/projects` | List all projects |
-| POST | `/api/projects` | Create a project |
-| GET | `/api/projects/:id/features` | List features in a project |
-| POST | `/api/projects/:id/features` | Create a feature |
-| POST | `/api/projects/features/:id/upload/ba-document` | Upload BA document |
-| POST | `/api/projects/features/:id/upload/screenshot` | Upload screenshot |
-| GET | `/api/test-cases/feature/:id` | List test cases for a feature |
-| POST | `/api/test-cases/feature/:id/generate` | Run the AI pipeline |
-| GET | `/api/dev-tasks/feature/:id` | List developer tasks for a feature |
-| DELETE | `/api/dev-tasks/:id` | Delete a developer task |
-| POST | `/api/chat/sessions` | Create a chat session |
-| GET | `/api/chat/sessions/feature/:id` | List sessions for a feature |
-| GET | `/api/chat/sessions/:id/stream` | SSE stream — send message + stream response |
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/api/auth/login` | — | Login, returns `accessToken` |
+| GET | `/api/users` | required | List all users |
+| POST | `/api/users` | required | Create a user |
+| GET | `/api/ai/providers` | required | List available providers |
+| GET | `/api/projects` | required | List all projects |
+| POST | `/api/projects` | required | Create a project |
+| GET | `/api/projects/:id/features` | required | List features in a project |
+| POST | `/api/projects/:id/features` | required | Create a feature |
+| POST | `/api/projects/features/:id/upload/ba-document` | required | Upload BA document |
+| POST | `/api/projects/features/:id/upload/screenshot` | required | Upload screenshot |
+| GET | `/api/test-cases/feature/:id` | required | List test cases for a feature |
+| POST | `/api/test-cases/feature/:id/generate` | required | Run the AI pipeline |
+| GET | `/api/dev-tasks/feature/:id` | required | List developer tasks for a feature |
+| DELETE | `/api/dev-tasks/:id` | required | Delete a developer task |
+| POST | `/api/chat/sessions` | required | Create a chat session |
+| GET | `/api/chat/sessions/feature/:id` | required | List sessions for a feature |
+| GET | `/api/chat/sessions/:id/stream` | `?token=` | SSE stream — send message + stream response |
 
 ## Adding a New AI Provider
 
