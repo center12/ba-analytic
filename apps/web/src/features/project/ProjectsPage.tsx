@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api, type Project } from '@/lib/api';
-import { PlusCircle, FolderOpen, Trash2 } from 'lucide-react';
+import { PlusCircle, FolderOpen, Trash2, Users, LogOut } from 'lucide-react';
+import { useAuthStore } from '@/store/auth.store';
 
 export function ProjectsPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { user, logout } = useAuthStore();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -35,12 +37,28 @@ export function ProjectsPage() {
     <div className="max-w-4xl mx-auto p-8">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold">Projects</h1>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90"
-        >
-          <PlusCircle size={18} /> New Project
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/users')}
+            className="flex items-center gap-2 border px-3 py-2 rounded-md hover:bg-muted text-sm"
+            title="User management"
+          >
+            <Users size={16} /> Users
+          </button>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90"
+          >
+            <PlusCircle size={18} /> New Project
+          </button>
+          <button
+            onClick={() => { logout(); navigate('/login', { replace: true }); }}
+            className="flex items-center gap-2 border px-3 py-2 rounded-md hover:bg-muted text-sm text-muted-foreground"
+            title={`Signed in as ${user?.username}`}
+          >
+            <LogOut size={16} />
+          </button>
+        </div>
       </div>
 
       {showForm && (

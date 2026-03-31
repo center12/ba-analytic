@@ -1,3 +1,5 @@
+import { getStoredToken, removeStoredToken } from '@/features/auth/helpers/auth.helpers';
+
 const BASE_URL = '/api';
 
 export interface AIModelInfo {
@@ -20,20 +22,49 @@ export interface AIProviderInfo {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    ...init,
-  });
+  const token = getStoredToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string>),
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers });
+
+  if (res.status === 401) {
+    removeStoredToken();
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+
   if (!res.ok) {
     const error = await res.text();
     throw new Error(error || `Request failed: ${res.status}`);
   }
+
+  // 204 No Content — return undefined cast to T
+  if (res.status === 204) return undefined as T;
+
   return res.json() as Promise<T>;
 }
 
 // ── Projects ──────────────────────────────────────────────────────────────
 
 export const api = {
+  auth: {
+    login: (data: { username: string; password: string }) =>
+      request<{ accessToken: string }>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
+
+  users: {
+    list: () => request<User[]>('/users'),
+    create: (data: { username: string; password: string }) =>
+      request<User>('/users', { method: 'POST', body: JSON.stringify(data) }),
+  },
+
   projects: {
     list: () => request<Project[]>('/projects'),
     get: (id: string) => request<Project>(`/projects/${id}`),
@@ -42,7 +73,7 @@ export const api = {
     update: (id: string, data: Partial<{ name: string; description: string }>) =>
       request<Project>(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) =>
-      fetch(`${BASE_URL}/projects/${id}`, { method: 'DELETE' }),
+      request<void>(`/projects/${id}`, { method: 'DELETE' }),
 
     getPipelineConfig: (projectId: string) =>
       request<ProjectStepConfig[]>(`/projects/${projectId}/pipeline-config`),
@@ -54,7 +85,7 @@ export const api = {
       }),
 
     deletePipelineConfigStep: (projectId: string, step: number) =>
-      fetch(`${BASE_URL}/projects/${projectId}/pipeline-config/${step}`, { method: 'DELETE' }),
+      request<void>(`/projects/${projectId}/pipeline-config/${step}`, { method: 'DELETE' }),
   },
 
   features: {
@@ -66,7 +97,7 @@ export const api = {
         body: JSON.stringify(data),
       }),
     delete: (featureId: string) =>
-      fetch(`${BASE_URL}/projects/features/${featureId}`, { method: 'DELETE' }),
+      request<void>(`/projects/features/${featureId}`, { method: 'DELETE' }),
 
     uploadBADocument: (featureId: string, file: File) => {
       const form = new FormData();
@@ -94,7 +125,7 @@ export const api = {
     get: (id: string) => request<TestCase>(`/test-cases/${id}`),
     update: (id: string, data: Partial<TestCase>) =>
       request<TestCase>(`/test-cases/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id: string) => fetch(`${BASE_URL}/test-cases/${id}`, { method: 'DELETE' }),
+    delete: (id: string) => request<void>(`/test-cases/${id}`, { method: 'DELETE' }),
     generate: (featureId: string, provider?: string, model?: string) => {
       const params = new URLSearchParams();
       if (provider) params.set('provider', provider);
@@ -162,12 +193,15 @@ export const api = {
     listMessages: (sessionId: string) =>
       request<ChatMessage[]>(`/chat/sessions/${sessionId}/messages`),
     deleteSession: (sessionId: string) =>
-      fetch(`${BASE_URL}/chat/sessions/${sessionId}`, { method: 'DELETE' }),
+      request<void>(`/chat/sessions/${sessionId}`, { method: 'DELETE' }),
 
-    /** Returns an EventSource for SSE streaming. */
+    /** Returns an EventSource for SSE streaming. Token is passed as a query param
+     *  because EventSource does not support custom headers. */
     stream: (sessionId: string, message: string, provider?: string): EventSource => {
       const params = new URLSearchParams({ message });
       if (provider) params.set('provider', provider);
+      const token = getStoredToken();
+      if (token) params.set('token', token);
       return new EventSource(`${BASE_URL}/chat/sessions/${sessionId}/stream?${params}`);
     },
   },
@@ -178,11 +212,18 @@ export const api = {
 
   devTasks: {
     list: (featureId: string) => request<DeveloperTask[]>(`/dev-tasks/feature/${featureId}`),
-    remove: (id: string) => fetch(`${BASE_URL}/dev-tasks/${id}`, { method: 'DELETE' }),
+    remove: (id: string) => request<void>(`/dev-tasks/${id}`, { method: 'DELETE' }),
   },
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────
+
+export interface User {
+  id: string;
+  username: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface Project {
   id: string;
