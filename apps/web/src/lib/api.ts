@@ -24,7 +24,7 @@ export interface AIProviderInfo {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getStoredToken();
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
     ...(init?.headers as Record<string, string>),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -104,7 +104,6 @@ export const api = {
       form.append('file', file);
       return request<BADocument>(`/projects/features/${featureId}/upload/ba-document`, {
         method: 'POST',
-        headers: {},
         body: form,
       });
     },
@@ -114,7 +113,6 @@ export const api = {
       form.append('file', file);
       return request<Screenshot>(`/projects/features/${featureId}/upload/screenshot`, {
         method: 'POST',
-        headers: {},
         body: form,
       });
     },
