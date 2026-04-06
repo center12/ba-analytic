@@ -47,6 +47,7 @@ export class TestCaseService {
       case 2: return this.pipeline.runStep2(featureId, providerName, model, override as any);
       case 3: return this.pipeline.runStep3(featureId, providerName, model);
       case 4: return this.pipeline.runStep4(featureId, providerName, model);
+      case 5: return this.pipeline.runStep5(featureId, providerName, model);
       default: throw new Error(`Invalid pipeline step: ${step}`);
     }
   }

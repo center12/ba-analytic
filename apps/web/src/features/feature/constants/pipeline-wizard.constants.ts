@@ -53,6 +53,50 @@ export const MANUAL_TEMPLATES: Record<number, string> = {
   ),
   4: JSON.stringify(
     {
+      workflow: [
+        { order: 1, title: 'User navigates to feature', description: 'User opens the feature page', actor: 'User' },
+        { order: 2, title: 'User submits data', description: 'User fills and submits the form', actor: 'User' },
+      ],
+      backend: {
+        database: {
+          entities: ['Feature', 'User'],
+          relationships: ['User has many Features'],
+        },
+        apiRoutes: [
+          { method: 'GET', path: '/api/features', description: 'List all features' },
+          { method: 'POST', path: '/api/features', description: 'Create a new feature' },
+        ],
+        folderStructure: [
+          'src/modules/feature/feature.controller.ts',
+          'src/modules/feature/feature.service.ts',
+          'src/modules/feature/feature.module.ts',
+          'src/modules/feature/dto/create-feature.dto.ts',
+        ],
+      },
+      frontend: {
+        components: ['FeatureForm — form for creating/editing a feature', 'FeatureList — displays list of features'],
+        pages: ['FeatureListPage', 'FeatureDetailPage'],
+        store: ['featureStore — holds feature list and selected feature'],
+        hooks: ['useFeature(id) — fetches and caches a single feature'],
+        utils: ['formatFeatureName(name: string) — trims and capitalises'],
+        services: ['featureService.create(data) — POST /api/features'],
+      },
+      testing: {
+        backendUnitTests: [
+          'FeatureService.create — success and validation error cases',
+          'FeatureService.findOne — returns 404 when not found',
+        ],
+        frontendTests: [
+          'FeatureForm — renders and submits correctly',
+          'FeatureList — displays items and handles empty state',
+        ],
+      },
+    },
+    null,
+    2,
+  ),
+  5: JSON.stringify(
+    {
       api: [{ title: 'API — Core endpoints', prompt: 'You are an expert backend engineer. Implement the API for...' }],
       frontend: [{ title: 'Frontend — Core UI', prompt: 'You are an expert frontend engineer. Implement the UI for...' }],
       testing: [{ title: 'Testing — Core flows', prompt: 'You are an expert QA engineer. Write automated tests for...' }],

@@ -11,6 +11,7 @@ export function deriveStatus(
     stepNum === 1 ? !!feature.extractedRequirements :
     stepNum === 2 ? !!feature.testScenarios :
     stepNum === 3 ? testCaseCount > 0 :
+    stepNum === 4 ? !!feature.devPlanWorkflow :
     !!feature.devPromptApi;
 
   if (isDone) return 'completed';

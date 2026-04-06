@@ -1,10 +1,10 @@
 import { FileText, Loader2, Play, RefreshCw } from 'lucide-react';
-import { Feature, DevPlan } from '@/lib/api';
+import { Feature } from '@/lib/api';
 import { MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
 import { ManualPanel } from './ManualPanel';
-import { DevPlanPanel } from './DevPlanPanel';
+import { DevPromptPanel } from './DevPromptPanel';
 
-interface PipelineStep4Props {
+interface PipelineStep5Props {
   feature: Feature;
   featureId: string;
   status: 'idle' | 'running' | 'completed' | 'failed';
@@ -22,7 +22,7 @@ interface PipelineStep4Props {
   runStep: (step: number) => void;
 }
 
-export function PipelineStep4({
+export function PipelineStep5({
   feature,
   featureId,
   status,
@@ -38,22 +38,8 @@ export function PipelineStep4({
   handleManualJsonChange,
   handleManualSave,
   runStep,
-}: PipelineStep4Props) {
+}: PipelineStep5Props) {
   const canRun = previousStepCompleted && !isRunning;
-
-  let devPlan: DevPlan | null = null;
-  if (feature.devPlanWorkflow && feature.devPlanBackend && feature.devPlanFrontend && feature.devPlanTesting) {
-    try {
-      devPlan = {
-        workflow: JSON.parse(feature.devPlanWorkflow),
-        backend:  JSON.parse(feature.devPlanBackend),
-        frontend: JSON.parse(feature.devPlanFrontend),
-        testing:  JSON.parse(feature.devPlanTesting),
-      };
-    } catch {
-      // malformed JSON — show nothing
-    }
-  }
 
   return (
     <div className="border-t px-4 py-4 space-y-4">
@@ -62,7 +48,7 @@ export function PipelineStep4({
           <>
             <button
               disabled={!canRun}
-              onClick={() => runStep(4)}
+              onClick={() => runStep(5)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm disabled:opacity-50 ${
                 status === 'failed'
                   ? 'border border-yellow-500 text-yellow-700 hover:bg-yellow-50'
@@ -73,12 +59,12 @@ export function PipelineStep4({
                 ? <Loader2 size={13} className="animate-spin" />
                 : status === 'failed' ? <RefreshCw size={13} /> : <Play size={13} />
               }
-              {status === 'failed' ? 'Retry Step 4' : 'Run Step 4'}
+              {status === 'failed' ? 'Retry Step 5' : 'Run Step 5'}
             </button>
-            {manualStep !== 4 && (
+            {manualStep !== 5 && (
               <button
                 disabled={!canRun}
-                onClick={() => openManual(4)}
+                onClick={() => openManual(5)}
                 className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50"
               >
                 <FileText size={13} /> Manual
@@ -88,32 +74,38 @@ export function PipelineStep4({
         )}
         {status === 'running' && (
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Loader2 size={13} className="animate-spin" /> Generating development plan...
+            <Loader2 size={13} className="animate-spin" /> Generating dev prompts...
           </span>
         )}
         {status === 'completed' && (
-          <button disabled={!canRun} onClick={() => runStep(4)}
+          <button disabled={!canRun} onClick={() => runStep(5)}
             className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50">
             <RefreshCw size={13} /> Re-run
           </button>
         )}
       </div>
 
-      {manualStep === 4 && (
+      {manualStep === 5 && (
         <ManualPanel
-          step={4}
+          step={5}
           featureId={featureId}
-          templateJson={MANUAL_TEMPLATES[4]}
+          templateJson={MANUAL_TEMPLATES[5]}
           manualJson={manualJson}
           jsonError={manualJsonError}
           isSaving={manualIsSaving}
           onJsonChange={handleManualJsonChange}
-          onSave={() => handleManualSave(4)}
+          onSave={() => handleManualSave(5)}
           onCancel={closeManual}
         />
       )}
 
-      {devPlan && <DevPlanPanel devPlan={devPlan} />}
+      {feature.devPromptApi && feature.devPromptFrontend && feature.devPromptTesting && (
+        <DevPromptPanel
+          api={feature.devPromptApi}
+          frontend={feature.devPromptFrontend}
+          testing={feature.devPromptTesting}
+        />
+      )}
     </div>
   );
 }

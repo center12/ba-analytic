@@ -20,7 +20,7 @@ model Project {
 model ProjectPipelineConfig {
   id        String   @id @default(cuid())
   projectId String
-  step      Int      // 1 | 2 | 3 | 4
+  step      Int      // 1 | 2 | 3 | 4 | 5
   provider  String   // 'gemini' | 'claude' | 'openai'
   model     String?  // null = provider default
   createdAt DateTime @default(now())
@@ -41,6 +41,10 @@ model Feature {
   extractedRequirements Json?
   extractedBehaviors    Json?
   testScenarios         Json?
+  devPlanWorkflow       String?        @db.Text  // JSON: WorkflowStep[]
+  devPlanBackend        String?        @db.Text  // JSON: BackendPlan
+  devPlanFrontend       String?        @db.Text  // JSON: FrontendPlan
+  devPlanTesting        String?        @db.Text  // JSON: TestingPlan
   devPromptApi          String?
   devPromptFrontend     String?
   devPromptTesting      String?

@@ -55,6 +55,51 @@ export interface DevPrompt {
   testing:  DevTaskItem[];   // 4C — test automation sub-tasks
 }
 
+// ── Step 4 — Development Plan types ──────────────────────────────────────────
+
+export interface WorkflowStep {
+  order: number;
+  title: string;
+  description: string;
+  actor: string;
+}
+
+export interface ApiRoute {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  path: string;
+  description: string;
+}
+
+export interface BackendPlan {
+  database: {
+    entities: string[];
+    relationships: string[];
+  };
+  apiRoutes: ApiRoute[];
+  folderStructure: string[];
+}
+
+export interface FrontendPlan {
+  components: string[];   // "ComponentName — purpose"
+  pages: string[];
+  store: string[];
+  hooks: string[];
+  utils: string[];
+  services: string[];
+}
+
+export interface TestingPlan {
+  backendUnitTests: string[];
+  frontendTests: string[];
+}
+
+export interface DevPlan {
+  workflow:  WorkflowStep[];
+  backend:   BackendPlan;
+  frontend:  FrontendPlan;
+  testing:   TestingPlan;
+}
+
 export type ScenarioType = 'happy_path' | 'edge_case' | 'error' | 'boundary' | 'security';
 
 export interface TestScenario {
@@ -314,6 +359,180 @@ Return ONLY valid JSON matching this exact structure (no markdown, no explanatio
 }
 
 /**
+ * Builds the prompt for Step 4 Call A — workflow steps + backend architecture.
+ * Shared across all provider implementations.
+ */
+export function buildDevPlanWorkflowBackendPrompt(
+  requirements: ExtractedRequirements,
+  behaviors: ExtractedBehaviors,
+  scenarios: TestScenario[],
+): string {
+  return `You are a senior software architect. Based on the feature analysis below, define the user workflow and design the backend architecture.
+
+LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values in that same language. Do not translate or mix languages.
+
+## Feature: ${behaviors.feature}
+
+## Actors
+${behaviors.actors.map(a => `- ${a}`).join('\n')}
+
+## Actions (atomic flows)
+${behaviors.actions.map(a => `- ${a}`).join('\n')}
+
+## Business Rules
+${behaviors.rules.map(r => `- ${r}`).join('\n')}
+
+## Domain Entities
+${requirements.entities.join(', ')}
+
+## Acceptance Criteria
+${requirements.acceptanceCriteria.map(c => `- ${c}`).join('\n')}
+
+## Test Scenarios
+${scenarios.map((s, i) => `${i + 1}. [${s.type.toUpperCase()}] ${s.title}`).join('\n')}
+
+---
+
+## Output Requirements
+
+### 1. Workflow Steps
+Produce an ordered list of user-facing workflow steps (the happy path from start to finish).
+Each step: order (1-based), title (short action name), description (one sentence), actor (who performs this step).
+Limit to 8 steps maximum.
+
+### 2. Backend Plan
+
+**Database**: List all entities (model names) and relationships as plain strings (e.g. "User has many Orders").
+
+**API Routes**: For each endpoint define: method (GET/POST/PUT/PATCH/DELETE), path (e.g. /api/features/:id), description (one sentence).
+Include all CRUD routes plus any special operations needed.
+
+**Folder Structure**: List file paths for the NestJS module (controller, service, module, DTOs, constants, helpers).
+Follow the pattern: src/modules/<name>/<name>.controller.ts, etc.
+
+---
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "workflow": [
+    { "order": 1, "title": "string", "description": "string", "actor": "string" }
+  ],
+  "backend": {
+    "database": {
+      "entities": ["string"],
+      "relationships": ["string"]
+    },
+    "apiRoutes": [
+      { "method": "GET|POST|PUT|PATCH|DELETE", "path": "string", "description": "string" }
+    ],
+    "folderStructure": ["string"]
+  }
+}`;
+}
+
+/**
+ * Builds the prompt for Step 4 Call B — frontend architecture.
+ * Receives a condensed text summary from Call A to keep token count low.
+ */
+export function buildDevPlanFrontendPrompt(
+  requirements: ExtractedRequirements,
+  behaviors: ExtractedBehaviors,
+  workflowSummary: string,
+): string {
+  return `You are a senior frontend architect. Based on the feature analysis and workflow below, design the frontend architecture.
+
+LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values in that same language. Do not translate or mix languages.
+
+## Feature: ${behaviors.feature}
+
+## Actors
+${behaviors.actors.map(a => `- ${a}`).join('\n')}
+
+## Acceptance Criteria
+${requirements.acceptanceCriteria.map(c => `- ${c}`).join('\n')}
+
+## User Workflow
+${workflowSummary}
+
+---
+
+## Output Requirements
+
+Design the React frontend for this feature. Use Vite + React + TanStack Query + Zustand conventions.
+
+- **components**: list each component as "ComponentName — one-line purpose". Include all form, list, card, panel, and modal components.
+- **pages**: list page component names (e.g. "FeatureListPage", "FeatureDetailPage").
+- **store**: list Zustand store slices or atoms needed (e.g. "featureStore — holds selected feature and list").
+- **hooks**: list custom hooks (e.g. "useFeature(id) — fetches and caches a single feature").
+- **utils**: list utility/helper functions (e.g. "formatFeatureName(name: string) — trims and capitalises").
+- **services**: list API service functions (e.g. "featureService.create(data) — POST /api/features").
+
+---
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "components": ["string"],
+  "pages": ["string"],
+  "store": ["string"],
+  "hooks": ["string"],
+  "utils": ["string"],
+  "services": ["string"]
+}`;
+}
+
+/**
+ * Builds the prompt for Step 4 Call C — testing plan.
+ * Receives only condensed lists from Calls A & B to keep token count low.
+ */
+export function buildDevPlanTestingPrompt(
+  requirements: ExtractedRequirements,
+  scenarios: TestScenario[],
+  apiRoutes: ApiRoute[],
+  components: string[],
+): string {
+  const routeList = apiRoutes.map(r => `${r.method} ${r.path} — ${r.description}`).join('\n');
+  const componentList = components.join('\n');
+
+  return `You are a senior QA engineer. Based on the feature analysis below, create a testing plan.
+
+LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values in that same language. Do not translate or mix languages.
+
+## Test Scenarios
+${scenarios.map((s, i) => `${i + 1}. [${s.type.toUpperCase()}] ${s.title}`).join('\n')}
+
+## Business Rules
+${requirements.businessRules.map(r => `- ${r}`).join('\n')}
+
+## API Routes
+${routeList}
+
+## Frontend Components
+${componentList}
+
+---
+
+## Output Requirements
+
+### Backend Unit Tests (NestJS Jest)
+For each service method that corresponds to an API route, define test cases as strings.
+Format: "ServiceName.method — scenario description" (e.g. "FeatureService.create — returns 400 when name is empty").
+Cover: success cases, validation errors, not-found errors, authorization errors.
+
+### Frontend Tests (React Testing Library + Vitest)
+For each page or key component, define test cases as strings.
+Format: "ComponentName — scenario description" (e.g. "FeatureForm — shows validation error when submitted empty").
+Cover: render tests, user interaction tests, API error display tests.
+
+---
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "backendUnitTests": ["string"],
+  "frontendTests": ["string"]
+}`;
+}
+
+/**
  * Abstract base class for all AI providers.
  * Concrete implementations: GeminiProvider, ClaudeProvider, OpenAIProvider.
  */
@@ -372,7 +591,37 @@ export abstract class AIProvider {
   ): Promise<GeneratedTestCase[]>;
 
   /**
-   * Layer 4 — Synthesize all pipeline outputs into a ready-to-copy prompt
+   * Step 4 Call A — Generate workflow steps + backend architecture plan.
+   */
+  abstract generateDevPlanWorkflowBackend(
+    requirements: ExtractedRequirements,
+    behaviors: ExtractedBehaviors,
+    scenarios: TestScenario[],
+  ): Promise<{ workflow: WorkflowStep[]; backend: BackendPlan }>;
+
+  /**
+   * Step 4 Call B — Generate frontend architecture plan.
+   * Receives a condensed text summary of workflow from Call A.
+   */
+  abstract generateDevPlanFrontend(
+    requirements: ExtractedRequirements,
+    behaviors: ExtractedBehaviors,
+    workflowSummary: string,
+  ): Promise<FrontendPlan>;
+
+  /**
+   * Step 4 Call C — Generate testing plan.
+   * Receives condensed API routes and component lists from Calls A & B.
+   */
+  abstract generateDevPlanTesting(
+    requirements: ExtractedRequirements,
+    scenarios: TestScenario[],
+    apiRoutes: ApiRoute[],
+    components: string[],
+  ): Promise<TestingPlan>;
+
+  /**
+   * Layer 4 (Step 5) — Synthesize all pipeline outputs into a ready-to-copy prompt
    * for AI coding tools (Cursor, Copilot, Claude, etc.).
    */
   abstract generateDevPrompt(

@@ -165,11 +165,12 @@ export const api = {
       );
     },
     saveStepResults: (featureId: string, data: {
-      step: 1 | 2 | 3 | 4;
+      step: 1 | 2 | 3 | 4 | 5;
       extractedRequirements?: ExtractedRequirements;
       extractedBehaviors?: ExtractedBehaviors;
       testScenarios?: TestScenario[];
       generatedTestCases?: GeneratedTestCase[];
+      devPlan?: DevPlan;
       devPrompt?: DevPrompt;
     }) =>
       request<unknown>(
@@ -267,6 +268,10 @@ export interface Feature {
   extractedRequirements?: ExtractedRequirements;
   extractedBehaviors?: ExtractedBehaviors;
   testScenarios?: TestScenario[];
+  devPlanWorkflow?: string;
+  devPlanBackend?: string;
+  devPlanFrontend?: string;
+  devPlanTesting?: string;
   devPromptApi?: string;
   devPromptFrontend?: string;
   devPromptTesting?: string;
@@ -315,6 +320,48 @@ export interface DevPrompt {
   api:      DevTaskItem[];
   frontend: DevTaskItem[];
   testing:  DevTaskItem[];
+}
+
+// ── Step 4 — Development Plan types ──────────────────────────────────────────
+
+export interface WorkflowStep {
+  order: number;
+  title: string;
+  description: string;
+  actor: string;
+}
+
+export interface ApiRoute {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  path: string;
+  description: string;
+}
+
+export interface BackendPlan {
+  database: { entities: string[]; relationships: string[] };
+  apiRoutes: ApiRoute[];
+  folderStructure: string[];
+}
+
+export interface FrontendPlan {
+  components: string[];
+  pages: string[];
+  store: string[];
+  hooks: string[];
+  utils: string[];
+  services: string[];
+}
+
+export interface TestingPlan {
+  backendUnitTests: string[];
+  frontendTests: string[];
+}
+
+export interface DevPlan {
+  workflow:  WorkflowStep[];
+  backend:   BackendPlan;
+  frontend:  FrontendPlan;
+  testing:   TestingPlan;
 }
 
 export interface TestCase {

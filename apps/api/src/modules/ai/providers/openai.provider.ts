@@ -5,6 +5,11 @@ import { generateObject, streamText } from 'ai';
 import { z } from 'zod';
 import {
   AIProvider,
+  ApiRoute,
+  BackendPlan,
+  buildDevPlanFrontendPrompt,
+  buildDevPlanTestingPrompt,
+  buildDevPlanWorkflowBackendPrompt,
   buildDevPromptInput,
   buildExtractAllPrompt,
   buildGenerateTestCasesPrompt,
@@ -15,8 +20,11 @@ import {
   DevPrompt,
   ExtractedBehaviors,
   ExtractedRequirements,
+  FrontendPlan,
   GeneratedTestCase,
+  TestingPlan,
   TestScenario,
+  WorkflowStep,
 } from '../ai-provider.abstract';
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
@@ -67,6 +75,40 @@ const DevPromptSchema = z.object({
   api:      z.array(DevTaskItemSchema),
   frontend: z.array(DevTaskItemSchema),
   testing:  z.array(DevTaskItemSchema),
+});
+
+const ApiRouteSchema = z.object({
+  method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
+  path: z.string(),
+  description: z.string(),
+});
+const WorkflowBackendSchema = z.object({
+  workflow: z.array(z.object({
+    order: z.number(),
+    title: z.string(),
+    description: z.string(),
+    actor: z.string(),
+  })),
+  backend: z.object({
+    database: z.object({
+      entities: z.array(z.string()),
+      relationships: z.array(z.string()),
+    }),
+    apiRoutes: z.array(ApiRouteSchema),
+    folderStructure: z.array(z.string()),
+  }),
+});
+const FrontendPlanSchema = z.object({
+  components: z.array(z.string()),
+  pages: z.array(z.string()),
+  store: z.array(z.string()),
+  hooks: z.array(z.string()),
+  utils: z.array(z.string()),
+  services: z.array(z.string()),
+});
+const TestingPlanSchema = z.object({
+  backendUnitTests: z.array(z.string()),
+  frontendTests: z.array(z.string()),
 });
 
 @Injectable()
@@ -235,23 +277,84 @@ ${baDocumentContent}`;
     return object.testCases as GeneratedTestCase[];
   }
 
-  // ── Layer 4: Dev Prompt Generator (4A API · 4B Frontend · 4C Testing) ──────────
+  // ── Step 4A: Dev Plan — Workflow + Backend ───────────────────────────────────
+
+  async generateDevPlanWorkflowBackend(
+    requirements: ExtractedRequirements,
+    behaviors: ExtractedBehaviors,
+    scenarios: TestScenario[],
+  ): Promise<{ workflow: WorkflowStep[]; backend: BackendPlan }> {
+    this.logger.log('[Step 4A] Generating workflow + backend plan...');
+    const prompt4a = buildDevPlanWorkflowBackendPrompt(requirements, behaviors, scenarios);
+    this.logPromptSize('[Step 4A]', prompt4a);
+    const { object, usage, response } = await generateObject({
+      model: openai(this.modelVersion),
+      schema: WorkflowBackendSchema,
+      prompt: prompt4a,
+    });
+    this.logger.log(`[Step 4A] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Step 4A]', response.headers);
+    return object as { workflow: WorkflowStep[]; backend: BackendPlan };
+  }
+
+  // ── Step 4B: Dev Plan — Frontend ─────────────────────────────────────────────
+
+  async generateDevPlanFrontend(
+    requirements: ExtractedRequirements,
+    behaviors: ExtractedBehaviors,
+    workflowSummary: string,
+  ): Promise<FrontendPlan> {
+    this.logger.log('[Step 4B] Generating frontend plan...');
+    const prompt4b = buildDevPlanFrontendPrompt(requirements, behaviors, workflowSummary);
+    this.logPromptSize('[Step 4B]', prompt4b);
+    const { object, usage, response } = await generateObject({
+      model: openai(this.modelVersion),
+      schema: FrontendPlanSchema,
+      prompt: prompt4b,
+    });
+    this.logger.log(`[Step 4B] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Step 4B]', response.headers);
+    return object as FrontendPlan;
+  }
+
+  // ── Step 4C: Dev Plan — Testing ──────────────────────────────────────────────
+
+  async generateDevPlanTesting(
+    requirements: ExtractedRequirements,
+    scenarios: TestScenario[],
+    apiRoutes: ApiRoute[],
+    components: string[],
+  ): Promise<TestingPlan> {
+    this.logger.log('[Step 4C] Generating testing plan...');
+    const prompt4c = buildDevPlanTestingPrompt(requirements, scenarios, apiRoutes, components);
+    this.logPromptSize('[Step 4C]', prompt4c);
+    const { object, usage, response } = await generateObject({
+      model: openai(this.modelVersion),
+      schema: TestingPlanSchema,
+      prompt: prompt4c,
+    });
+    this.logger.log(`[Step 4C] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Step 4C]', response.headers);
+    return object as TestingPlan;
+  }
+
+  // ── Step 5 (Layer 4): Dev Prompt Generator (4A API · 4B Frontend · 4C Testing) ─
 
   async generateDevPrompt(
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
     scenarios: TestScenario[],
   ): Promise<DevPrompt> {
-    this.logger.log('[Layer 4] Generating dev prompts (API / Frontend / Testing)...');
+    this.logger.log('[Step 5] Generating dev prompts (API / Frontend / Testing)...');
     const prompt4 = buildDevPromptInput(requirements, behaviors, scenarios);
-    this.logPromptSize('[Layer 4]', prompt4);
+    this.logPromptSize('[Step 5]', prompt4);
     const { object, usage, response } = await generateObject({
       model: openai(this.modelVersion),
       schema: DevPromptSchema,
       prompt: prompt4,
     });
-    this.logger.log(`[Layer 4] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
-    this.logRateLimit('[Layer 4]', response.headers);
+    this.logger.log(`[Step 5] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Step 5]', response.headers);
     return object as DevPrompt;
   }
 

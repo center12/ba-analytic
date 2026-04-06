@@ -5,16 +5,22 @@ import { AIProviderFactory, ProviderName } from '../ai/ai-provider.factory';
 import { STORAGE_PROVIDER, IStorageProvider } from '../storage/storage.interface';
 import {
   AIProvider,
+  BackendPlan,
+  buildDevPlanWorkflowBackendPrompt,
   buildDevPromptInput,
   buildExtractAllPrompt,
   buildGenerateTestCasesPrompt,
   buildPlanScenariosPrompt,
   CombinedExtraction,
+  DevPlan,
   DevPrompt,
   ExtractedBehaviors,
   ExtractedRequirements,
+  FrontendPlan,
   GeneratedTestCase,
+  TestingPlan,
   TestScenario,
+  WorkflowStep,
 } from '../ai/ai-provider.abstract';
 import { AI_CONFIG } from '@/modules/test-case/constants';
 import {
@@ -205,11 +211,74 @@ export class PipelineService {
     }
   }
 
-  /** Step 4: Run Layer 4 dev prompt generation using saved Layer 1+2 results */
+  /** Step 4: Generate Development Plan using 3 separate AI calls (workflow+backend, frontend, testing) */
   async runStep4(featureId: string, providerName?: string, model?: string) {
     await this.prisma.feature.update({
       where: { id: featureId },
       data: ({ pipelineStatus: 'RUNNING', pipelineStep: 4 } as any),
+    });
+    try {
+      const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
+      if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
+
+      const req           = feature.extractedRequirements as ExtractedRequirements | null;
+      const beh           = feature.extractedBehaviors    as ExtractedBehaviors    | null;
+      const testScenarios = feature.testScenarios          as TestScenario[]       | null;
+      if (!req || !beh)          throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
+      if (!testScenarios?.length) throw new BadRequestException(`Feature ${featureId} has no scenarios — run Step 2 first`);
+
+      const provider = await this._resolveProvider(featureId, 4, providerName, model);
+      const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+
+      // Call A: Workflow + Backend
+      this.logger.log('[Pipeline] Step 4A — generating workflow + backend plan');
+      const { workflow, backend } = await withRetry(() =>
+        provider.generateDevPlanWorkflowBackend(compReq, compBeh, testScenarios)
+      );
+
+      // Call B: Frontend (receives condensed workflow text summary)
+      const workflowSummary = workflow.map(s => `${s.order}. ${s.title} (${s.actor}): ${s.description}`).join('\n');
+      this.logger.log('[Pipeline] Step 4B — generating frontend plan');
+      const frontend = await withRetry(() =>
+        provider.generateDevPlanFrontend(compReq, compBeh, workflowSummary)
+      );
+
+      // Call C: Testing (receives condensed API routes + component list)
+      this.logger.log('[Pipeline] Step 4C — generating testing plan');
+      const testing = await withRetry(() =>
+        provider.generateDevPlanTesting(compReq, testScenarios, backend.apiRoutes, frontend.components)
+      );
+
+      const devPlan: DevPlan = { workflow, backend, frontend, testing };
+
+      await this.prisma.feature.update({
+        where: { id: featureId },
+        data: ({
+          devPlanWorkflow:  JSON.stringify(devPlan.workflow),
+          devPlanBackend:   JSON.stringify(devPlan.backend),
+          devPlanFrontend:  JSON.stringify(devPlan.frontend),
+          devPlanTesting:   JSON.stringify(devPlan.testing),
+          pipelineStatus: 'COMPLETED',
+          pipelineStep: 4,
+        } as any),
+      });
+
+      this.logger.log(`[Pipeline] Step 4 done — ${workflow.length} workflow steps, ${backend.apiRoutes.length} routes, ${frontend.components.length} components`);
+      return { devPlan };
+    } catch (err) {
+      await this.prisma.feature.update({
+        where: { id: featureId },
+        data: ({ pipelineStatus: 'FAILED', pipelineStep: 4 } as any),
+      });
+      throw err;
+    }
+  }
+
+  /** Step 5: Run Layer 4 dev prompt generation using saved Layer 1+2 results */
+  async runStep5(featureId: string, providerName?: string, model?: string) {
+    await this.prisma.feature.update({
+      where: { id: featureId },
+      data: ({ pipelineStatus: 'RUNNING', pipelineStep: 5 } as any),
     });
     try {
       const feature = await this.prisma.feature.findUnique({ where: { id: featureId }, include: { developerTasks: false } });
@@ -221,10 +290,10 @@ export class PipelineService {
       if (!req || !beh)         throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
       if (!testScenarios?.length) throw new BadRequestException(`Feature ${featureId} has no scenarios — run Step 2 first`);
 
-      const provider = await this._resolveProvider(featureId, 4, providerName, model);
+      const provider = await this._resolveProvider(featureId, 5, providerName, model);
       const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
 
-      this.logger.log('[Pipeline] Step 4 — generating dev prompts');
+      this.logger.log('[Pipeline] Step 5 — generating dev prompts');
       const devPrompt = await withRetry(() => provider.generateDevPrompt(compReq, compBeh, testScenarios));
 
       await this.prisma.feature.update({
@@ -234,7 +303,7 @@ export class PipelineService {
           devPromptFrontend: JSON.stringify(devPrompt.frontend),
           devPromptTesting:  JSON.stringify(devPrompt.testing),
           pipelineStatus: 'COMPLETED',
-          pipelineStep: 4,
+          pipelineStep: 5,
         } as any),
       });
 
@@ -246,12 +315,12 @@ export class PipelineService {
       await this.prisma.developerTask.deleteMany({ where: { featureId } });
       await this.prisma.developerTask.createMany({ data: taskRows });
 
-      this.logger.log(`[Pipeline] Step 4 — created ${taskRows.length} dev task(s) (${devPrompt.api.length} API, ${devPrompt.frontend.length} Frontend, ${devPrompt.testing.length} Testing)`);
+      this.logger.log(`[Pipeline] Step 5 — created ${taskRows.length} dev task(s) (${devPrompt.api.length} API, ${devPrompt.frontend.length} Frontend, ${devPrompt.testing.length} Testing)`);
       return { devPrompt };
     } catch (err) {
       await this.prisma.feature.update({
         where: { id: featureId },
-        data: ({ pipelineStatus: 'FAILED', pipelineStep: 4 } as any),
+        data: ({ pipelineStatus: 'FAILED', pipelineStep: 5 } as any),
       });
       throw err;
     }
@@ -261,11 +330,12 @@ export class PipelineService {
   async saveStepResults(
     featureId: string,
     data: {
-      step: 1 | 2 | 3 | 4;
+      step: 1 | 2 | 3 | 4 | 5;
       extractedRequirements?: ExtractedRequirements;
       extractedBehaviors?: ExtractedBehaviors;
       testScenarios?: TestScenario[];
       generatedTestCases?: GeneratedTestCase[];
+      devPlan?: DevPlan;
       devPrompt?: DevPrompt;
     },
   ) {
@@ -293,28 +363,44 @@ export class PipelineService {
     }
 
     if (data.step === 4) {
-      if (!data.devPrompt) throw new BadRequestException('devPrompt is required for step 4');
+      if (!data.devPlan) throw new BadRequestException('devPlan is required for step 4');
+      const feature4 = await this.prisma.feature.update({
+        where: { id: featureId },
+        data: ({
+          devPlanWorkflow:  JSON.stringify(data.devPlan.workflow),
+          devPlanBackend:   JSON.stringify(data.devPlan.backend),
+          devPlanFrontend:  JSON.stringify(data.devPlan.frontend),
+          devPlanTesting:   JSON.stringify(data.devPlan.testing),
+          pipelineStep: 4,
+          pipelineStatus: 'COMPLETED',
+        } as any),
+      });
+      return { step: 4, feature: feature4, devPlan: data.devPlan };
+    }
+
+    if (data.step === 5) {
+      if (!data.devPrompt) throw new BadRequestException('devPrompt is required for step 5');
       const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
       if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
-      const feature4 = await this.prisma.feature.update({
+      const feature5 = await this.prisma.feature.update({
         where: { id: featureId },
         data: ({
           devPromptApi:      JSON.stringify(data.devPrompt.api),
           devPromptFrontend: JSON.stringify(data.devPrompt.frontend),
           devPromptTesting:  JSON.stringify(data.devPrompt.testing),
-          pipelineStep: 4,
+          pipelineStep: 5,
           pipelineStatus: 'COMPLETED',
         } as any),
       });
-      const taskRows4 = [
+      const taskRows5 = [
         ...data.devPrompt.api.map(t      => ({ featureId, category: 'API'      as const, title: t.title, prompt: t.prompt })),
         ...data.devPrompt.frontend.map(t => ({ featureId, category: 'FRONTEND' as const, title: t.title, prompt: t.prompt })),
         ...data.devPrompt.testing.map(t  => ({ featureId, category: 'TESTING'  as const, title: t.title, prompt: t.prompt })),
       ];
       await this.prisma.developerTask.deleteMany({ where: { featureId } });
-      await this.prisma.developerTask.createMany({ data: taskRows4 });
+      await this.prisma.developerTask.createMany({ data: taskRows5 });
       const devTasks = await this.prisma.developerTask.findMany({ where: { featureId } });
-      return { step: 4, feature: feature4, devPrompt: data.devPrompt, devTasks };
+      return { step: 5, feature: feature5, devPrompt: data.devPrompt, devTasks };
     }
 
     // Steps 1 and 2
@@ -369,10 +455,20 @@ export class PipelineService {
       if (!req || !beh)       throw new BadRequestException(`Run Step 1 first — no extraction results found`);
       if (!scenarios?.length) throw new BadRequestException(`Run Step 2 first — no scenarios found`);
       const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+      return { prompt: buildDevPlanWorkflowBackendPrompt(compReq, compBeh, scenarios) };
+    }
+
+    if (step === 5) {
+      const req       = feature.extractedRequirements as ExtractedRequirements | null;
+      const beh       = feature.extractedBehaviors    as ExtractedBehaviors    | null;
+      const scenarios = feature.testScenarios          as TestScenario[]       | null;
+      if (!req || !beh)       throw new BadRequestException(`Run Step 1 first — no extraction results found`);
+      if (!scenarios?.length) throw new BadRequestException(`Run Step 2 first — no scenarios found`);
+      const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
       return { prompt: buildDevPromptInput(compReq, compBeh, scenarios) };
     }
 
-    throw new BadRequestException(`Invalid step: ${step}. Must be 1–4`);
+    throw new BadRequestException(`Invalid step: ${step}. Must be 1–5`);
   }
 
   // ── Full pipeline (kept for backward compat) ───────────────────────────────
@@ -482,11 +578,12 @@ export class PipelineService {
     previousPartial: CombinedExtraction | null,
   ) {
     // Resolve per-step providers — each step independently consults saved project config
-    const [provider1, provider2, provider3, provider4] = await Promise.all([
+    const [provider1, provider2, provider3, provider4, provider5] = await Promise.all([
       this._resolveProvider(featureId, 1, providerName, model),
       this._resolveProvider(featureId, 2, providerName, model),
       this._resolveProvider(featureId, 3, providerName, model),
       this._resolveProvider(featureId, 4, providerName, model),
+      this._resolveProvider(featureId, 5, providerName, model),
     ]);
 
     // ── Layer 1: Combined extraction (chunked, resumable) ─────────────────────
@@ -538,10 +635,37 @@ export class PipelineService {
       ),
     );
 
-    // ── Layer 4: Generate dev prompts ─────────────────────────────────────────
-    this.logger.log('[Pipeline] Layer 4 — generating dev prompts');
+    // ── Step 4: Generate Development Plan ────────────────────────────────────
+    this.logger.log('[Pipeline] Step 4A — generating workflow + backend plan');
+    const { workflow, backend } = await withRetry(() =>
+      provider4.generateDevPlanWorkflowBackend(compReq, compBeh, testScenarios),
+    );
+    const workflowSummary = workflow.map((s: WorkflowStep) => `${s.order}. ${s.title} (${s.actor}): ${s.description}`).join('\n');
+
+    this.logger.log('[Pipeline] Step 4B — generating frontend plan');
+    const frontend = await withRetry(() =>
+      provider4.generateDevPlanFrontend(compReq, compBeh, workflowSummary),
+    );
+
+    this.logger.log('[Pipeline] Step 4C — generating testing plan');
+    const testing = await withRetry(() =>
+      provider4.generateDevPlanTesting(compReq, testScenarios, (backend as BackendPlan).apiRoutes, (frontend as FrontendPlan).components),
+    );
+
+    await this.prisma.feature.update({
+      where: { id: featureId },
+      data: ({
+        devPlanWorkflow:  JSON.stringify(workflow),
+        devPlanBackend:   JSON.stringify(backend),
+        devPlanFrontend:  JSON.stringify(frontend),
+        devPlanTesting:   JSON.stringify(testing),
+      } as any),
+    });
+
+    // ── Step 5: Generate dev prompts ──────────────────────────────────────────
+    this.logger.log('[Pipeline] Step 5 — generating dev prompts');
     const devPrompt = await withRetry(() =>
-      provider4.generateDevPrompt(compReq, compBeh, testScenarios),
+      provider5.generateDevPrompt(compReq, compBeh, testScenarios),
     );
 
     await this.prisma.feature.update({

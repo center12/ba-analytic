@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   api,
+  DevPlan,
   Feature,
   ExtractedRequirements,
   ExtractedBehaviors,
@@ -18,6 +19,7 @@ import { PipelineStep1 } from './components/pipeline-wizard/PipelineStep1';
 import { PipelineStep2 } from './components/pipeline-wizard/PipelineStep2';
 import { PipelineStep3 } from './components/pipeline-wizard/PipelineStep3';
 import { PipelineStep4 } from './components/pipeline-wizard/PipelineStep4';
+import { PipelineStep5 } from './components/pipeline-wizard/PipelineStep5';
 
 // ── Main wizard ───────────────────────────────────────────────────────────────
 
@@ -87,7 +89,9 @@ export function PipelineWizard({ featureId }: Props) {
       } else if (step === 3) {
         manualSaveMutation.mutate({ step: 3, generatedTestCases: parsed as GeneratedTestCase[] });
       } else if (step === 4) {
-        manualSaveMutation.mutate({ step: 4, devPrompt: parsed as DevPrompt });
+        manualSaveMutation.mutate({ step: 4, devPlan: parsed as DevPlan });
+      } else if (step === 5) {
+        manualSaveMutation.mutate({ step: 5, devPrompt: parsed as DevPrompt });
       }
     } catch {
       toast({ variant: 'destructive', title: 'Invalid JSON' });
@@ -218,7 +222,7 @@ export function PipelineWizard({ featureId }: Props) {
     resumeMutation.isPending ? 1 :
     null;
 
-  const statuses = [1, 2, 3, 4].map(n => deriveStatus(n, feature, testCases.length, activeStep));
+  const statuses = [1, 2, 3, 4, 5].map(n => deriveStatus(n, feature, testCases.length, activeStep));
 
   const runStep = (step: number) => runMutation.mutate({ step });
   const runIsPendingStep = runMutation.isPending ? (runMutation.variables?.step ?? null) : null;
@@ -312,7 +316,7 @@ export function PipelineWizard({ featureId }: Props) {
     },
     {
       num: 4,
-      title: 'Step 4 — Generate Dev Prompts',
+      title: 'Step 4 — Generate Development Plan',
       render: () => (
         <PipelineStep4
           feature={feature}
@@ -325,6 +329,29 @@ export function PipelineWizard({ featureId }: Props) {
           manualJsonError={manualJsonError}
           manualIsSaving={manualSaveMutation.isPending}
           runIsPendingForStep={runIsPendingStep === 4}
+          openManual={openManual}
+          closeManual={closeManual}
+          handleManualJsonChange={handleManualJsonChange}
+          handleManualSave={handleManualSave}
+          runStep={runStep}
+        />
+      ),
+    },
+    {
+      num: 5,
+      title: 'Step 5 — Generate Dev Prompts',
+      render: () => (
+        <PipelineStep5
+          feature={feature}
+          featureId={featureId}
+          status={statuses[4]}
+          previousStepCompleted={statuses[3] === 'completed'}
+          isRunning={isRunning}
+          manualStep={manualStep}
+          manualJson={manualJson}
+          manualJsonError={manualJsonError}
+          manualIsSaving={manualSaveMutation.isPending}
+          runIsPendingForStep={runIsPendingStep === 5}
           openManual={openManual}
           closeManual={closeManual}
           handleManualJsonChange={handleManualJsonChange}
