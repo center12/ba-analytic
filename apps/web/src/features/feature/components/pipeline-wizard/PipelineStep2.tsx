@@ -2,7 +2,9 @@ import { FileText, Loader2, Pencil, Play, RefreshCw, Save, X } from 'lucide-reac
 import { Dispatch, SetStateAction } from 'react';
 import { Feature } from '@/lib/api';
 import { BADGE, MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
+import { step2ToMarkdown } from '../../helpers/pipeline-wizard.helpers';
 import { ManualPanel } from './ManualPanel';
+import { CopyMarkdownButton } from './CopyMarkdownButton';
 
 interface PipelineStep2Props {
   feature: Feature;
@@ -104,6 +106,10 @@ export function PipelineStep2({
               className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50">
               <RefreshCw size={13} /> Re-run
             </button>
+            <CopyMarkdownButton
+              getText={() => step2ToMarkdown(feature)}
+              filename={`step2-scenarios-${feature.name}.md`}
+            />
           </>
         )}
         {isEditing && (

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { DevPlan, WorkflowStep, ApiRoute } from '@/lib/api';
+import { DevPlan, WorkflowStep, ApiRoute, DatabaseEntity } from '@/lib/api';
 
 interface Props {
   devPlan: DevPlan;
@@ -57,7 +57,62 @@ function WorkflowSection({ steps }: { steps: WorkflowStep[] }) {
   );
 }
 
+function DatabaseEntitiesSection({ entities }: { entities: DatabaseEntity[] }) {
+  const [expandedEntity, setExpandedEntity] = useState<string | null>(null);
+  if (!entities.length) return <span className="text-muted-foreground italic">None</span>;
+  return (
+    <div className="space-y-1.5">
+      {entities.map((entity) => (
+        <div key={entity.name} className="border rounded">
+          <button
+            onClick={() => setExpandedEntity(expandedEntity === entity.name ? null : entity.name)}
+            className="w-full flex items-center justify-between px-2 py-1.5 hover:bg-muted/50 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold">{entity.name}</span>
+              <span className="text-xs text-muted-foreground font-mono">{entity.tableName}</span>
+            </div>
+            <span className="text-xs text-muted-foreground">{entity.fields?.length ?? 0} fields</span>
+          </button>
+          {expandedEntity === entity.name && (
+            <div className="border-t px-2 pb-2">
+              <table className="w-full text-xs mt-1.5 border-collapse">
+                <thead>
+                  <tr className="text-muted-foreground">
+                    <th className="text-left pb-0.5 pr-2">Field</th>
+                    <th className="text-left pb-0.5 pr-2">Type</th>
+                    <th className="text-left pb-0.5 pr-2">Flags</th>
+                    <th className="text-left pb-0.5">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(entity.fields ?? []).map((f, fi) => (
+                    <tr key={fi} className={f.isPrimaryKey ? 'font-medium' : ''}>
+                      <td className="pr-2 font-mono py-0.5">{f.name}</td>
+                      <td className="pr-2 text-muted-foreground py-0.5">{f.type}</td>
+                      <td className="pr-2 py-0.5">
+                        {f.isPrimaryKey && (
+                          <span className="bg-primary/10 text-primary text-[10px] px-1 rounded mr-1">PK</span>
+                        )}
+                        {!f.isNullable && (
+                          <span className="bg-muted text-muted-foreground text-[10px] px-1 rounded">NOT NULL</span>
+                        )}
+                      </td>
+                      <td className="text-muted-foreground py-0.5">{f.description ?? ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ApiRoutesTable({ routes }: { routes: ApiRoute[] }) {
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const methodColor: Record<string, string> = {
     GET: 'bg-blue-100 text-blue-800',
     POST: 'bg-green-100 text-green-800',
@@ -68,12 +123,52 @@ function ApiRoutesTable({ routes }: { routes: ApiRoute[] }) {
   return (
     <div className="space-y-1.5">
       {routes.map((r, i) => (
-        <div key={i} className="flex items-start gap-2">
-          <span className={`shrink-0 text-xs font-mono font-semibold px-1.5 py-0.5 rounded ${methodColor[r.method] ?? 'bg-muted'}`}>
-            {r.method}
-          </span>
-          <span className="font-mono text-xs text-muted-foreground shrink-0">{r.path}</span>
-          <span className="text-xs text-muted-foreground">— {r.description}</span>
+        <div key={i} className="border rounded">
+          <button
+            onClick={() => setExpandedIndex(expandedIndex === i ? null : i)}
+            className="w-full flex items-start gap-2 px-2 py-1.5 hover:bg-muted/50 text-left"
+          >
+            <span className={`shrink-0 text-xs font-mono font-semibold px-1.5 py-0.5 rounded ${methodColor[r.method] ?? 'bg-muted'}`}>
+              {r.method}
+            </span>
+            <span className="font-mono text-xs text-muted-foreground shrink-0">{r.path}</span>
+            <span className="text-xs text-muted-foreground">— {r.description}</span>
+          </button>
+          {expandedIndex === i && (
+            <div className="px-3 pb-2 space-y-2 border-t">
+              {r.params?.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium mt-1.5 mb-1">Parameters</p>
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="text-muted-foreground">
+                        <th className="text-left pb-0.5 pr-2">Name</th>
+                        <th className="text-left pb-0.5 pr-2">In</th>
+                        <th className="text-left pb-0.5 pr-2">Type</th>
+                        <th className="text-left pb-0.5">Required</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.params.map((p, pi) => (
+                        <tr key={pi}>
+                          <td className="pr-2 font-mono py-0.5">{p.name}</td>
+                          <td className="pr-2 text-muted-foreground py-0.5">{p.in}</td>
+                          <td className="pr-2 text-muted-foreground py-0.5">{p.type}</td>
+                          <td className="py-0.5">{p.required ? 'yes' : 'no'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {r.jsonResponse && (
+                <div>
+                  <p className="text-xs font-medium mb-0.5">Response</p>
+                  <pre className="text-xs bg-muted/50 rounded px-2 py-1 overflow-x-auto">{r.jsonResponse}</pre>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -97,7 +192,7 @@ export function DevPlanPanel({ devPlan }: Props) {
             <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Database</p>
             <div className="space-y-1">
               <p className="text-xs font-medium">Entities</p>
-              <StringList items={backend.database.entities} />
+              <DatabaseEntitiesSection entities={backend.database.entities} />
               <p className="text-xs font-medium mt-2">Relationships</p>
               <StringList items={backend.database.relationships} />
             </div>

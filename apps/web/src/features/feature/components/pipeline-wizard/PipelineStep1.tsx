@@ -2,8 +2,10 @@ import { FileText, Loader2, Pencil, Play, RefreshCw, Save, X } from 'lucide-reac
 import { Dispatch, SetStateAction } from 'react';
 import { Feature } from '@/lib/api';
 import { MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
+import { step1ToMarkdown } from '../../helpers/pipeline-wizard.helpers';
 import { EditableList } from './EditableList';
 import { ManualPanel } from './ManualPanel';
+import { CopyMarkdownButton } from './CopyMarkdownButton';
 
 interface PipelineStep1Props {
   feature: Feature;
@@ -129,6 +131,10 @@ export function PipelineStep1({
             >
               <RefreshCw size={13} /> Re-run
             </button>
+            <CopyMarkdownButton
+              getText={() => step1ToMarkdown(feature)}
+              filename={`step1-requirements-${feature.name}.md`}
+            />
           </>
         )}
         {isEditing && (

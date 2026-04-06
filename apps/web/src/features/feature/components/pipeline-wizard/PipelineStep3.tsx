@@ -1,10 +1,15 @@
 import { FileText, Loader2, Play, RefreshCw } from 'lucide-react';
+import { TestCase } from '@/lib/api';
 import { MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
+import { step3ToMarkdown } from '../../helpers/pipeline-wizard.helpers';
 import { ManualPanel } from './ManualPanel';
 import { TestCaseDashboard } from '@/features/test-case/TestCaseDashboard';
+import { CopyMarkdownButton } from './CopyMarkdownButton';
 
 interface PipelineStep3Props {
   featureId: string;
+  featureName: string;
+  testCases: TestCase[];
   status: 'idle' | 'running' | 'completed' | 'failed';
   previousStepCompleted: boolean;
   isRunning: boolean;
@@ -24,6 +29,8 @@ interface PipelineStep3Props {
 
 export function PipelineStep3({
   featureId,
+  featureName,
+  testCases,
   status,
   previousStepCompleted,
   isRunning,
@@ -85,6 +92,10 @@ export function PipelineStep3({
               className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50 ml-2">
               <RefreshCw size={13} /> Re-run
             </button>
+            <CopyMarkdownButton
+              getText={() => step3ToMarkdown(testCases, featureName)}
+              filename={`step3-test-cases-${featureName}.md`}
+            />
           </>
         )}
       </div>

@@ -1,8 +1,10 @@
 import { FileText, Loader2, Play, RefreshCw } from 'lucide-react';
 import { Feature, DevPlan } from '@/lib/api';
 import { MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
+import { step4ToMarkdown } from '../../helpers/pipeline-wizard.helpers';
 import { ManualPanel } from './ManualPanel';
 import { DevPlanPanel } from './DevPlanPanel';
+import { CopyMarkdownButton } from './CopyMarkdownButton';
 
 interface PipelineStep4Props {
   feature: Feature;
@@ -92,10 +94,16 @@ export function PipelineStep4({
           </span>
         )}
         {status === 'completed' && (
-          <button disabled={!canRun} onClick={() => runStep(4)}
-            className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50">
-            <RefreshCw size={13} /> Re-run
-          </button>
+          <>
+            <button disabled={!canRun} onClick={() => runStep(4)}
+              className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50">
+              <RefreshCw size={13} /> Re-run
+            </button>
+            <CopyMarkdownButton
+              getText={() => step4ToMarkdown(feature)}
+              filename={`step4-dev-plan-${feature.name}.md`}
+            />
+          </>
         )}
       </div>
 

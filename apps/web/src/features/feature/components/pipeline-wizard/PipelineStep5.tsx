@@ -1,8 +1,10 @@
 import { FileText, Loader2, Play, RefreshCw } from 'lucide-react';
 import { Feature } from '@/lib/api';
 import { MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
+import { step5ToMarkdown } from '../../helpers/pipeline-wizard.helpers';
 import { ManualPanel } from './ManualPanel';
 import { DevPromptPanel } from './DevPromptPanel';
+import { CopyMarkdownButton } from './CopyMarkdownButton';
 
 interface PipelineStep5Props {
   feature: Feature;
@@ -78,10 +80,16 @@ export function PipelineStep5({
           </span>
         )}
         {status === 'completed' && (
-          <button disabled={!canRun} onClick={() => runStep(5)}
-            className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50">
-            <RefreshCw size={13} /> Re-run
-          </button>
+          <>
+            <button disabled={!canRun} onClick={() => runStep(5)}
+              className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50">
+              <RefreshCw size={13} /> Re-run
+            </button>
+            <CopyMarkdownButton
+              getText={() => step5ToMarkdown(feature)}
+              filename={`step5-dev-prompts-${feature.name}.md`}
+            />
+          </>
         )}
       </div>
 

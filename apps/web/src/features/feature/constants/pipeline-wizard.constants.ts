@@ -59,12 +59,38 @@ export const MANUAL_TEMPLATES: Record<number, string> = {
       ],
       backend: {
         database: {
-          entities: ['Feature', 'User'],
+          entities: [
+            {
+              name: 'Feature',
+              tableName: 'features',
+              fields: [
+                { name: 'id', type: 'uuid', isPrimaryKey: true, isNullable: false, description: 'Primary key' },
+                { name: 'name', type: 'varchar(255)', isPrimaryKey: false, isNullable: false, description: 'Feature name' },
+                { name: 'description', type: 'text', isPrimaryKey: false, isNullable: true },
+                { name: 'createdAt', type: 'timestamp', isPrimaryKey: false, isNullable: false },
+              ],
+            },
+          ],
           relationships: ['User has many Features'],
         },
         apiRoutes: [
-          { method: 'GET', path: '/api/features', description: 'List all features' },
-          { method: 'POST', path: '/api/features', description: 'Create a new feature' },
+          {
+            method: 'GET',
+            path: '/api/features',
+            description: 'List all features',
+            params: [{ name: 'projectId', in: 'query', type: 'string', required: true }],
+            jsonResponse: '[{"id":"uuid","name":"string","createdAt":"string"}]',
+          },
+          {
+            method: 'POST',
+            path: '/api/features',
+            description: 'Create a new feature',
+            params: [
+              { name: 'name', in: 'body', type: 'string', required: true },
+              { name: 'description', in: 'body', type: 'string', required: false },
+            ],
+            jsonResponse: '{"id":"uuid","name":"string","createdAt":"string"}',
+          },
         ],
         folderStructure: [
           'src/modules/feature/feature.controller.ts',

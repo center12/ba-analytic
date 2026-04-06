@@ -331,14 +331,37 @@ export interface WorkflowStep {
   actor: string;
 }
 
+export interface DatabaseField {
+  name: string;
+  type: string;
+  isPrimaryKey: boolean;
+  isNullable: boolean;
+  description?: string;
+}
+
+export interface DatabaseEntity {
+  name: string;
+  tableName: string;
+  fields: DatabaseField[];
+}
+
+export interface ApiParam {
+  name: string;
+  in: 'path' | 'query' | 'body';
+  type: string;
+  required: boolean;
+}
+
 export interface ApiRoute {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   description: string;
+  params: ApiParam[];
+  jsonResponse: string;
 }
 
 export interface BackendPlan {
-  database: { entities: string[]; relationships: string[] };
+  database: { entities: DatabaseEntity[]; relationships: string[] };
   apiRoutes: ApiRoute[];
   folderStructure: string[];
 }

@@ -64,15 +64,38 @@ export interface WorkflowStep {
   actor: string;
 }
 
+export interface DatabaseField {
+  name: string;
+  type: string;          // e.g. "uuid", "varchar(255)", "int", "boolean", "timestamp"
+  isPrimaryKey: boolean;
+  isNullable: boolean;
+  description?: string;
+}
+
+export interface DatabaseEntity {
+  name: string;
+  tableName: string;
+  fields: DatabaseField[];
+}
+
+export interface ApiParam {
+  name: string;
+  in: 'path' | 'query' | 'body';
+  type: string;
+  required: boolean;
+}
+
 export interface ApiRoute {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   description: string;
+  params: ApiParam[];
+  jsonResponse: string;  // JSON example as string, e.g. '{"id":"uuid","name":"string"}'
 }
 
 export interface BackendPlan {
   database: {
-    entities: string[];
+    entities: DatabaseEntity[];
     relationships: string[];
   };
   apiRoutes: ApiRoute[];
@@ -287,6 +310,7 @@ export function buildDevPromptInput(
   requirements: ExtractedRequirements,
   behaviors: ExtractedBehaviors,
   scenarios: TestScenario[],
+  devPlan?: DevPlan,
 ): string {
   const scenarioCount = scenarios.length;
   const subTaskCount  = Math.min(Math.ceil(scenarioCount / 4), 5); // 1 for ≤4, up to 5 for large features
@@ -294,6 +318,28 @@ export function buildDevPromptInput(
   const scenarioList = scenarios
     .map((s, i) => `${i + 1}. [${s.type.toUpperCase()}] ${s.title}`)
     .join('\n');
+
+  const architectureSection = devPlan ? `
+## Development Architecture (from Step 4 — use these exact names in your prompts)
+
+### Database Entities
+${devPlan.backend.database.entities.map(e =>
+  `**${e.name}** (table: \`${e.tableName}\`)\n` +
+  e.fields.map(f =>
+    `  - \`${f.name}\`: ${f.type}${f.isPrimaryKey ? ' PK' : ''}${f.isNullable ? ' nullable' : ' NOT NULL'}${f.description ? ` — ${f.description}` : ''}`
+  ).join('\n')
+).join('\n\n')}
+
+### API Routes
+${devPlan.backend.apiRoutes.map(r =>
+  `${r.method} ${r.path} — ${r.description}` +
+  (r.params?.length ? `\n  Params: ${r.params.map(p => `${p.name} (${p.in}, ${p.type}${p.required ? ', required' : ''})`).join('; ')}` : '') +
+  (r.jsonResponse ? `\n  Response: ${r.jsonResponse}` : '')
+).join('\n')}
+
+### Frontend Components
+${devPlan.frontend.components.join('\n')}
+` : '';
 
   return `You are a senior software architect. Based on the feature analysis below, generate developer implementation prompts split into sub-tasks — one set for API/backend (4A), one for frontend/UI (4B), and one for test automation (4C).
 
@@ -319,7 +365,7 @@ ${requirements.acceptanceCriteria.map((c) => `- ${c}`).join('\n')}
 
 ## Test Scenarios to Cover (${scenarioCount} total)
 ${scenarioList}
-
+${architectureSection}
 ---
 
 ## Sub-Task Breakdown Rules
@@ -335,7 +381,7 @@ ${scenarioList}
 
 **ALWAYS include** (complete, working code):
 - Function/method signatures with correct types
-- API routes with HTTP methods, paths, and response shapes
+- API routes with HTTP methods, paths, and response shapes${devPlan ? '\n- Reference exact entity names, field names, and API paths from the Development Architecture section above' : ''}
 - Input validation derived from the business rules relevant to this sub-task
 - Error handling derived from the error/boundary scenarios relevant to this sub-task
 
@@ -402,9 +448,23 @@ Limit to 8 steps maximum.
 
 ### 2. Backend Plan
 
-**Database**: List all entities (model names) and relationships as plain strings (e.g. "User has many Orders").
+**Database Entities**: For each entity define:
+- name: PascalCase model name (e.g. "Feature")
+- tableName: snake_case DB table name (e.g. "features")
+- fields: array of all fields needed to implement the feature. Each field:
+  - name: camelCase field name
+  - type: SQL-style type (e.g. "uuid", "varchar(255)", "int", "boolean", "timestamp", "text")
+  - isPrimaryKey: true only for the primary key field
+  - isNullable: true if the field can be null
+  - description: optional one-sentence note (omit if obvious)
+Also include relationships as plain strings (e.g. "User has many Orders").
 
-**API Routes**: For each endpoint define: method (GET/POST/PUT/PATCH/DELETE), path (e.g. /api/features/:id), description (one sentence).
+**API Routes**: For each endpoint define:
+- method: GET/POST/PUT/PATCH/DELETE
+- path: e.g. /api/features/:id
+- description: one sentence
+- params: array of parameters. Each param: name, in ("path"|"query"|"body"), type (e.g. "string", "uuid", "number"), required (boolean). Include path params, key query params, and body fields for POST/PUT/PATCH.
+- jsonResponse: a short JSON example string showing the response shape (e.g. '{"id":"uuid","name":"string"}' or '[{"id":"uuid"}]'). For DELETE use '{"message":"string"}'.
 Include all CRUD routes plus any special operations needed.
 
 **Folder Structure**: List file paths for the NestJS module (controller, service, module, DTOs, constants, helpers).
@@ -419,11 +479,25 @@ Return ONLY valid JSON (no markdown, no explanation):
   ],
   "backend": {
     "database": {
-      "entities": ["string"],
+      "entities": [
+        {
+          "name": "string",
+          "tableName": "string",
+          "fields": [
+            { "name": "string", "type": "string", "isPrimaryKey": false, "isNullable": false, "description": "string" }
+          ]
+        }
+      ],
       "relationships": ["string"]
     },
     "apiRoutes": [
-      { "method": "GET|POST|PUT|PATCH|DELETE", "path": "string", "description": "string" }
+      {
+        "method": "GET|POST|PUT|PATCH|DELETE",
+        "path": "string",
+        "description": "string",
+        "params": [{ "name": "string", "in": "path|query|body", "type": "string", "required": true }],
+        "jsonResponse": "string"
+      }
     ],
     "folderStructure": ["string"]
   }
@@ -623,11 +697,13 @@ export abstract class AIProvider {
   /**
    * Layer 4 (Step 5) — Synthesize all pipeline outputs into a ready-to-copy prompt
    * for AI coding tools (Cursor, Copilot, Claude, etc.).
+   * Optionally receives the Step 4 DevPlan to include architectural context in prompts.
    */
   abstract generateDevPrompt(
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
     scenarios: TestScenario[],
+    devPlan?: DevPlan,
   ): Promise<DevPrompt>;
 
   /**

@@ -293,8 +293,27 @@ export class PipelineService {
       const provider = await this._resolveProvider(featureId, 5, providerName, model);
       const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
 
+      let devPlan: DevPlan | undefined;
+      const rawWorkflow  = (feature as any).devPlanWorkflow;
+      const rawBackend   = (feature as any).devPlanBackend;
+      const rawFrontend  = (feature as any).devPlanFrontend;
+      const rawTesting   = (feature as any).devPlanTesting;
+      if (rawWorkflow && rawBackend && rawFrontend && rawTesting) {
+        try {
+          devPlan = {
+            workflow: JSON.parse(rawWorkflow),
+            backend:  JSON.parse(rawBackend),
+            frontend: JSON.parse(rawFrontend),
+            testing:  JSON.parse(rawTesting),
+          };
+          this.logger.log('[Pipeline] Step 5 — devPlan loaded from DB, passing as context');
+        } catch {
+          this.logger.warn('[Pipeline] Step 5 — devPlan JSON parse failed, proceeding without it');
+        }
+      }
+
       this.logger.log('[Pipeline] Step 5 — generating dev prompts');
-      const devPrompt = await withRetry(() => provider.generateDevPrompt(compReq, compBeh, testScenarios));
+      const devPrompt = await withRetry(() => provider.generateDevPrompt(compReq, compBeh, testScenarios, devPlan));
 
       await this.prisma.feature.update({
         where: { id: featureId },
@@ -465,7 +484,16 @@ export class PipelineService {
       if (!req || !beh)       throw new BadRequestException(`Run Step 1 first — no extraction results found`);
       if (!scenarios?.length) throw new BadRequestException(`Run Step 2 first — no scenarios found`);
       const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
-      return { prompt: buildDevPromptInput(compReq, compBeh, scenarios) };
+      let devPlan: DevPlan | undefined;
+      const rawW = (feature as any).devPlanWorkflow;
+      const rawB = (feature as any).devPlanBackend;
+      const rawF = (feature as any).devPlanFrontend;
+      const rawT = (feature as any).devPlanTesting;
+      if (rawW && rawB && rawF && rawT) {
+        try { devPlan = { workflow: JSON.parse(rawW), backend: JSON.parse(rawB), frontend: JSON.parse(rawF), testing: JSON.parse(rawT) }; }
+        catch { /* ignore */ }
+      }
+      return { prompt: buildDevPromptInput(compReq, compBeh, scenarios, devPlan) };
     }
 
     throw new BadRequestException(`Invalid step: ${step}. Must be 1–5`);

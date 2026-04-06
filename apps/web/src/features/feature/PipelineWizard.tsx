@@ -296,6 +296,8 @@ export function PipelineWizard({ featureId }: Props) {
       render: () => (
         <PipelineStep3
           featureId={featureId}
+          featureName={feature.name}
+          testCases={testCases}
           status={statuses[2]}
           previousStepCompleted={statuses[1] === 'completed'}
           isRunning={isRunning}

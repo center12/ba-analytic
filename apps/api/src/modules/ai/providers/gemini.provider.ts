@@ -17,6 +17,7 @@ import {
   buildSynthesisPrompt,
   ChatHistoryItem,
   CombinedExtraction,
+  DevPlan,
   DevPrompt,
   ExtractedBehaviors,
   ExtractedRequirements,
@@ -77,10 +78,30 @@ const DevPromptSchema = z.object({
   testing:  z.array(DevTaskItemSchema),
 });
 
+const ApiParamSchema = z.object({
+  name: z.string(),
+  in: z.enum(['path', 'query', 'body']),
+  type: z.string(),
+  required: z.boolean(),
+});
 const ApiRouteSchema = z.object({
   method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
   path: z.string(),
   description: z.string(),
+  params: z.array(ApiParamSchema).default([]),
+  jsonResponse: z.string().default(''),
+});
+const DatabaseFieldSchema = z.object({
+  name: z.string(),
+  type: z.string(),
+  isPrimaryKey: z.boolean(),
+  isNullable: z.boolean(),
+  description: z.string().optional(),
+});
+const DatabaseEntitySchema = z.object({
+  name: z.string(),
+  tableName: z.string(),
+  fields: z.array(DatabaseFieldSchema),
 });
 const WorkflowBackendSchema = z.object({
   workflow: z.array(z.object({
@@ -91,7 +112,7 @@ const WorkflowBackendSchema = z.object({
   })),
   backend: z.object({
     database: z.object({
-      entities: z.array(z.string()),
+      entities: z.array(DatabaseEntitySchema),
       relationships: z.array(z.string()),
     }),
     apiRoutes: z.array(ApiRouteSchema),
@@ -344,9 +365,10 @@ ${baDocumentContent}`;
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
     scenarios: TestScenario[],
+    devPlan?: DevPlan,
   ): Promise<DevPrompt> {
     this.logger.log('[Step 5] Generating dev prompts (API / Frontend / Testing)...');
-    const prompt4 = buildDevPromptInput(requirements, behaviors, scenarios);
+    const prompt4 = buildDevPromptInput(requirements, behaviors, scenarios, devPlan);
     this.logPromptSize('[Step 5]', prompt4);
     const { object, usage, response } = await generateObject({
       model: google(this.modelVersion),
