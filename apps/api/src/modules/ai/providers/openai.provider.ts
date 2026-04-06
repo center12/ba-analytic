@@ -127,10 +127,54 @@ const FrontendPlanSchema = z.object({
   utils: z.array(z.string()),
   services: z.array(z.string()),
 });
-const TestingPlanSchema = z.object({
-  backendUnitTests: z.array(z.string()),
-  frontendTests: z.array(z.string()),
-});
+const TestingPlanSchema = z.preprocess((input) => {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return input;
+  }
+
+  const value = input as Record<string, unknown>;
+  const toStringArray = (candidate: unknown): string[] => {
+    if (!Array.isArray(candidate)) return [];
+    return candidate
+      .map((item) => {
+        if (typeof item === 'string') return item.trim();
+        if (item && typeof item === 'object') {
+          const obj = item as Record<string, unknown>;
+          const title = typeof obj.title === 'string' ? obj.title.trim() : '';
+          const description =
+            typeof obj.description === 'string' ? obj.description.trim() : '';
+          if (title && description) return `${title} — ${description}`;
+          if (title) return title;
+          if (description) return description;
+        }
+        return '';
+      })
+      .filter(Boolean);
+  };
+
+  const backendCandidates = [
+    value.backendUnitTests,
+    value.backendTests,
+    value.unitTests,
+    value.backend,
+  ];
+  const frontendCandidates = [
+    value.frontendTests,
+    value.uiTests,
+    value.frontendUnitTests,
+    value.frontend,
+  ];
+
+  const backendUnitTests =
+    backendCandidates.map(toStringArray).find((arr) => arr.length > 0) ?? [];
+  const frontendTests =
+    frontendCandidates.map(toStringArray).find((arr) => arr.length > 0) ?? [];
+
+  return { ...value, backendUnitTests, frontendTests };
+}, z.object({
+  backendUnitTests: z.array(z.string()).default([]),
+  frontendTests: z.array(z.string()).default([]),
+}));
 
 @Injectable()
 export class OpenAIProvider extends AIProvider {
