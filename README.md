@@ -10,6 +10,7 @@ Upload a BA specification document as a **Markdown (`.md`) file**, optionally at
 - **Extracted Behaviors** — actors, user actions, behavioral rules
 - **Test Scenarios** — categorized scenarios (happy path, edge cases, errors, boundary, security)
 - **Test Cases** — fully written test cases with steps and expected results, persisted to the database
+- **Development Plan** — workflow steps, backend architecture (entities, API routes, folder structure), frontend architecture, and a testing plan; each section can be generated independently
 - **Developer Tasks** — focused implementation prompts split into sub-tasks per category (API, Frontend, Testing); number of sub-tasks scales with feature complexity
 
 An AI chat sidebar lets you ask questions about the feature in the context of all uploaded documents.
@@ -219,19 +220,27 @@ The pipeline runs when you click **Generate** on a feature with an uploaded BA d
 ```
 BA Document
     │
-    ├─── Layer 1A: Domain Extraction ─────────────────────┐
-    │                                                      ├─▶ Layer 2: Scenario Planning
-    └─── Layer 1B: Behavior Extraction ───────────────────┘        │
+    ├─── Step 1A: Domain Extraction ──────────────────────┐
+    │                                                      ├─▶ Step 2: Scenario Planning
+    └─── Step 1B: Behavior Extraction ────────────────────┘        │
                                                                     ▼
-                                                           Layer 3: Test Case Generation
+                                                           Step 3: Test Case Generation
                                                                     │
                                                                     ▼
-                                                           Layer 4: Dev Prompt Generation
+                                                           Step 4: Development Plan
+                                                           ┌──────────────┬──────────┬─────────┐
+                                                           4A Workflow+   4B         4C
+                                                              Backend     Frontend   Testing
+                                                                    │
+                                                                    ▼
+                                                           Step 5: Dev Prompt Generation
                                                            ┌────────┬──────────┬─────────┐
-                                                           4A API  4B Frontend 4C Testing
+                                                           API     Frontend   Testing
 ```
 
-Layers 1A and 1B run in parallel. Each layer's output is saved to the database immediately so the UI can show partial results.
+Steps 1A and 1B run in parallel. Each step's output is saved to the database immediately so the UI can show partial results.
+
+**Step 4 sections are individually regenerable** — each section (Workflow+Backend, Frontend, Testing) has its own generate button in the UI and can be re-run independently. Frontend requires Workflow+Backend first; Testing requires both.
 
 **Supported providers**: Gemini (`gemini-2.0-flash`), Claude (`claude-sonnet-4-6`), OpenAI (`gpt-4o`). The active provider is selectable in the UI at runtime.
 
@@ -271,7 +280,9 @@ The SSE chat stream (`/api/chat/sessions/:id/stream`) passes the token as a quer
 | POST | `/api/projects/features/:id/upload/ba-document` | required | Upload BA document |
 | POST | `/api/projects/features/:id/upload/screenshot` | required | Upload screenshot |
 | GET | `/api/test-cases/feature/:id` | required | List test cases for a feature |
-| POST | `/api/test-cases/feature/:id/generate` | required | Run the AI pipeline |
+| POST | `/api/test-cases/feature/:id/generate` | required | Run the full AI pipeline |
+| POST | `/api/test-cases/feature/:id/run-step/:step` | required | Run a single pipeline step (1–5) |
+| POST | `/api/test-cases/feature/:id/run-step-4-section/:section` | required | Generate one Step 4 section (`workflow-backend` / `frontend` / `testing`) |
 | GET | `/api/dev-tasks/feature/:id` | required | List developer tasks for a feature |
 | DELETE | `/api/dev-tasks/:id` | required | Delete a developer task |
 | POST | `/api/chat/sessions` | required | Create a chat session |
@@ -281,7 +292,7 @@ The SSE chat stream (`/api/chat/sessions/:id/stream`) passes the token as a quer
 ## Adding a New AI Provider
 
 1. Create `apps/api/src/modules/ai/providers/myprovider.provider.ts` extending `AIProvider`
-2. Implement all abstract methods: `extractRequirements`, `extractBehaviors`, `planTestScenarios`, `generateTestCasesFromScenarios`, `generateDevPrompt`, `chat`
+2. Implement all abstract methods: `extractRequirements`, `extractBehaviors`, `planTestScenarios`, `generateTestCasesFromScenarios`, `generateDevPlanWorkflowBackend`, `generateDevPlanFrontend`, `generateDevPlanTesting`, `generateDevPrompt`, `chat`
 3. Register the provider in `AIProviderFactory` and add the API key mapping
 
 ## Extending Storage

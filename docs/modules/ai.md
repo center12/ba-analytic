@@ -27,9 +27,18 @@
 | `synthesiseExtraction(merged)` | Layer 1 synthesis — deduplicates multi-chunk merges |
 | `planTestScenarios(req, beh)` | Layer 2 — produce up to 15 test scenarios |
 | `generateTestCasesFromScenarios(scenarios, req)` | Layer 3 — detailed test cases per scenario |
-| `generateDevPrompt(req, beh, scenarios)` | Layer 4 — API/Frontend/Testing prompts |
+| `generateDevPlanWorkflowBackend(req, beh, scenarios)` | Step 4A — workflow steps + backend (DB entities, API routes, folder structure) |
+| `generateDevPlanFrontend(req, beh, workflowSummary)` | Step 4B — frontend components, pages, store, hooks, utils, services |
+| `generateDevPlanTesting(req, scenarios, apiRoutes, components)` | Step 4C — backend unit tests and frontend test cases |
+| `generateDevPrompt(req, beh, scenarios, devPlan?)` | Step 5 — API/Frontend/Testing sub-task prompts |
 | `chat(history, userMessage)` | SSE streaming chat (AsyncIterable) |
 | `withModel(model)` | Clone provider with overridden modelVersion |
+| `cacheContext(content)` | Cache large context with provider (returns cache key or null) |
+
+## Factory Methods (AIProviderFactory)
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `getProvider` | `(name?: ProviderName, model?: string): AIProvider` | Resolve provider by name (falls back to `AI_PROVIDER` env); applies model override via `withModel` |
 
 ## NestJS Dependencies
 - Imports: `ConfigModule`

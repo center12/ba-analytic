@@ -78,19 +78,25 @@ Avoid generic root-level names like `constants.ts` or `utils.ts` for new code; p
 
 **SSE chat flow**: `GET /api/chat/sessions/:id/stream?message=<text>&provider=<name>&token=<jwt>` — token passed as query param because `EventSource` doesn't support custom headers. Persists user message → streams AI response token-by-token → persists completed assistant message on stream close.
 
-### 4-Layer AI Pipeline (`modules/test-case/pipeline.service.ts`)
+### 5-Step AI Pipeline (`modules/test-case/pipeline.service.ts`)
 
 Triggered by `POST /api/test-cases/feature/:id/generate`. Runs in sequence:
 
-| Layer | Step | Output |
+| Step | Name | Output |
 |---|---|---|
 | 1A | Domain Extraction | `ExtractedRequirements` (features, rules, criteria, entities) |
 | 1B | Behavior Extraction | `ExtractedBehaviors` (actors, actions, rules) — runs in parallel with 1A |
 | 2 | Scenario Planning | `TestScenario[]` (happy path, edge cases, errors, boundary, security) |
 | 3 | Test Case Generation | `TestCase[]` persisted to DB |
-| 4 | Dev Prompt Generation | `DevPrompt { api: DevTaskItem[], frontend: DevTaskItem[], testing: DevTaskItem[] }` → saved to Feature + N `DeveloperTask` records (1 per sub-task; count scales with scenario complexity) |
+| 4 | Development Plan | `DevPlan { workflow, backend, frontend, testing }` — 3 independent sub-sections, each callable separately via `runStep4a/b/c` |
+| 5 | Dev Prompt Generation | `DevPrompt { api: DevTaskItem[], frontend: DevTaskItem[], testing: DevTaskItem[] }` → saved to Feature + N `DeveloperTask` records (1 per sub-task; count scales with scenario complexity) |
 
-Each re-run deletes existing `DeveloperTask` records for the feature before creating fresh ones.
+**Step 4 sub-sections** — callable individually via `POST /api/test-cases/feature/:id/run-step-4-section/:section`:
+- `workflow-backend` (`runStep4a`) — generates `WorkflowStep[]` + `BackendPlan`; no prerequisites beyond Step 2
+- `frontend` (`runStep4b`) — generates `FrontendPlan`; requires `workflow-backend` to be done first
+- `testing` (`runStep4c`) — generates `TestingPlan`; requires both `workflow-backend` and `frontend` first
+
+Each re-run of Step 5 deletes existing `DeveloperTask` records for the feature before creating fresh ones.
 
 ### Frontend (`apps/web/src/`)
 

@@ -11,7 +11,8 @@
 | DELETE | `/api/test-cases/:id` | `delete` | Delete a test case |
 | POST | `/api/test-cases/feature/:featureId/generate` | `generate` | Run full pipeline (steps 1–4) |
 | POST | `/api/test-cases/feature/:featureId/resume` | `resume` | Resume failed full pipeline from failed chunk |
-| POST | `/api/test-cases/feature/:featureId/run-step/:step` | `runStep` | Run a single step (1–4) independently |
+| POST | `/api/test-cases/feature/:featureId/run-step/:step` | `runStep` | Run a single step (1–5) independently |
+| POST | `/api/test-cases/feature/:featureId/run-step-4-section/:section` | `runStep4Section` | Run one Step 4 section: `workflow-backend` \| `frontend` \| `testing` |
 | POST | `/api/test-cases/feature/:featureId/resume-step1` | `resumeStep1` | Resume step 1 from failed chunk |
 | PATCH | `/api/test-cases/feature/:featureId/step-results` | `saveStepResults` | Persist manually edited step output |
 
@@ -22,8 +23,11 @@
 | `findOne` | `(id) => Promise<TestCase>` | 404 if missing |
 | `update` | `(id, dto) => Promise<TestCase>` | — |
 | `delete` | `(id) => Promise<TestCase>` | — |
-| `generateForFeature` | `(featureId, provider?, model?) => Promise` | Full pipeline run |
-| `runStepForFeature` | `(featureId, step, provider?, model?, override?) => Promise` | Single step |
+| `generateForFeature` | `(featureId, provider?, model?) => Promise` | Full pipeline run (steps 1–5) |
+| `resumeForFeature` | `(featureId, provider?, model?) => Promise` | Resume failed full pipeline |
+| `runStepForFeature` | `(featureId, step, provider?, model?, override?) => Promise` | Single step (1–5) |
+| `runStep4SectionForFeature` | `(featureId, section, provider?, model?) => Promise` | Single Step 4 sub-section |
+| `resumeStep1ForFeature` | `(featureId, provider?, model?) => Promise` | Resume step 1 from failed chunk |
 | `saveStepResults` | `(featureId, data) => Promise` | Save edited step data |
 | `getStepPrompt` | `(featureId, step) => Promise<{ prompt: string }>` | — |
 
@@ -54,7 +58,7 @@
 ## Extra Files
 | File | Responsibility |
 |------|----------------|
-| `pipeline.service.ts` | `PipelineService` — runs `runStep1`–`runStep4`, chunking, synthesis, and persistence |
+| `pipeline.service.ts` | `PipelineService` — `run`, `resume`, `runStep1`–`runStep5`, `runStep4a/4b/4c`, `resumeStep1`, `saveStepResults`, `getStepPrompt`; handles chunking, synthesis, and DB persistence |
 
 ## NestJS Dependencies
 - Imports: `AIModule`, `StorageModule`, `PrismaService`

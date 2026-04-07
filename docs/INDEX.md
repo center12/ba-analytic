@@ -1,5 +1,5 @@
 # Documentation Index
-_Last updated: 2026-04-06_
+_Last updated: 2026-04-07_
 
 ## Frontend Features (`apps/web/src/features/`)
 | Feature | Doc | Purpose |
@@ -7,7 +7,7 @@ _Last updated: 2026-04-06_
 | auth | [docs/features/auth.md](features/auth.md) | Login/logout and JWT token management |
 | user | [docs/features/user.md](features/user.md) | Admin interface for creating and listing users |
 | project | [docs/features/project.md](features/project.md) | CRUD for projects/features and per-project AI pipeline config |
-| feature | [docs/features/feature.md](features/feature.md) | Feature detail view with BA doc upload and 4-step AI pipeline wizard |
+| feature | [docs/features/feature.md](features/feature.md) | Feature detail view with BA doc/screenshot upload and 5-step AI pipeline wizard |
 | test-case | [docs/features/test-case.md](features/test-case.md) | Display and manage AI-generated test cases |
 | chat | [docs/features/chat.md](features/chat.md) | SSE streaming AI chat sidebar scoped to a feature |
 | dev-task | [docs/features/dev-task.md](features/dev-task.md) | Developer task prompts grouped by API/Frontend/Testing |
