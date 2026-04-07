@@ -154,6 +154,21 @@ export const api = {
         { method: 'POST', body: override ? JSON.stringify({ override }) : undefined },
       );
     },
+    runStep4Section: (
+      featureId: string,
+      section: 'workflow-backend' | 'frontend' | 'testing',
+      provider?: string,
+      model?: string,
+    ) => {
+      const params = new URLSearchParams();
+      if (provider) params.set('provider', provider);
+      if (model) params.set('model', model);
+      const qs = params.toString();
+      return request<unknown>(
+        `/test-cases/feature/${featureId}/run-step-4-section/${section}${qs ? `?${qs}` : ''}`,
+        { method: 'POST' },
+      );
+    },
     resumeStep1: (featureId: string, provider?: string, model?: string) => {
       const params = new URLSearchParams();
       if (provider) params.set('provider', provider);

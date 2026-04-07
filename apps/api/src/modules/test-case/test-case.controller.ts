@@ -94,6 +94,20 @@ export class TestCaseController {
   }
 
   /**
+   * POST /api/test-cases/feature/:featureId/run-step-4-section/:section?provider=gemini
+   * Generates a single section of Step 4 (workflow-backend | frontend | testing).
+   */
+  @Post('feature/:featureId/run-step-4-section/:section')
+  runStep4Section(
+    @Param('featureId') featureId: string,
+    @Param('section') section: 'workflow-backend' | 'frontend' | 'testing',
+    @Query('provider') provider?: string,
+    @Query('model') model?: string,
+  ) {
+    return this.service.runStep4SectionForFeature(featureId, section, provider, model);
+  }
+
+  /**
    * POST /api/test-cases/feature/:featureId/resume-step1?provider=gemini&model=gemini-2.0-flash
    * Resumes Step 1 from the failed chunk.
    */

@@ -18,7 +18,6 @@ import {
   ExtractedRequirements,
   FrontendPlan,
   GeneratedTestCase,
-  TestingPlan,
   TestScenario,
   WorkflowStep,
 } from '../ai/ai-provider.abstract';
@@ -272,6 +271,107 @@ export class PipelineService {
       });
       throw err;
     }
+  }
+
+  /** Step 4A (manual): Generate Workflow + Backend only */
+  async runStep4a(featureId: string, providerName?: string, model?: string) {
+    const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
+    if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
+    const req          = feature.extractedRequirements as ExtractedRequirements | null;
+    const beh          = feature.extractedBehaviors    as ExtractedBehaviors    | null;
+    const testScenarios = feature.testScenarios         as TestScenario[]       | null;
+    if (!req || !beh)           throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
+    if (!testScenarios?.length) throw new BadRequestException(`Feature ${featureId} has no scenarios — run Step 2 first`);
+
+    const provider = await this._resolveProvider(featureId, 4, providerName, model);
+    const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+
+    this.logger.log('[Pipeline] Step 4A (manual) — generating workflow + backend');
+    const { workflow, backend } = await withRetry(() =>
+      provider.generateDevPlanWorkflowBackend(compReq, compBeh, testScenarios)
+    );
+
+    await this.prisma.feature.update({
+      where: { id: featureId },
+      data: ({
+        devPlanWorkflow: JSON.stringify(workflow),
+        devPlanBackend:  JSON.stringify(backend),
+        pipelineStep:    4,
+        pipelineStatus:  'COMPLETED',
+        pipelineFailedAt: null,
+      } as any),
+    });
+    return { workflow, backend };
+  }
+
+  /** Step 4B (manual): Generate Frontend plan only — requires workflow to exist */
+  async runStep4b(featureId: string, providerName?: string, model?: string) {
+    const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
+    if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
+    const req        = feature.extractedRequirements as ExtractedRequirements | null;
+    const beh        = feature.extractedBehaviors    as ExtractedBehaviors    | null;
+    const rawWorkflow = (feature as any).devPlanWorkflow as string | null;
+    if (!req || !beh)  throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
+    if (!rawWorkflow)  throw new BadRequestException(`Feature ${featureId} has no workflow — generate Workflow+Backend first`);
+
+    const workflow: WorkflowStep[] = JSON.parse(rawWorkflow);
+    const workflowSummary = workflow.map(s => `${s.order}. ${s.title} (${s.actor}): ${s.description}`).join('\n');
+
+    const provider = await this._resolveProvider(featureId, 4, providerName, model);
+    const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+
+    this.logger.log('[Pipeline] Step 4B (manual) — generating frontend plan');
+    const frontend = await withRetry(() =>
+      provider.generateDevPlanFrontend(compReq, compBeh, workflowSummary)
+    );
+
+    await this.prisma.feature.update({
+      where: { id: featureId },
+      data: ({
+        devPlanFrontend: JSON.stringify(frontend),
+        pipelineStep:    4,
+        pipelineStatus:  'COMPLETED',
+        pipelineFailedAt: null,
+      } as any),
+    });
+    return { frontend };
+  }
+
+  /** Step 4C (manual): Generate Testing plan only — requires backend + frontend to exist */
+  async runStep4c(featureId: string, providerName?: string, model?: string) {
+    const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
+    if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
+    const req          = feature.extractedRequirements as ExtractedRequirements | null;
+    const beh          = feature.extractedBehaviors    as ExtractedBehaviors    | null;
+    const testScenarios = feature.testScenarios         as TestScenario[]       | null;
+    const rawBackend   = (feature as any).devPlanBackend   as string | null;
+    const rawFrontend  = (feature as any).devPlanFrontend  as string | null;
+    if (!req || !beh)           throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
+    if (!testScenarios?.length) throw new BadRequestException(`Feature ${featureId} has no scenarios — run Step 2 first`);
+    if (!rawBackend)            throw new BadRequestException(`Feature ${featureId} has no backend plan — generate Workflow+Backend first`);
+    if (!rawFrontend)           throw new BadRequestException(`Feature ${featureId} has no frontend plan — generate Frontend first`);
+
+    const backend:  BackendPlan  = JSON.parse(rawBackend);
+    const frontend: FrontendPlan = JSON.parse(rawFrontend);
+
+    const provider = await this._resolveProvider(featureId, 4, providerName, model);
+    const { req: compReq } = compressForDownstream(req, beh);
+
+    this.logger.log('[Pipeline] Step 4C (manual) — generating testing plan');
+    const testing = await withRetry(() =>
+      provider.generateDevPlanTesting(compReq, testScenarios, backend.apiRoutes, frontend.components)
+    );
+
+    await this.prisma.feature.update({
+      where: { id: featureId },
+      data: ({
+        devPlanTesting:  JSON.stringify(testing),
+        pipelineStep:    4,
+        pipelineStatus:  'COMPLETED',
+        pipelineFailedAt: null,
+      } as any),
+    });
+    return { testing };
   }
 
   /** Step 5: Run Layer 4 dev prompt generation using saved Layer 1+2 results */

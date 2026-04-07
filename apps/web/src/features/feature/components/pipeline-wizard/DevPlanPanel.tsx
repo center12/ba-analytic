@@ -2,8 +2,12 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { DevPlan, WorkflowStep, ApiRoute, DatabaseEntity } from '@/lib/api';
 
+type SectionKey = 'workflow' | 'backend' | 'frontend' | 'testing';
+
 interface Props {
   devPlan: DevPlan;
+  /** If provided, only render these sections */
+  sectionsFilter?: SectionKey[];
 }
 
 function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
@@ -175,75 +179,84 @@ function ApiRoutesTable({ routes }: { routes: ApiRoute[] }) {
   );
 }
 
-export function DevPlanPanel({ devPlan }: Props) {
+export function DevPlanPanel({ devPlan, sectionsFilter }: Props) {
   const { workflow, backend, frontend, testing } = devPlan;
+  const show = (key: SectionKey) => !sectionsFilter || sectionsFilter.includes(key);
 
   return (
     <div className="space-y-2">
       {/* Workflow */}
+      {show('workflow') && (
       <Section title={`Workflow (${workflow.length} steps)`} defaultOpen>
         <WorkflowSection steps={workflow} />
       </Section>
+      )}
 
       {/* Backend */}
-      <Section title="Backend Architecture">
-        <div className="space-y-3">
-          <div>
-            <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Database</p>
-            <div className="space-y-1">
-              <p className="text-xs font-medium">Entities</p>
-              <DatabaseEntitiesSection entities={backend.database.entities} />
-              <p className="text-xs font-medium mt-2">Relationships</p>
-              <StringList items={backend.database.relationships} />
+      {show('backend') && (
+        <Section title="Backend Architecture">
+          <div className="space-y-3">
+            <div>
+              <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Database</p>
+              <div className="space-y-1">
+                <p className="text-xs font-medium">Entities</p>
+                <DatabaseEntitiesSection entities={backend.database.entities} />
+                <p className="text-xs font-medium mt-2">Relationships</p>
+                <StringList items={backend.database.relationships} />
+              </div>
+            </div>
+            <div>
+              <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">API Routes</p>
+              <ApiRoutesTable routes={backend.apiRoutes} />
+            </div>
+            <div>
+              <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Folder Structure</p>
+              <ul className="space-y-0.5">
+                {backend.folderStructure.map((path, i) => (
+                  <li key={i} className="font-mono text-xs text-muted-foreground">{path}</li>
+                ))}
+              </ul>
             </div>
           </div>
-          <div>
-            <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">API Routes</p>
-            <ApiRoutesTable routes={backend.apiRoutes} />
-          </div>
-          <div>
-            <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Folder Structure</p>
-            <ul className="space-y-0.5">
-              {backend.folderStructure.map((path, i) => (
-                <li key={i} className="font-mono text-xs text-muted-foreground">{path}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </Section>
+        </Section>
+      )}
 
       {/* Frontend */}
-      <Section title="Frontend Architecture">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {[
-            { label: 'Components', items: frontend.components },
-            { label: 'Pages', items: frontend.pages },
-            { label: 'Store', items: frontend.store },
-            { label: 'Hooks', items: frontend.hooks },
-            { label: 'Utils', items: frontend.utils },
-            { label: 'Services', items: frontend.services },
-          ].map(({ label, items }) => (
-            <div key={label}>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">{label}</p>
-              <StringList items={items} />
-            </div>
-          ))}
-        </div>
-      </Section>
+      {show('frontend') && (
+        <Section title="Frontend Architecture">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {[
+              { label: 'Components', items: frontend.components },
+              { label: 'Pages', items: frontend.pages },
+              { label: 'Store', items: frontend.store },
+              { label: 'Hooks', items: frontend.hooks },
+              { label: 'Utils', items: frontend.utils },
+              { label: 'Services', items: frontend.services },
+            ].map(({ label, items }) => (
+              <div key={label}>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">{label}</p>
+                <StringList items={items} />
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
 
       {/* Testing */}
-      <Section title="Testing Plan">
-        <div className="space-y-3">
-          <div>
-            <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Backend Unit Tests</p>
-            <StringList items={testing.backendUnitTests} />
+      {show('testing') && (
+        <Section title="Testing Plan">
+          <div className="space-y-3">
+            <div>
+              <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Backend Unit Tests</p>
+              <StringList items={testing.backendUnitTests} />
+            </div>
+            <div>
+              <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Frontend Tests</p>
+              <StringList items={testing.frontendTests} />
+            </div>
           </div>
-          <div>
-            <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Frontend Tests</p>
-            <StringList items={testing.frontendTests} />
-          </div>
-        </div>
-      </Section>
+        </Section>
+      )}
     </div>
   );
 }

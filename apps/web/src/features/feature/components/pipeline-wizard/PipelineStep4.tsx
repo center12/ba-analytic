@@ -1,5 +1,8 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { FileText, Loader2, Play, RefreshCw } from 'lucide-react';
-import { Feature, DevPlan } from '@/lib/api';
+import { api, Feature, WorkflowStep, BackendPlan, FrontendPlan, TestingPlan } from '@/lib/api';
+import { useAppStore } from '@/store';
+import { toast } from '@/hooks/use-toast';
 import { MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
 import { step4ToMarkdown } from '../../helpers/pipeline-wizard.helpers';
 import { ManualPanel } from './ManualPanel';
@@ -24,6 +27,50 @@ interface PipelineStep4Props {
   runStep: (step: number) => void;
 }
 
+type Section = 'workflow-backend' | 'frontend' | 'testing';
+
+function SectionGenerateButton({
+  label,
+  section,
+  featureId,
+  disabled,
+}: {
+  label: string;
+  section: Section;
+  featureId: string;
+  disabled: boolean;
+}) {
+  const activeProvider = useAppStore(s => s.activeProvider);
+  const activeModel = useAppStore(s => s.activeModel);
+  const qc = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      api.testCases.runStep4Section(featureId, section, activeProvider ?? undefined, activeModel),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['features', featureId] });
+      toast({ variant: 'success', title: `${label} generated` });
+    },
+    onError: (err: Error) => {
+      toast({ variant: 'destructive', title: `${label} failed`, description: err.message });
+    },
+  });
+
+  return (
+    <button
+      disabled={disabled || mutation.isPending}
+      onClick={() => mutation.mutate()}
+      className="flex items-center gap-1.5 border px-2.5 py-1 rounded text-xs hover:bg-muted disabled:opacity-50"
+    >
+      {mutation.isPending
+        ? <Loader2 size={12} className="animate-spin" />
+        : <Play size={12} />
+      }
+      {mutation.isPending ? 'Generating…' : `Generate ${label}`}
+    </button>
+  );
+}
+
 export function PipelineStep4({
   feature,
   featureId,
@@ -43,23 +90,24 @@ export function PipelineStep4({
 }: PipelineStep4Props) {
   const canRun = previousStepCompleted && !isRunning;
 
-  let devPlan: DevPlan | null = null;
-  if (feature.devPlanWorkflow && feature.devPlanBackend && feature.devPlanFrontend && feature.devPlanTesting) {
-    try {
-      devPlan = {
-        workflow: JSON.parse(feature.devPlanWorkflow),
-        backend:  JSON.parse(feature.devPlanBackend),
-        frontend: JSON.parse(feature.devPlanFrontend),
-        testing:  JSON.parse(feature.devPlanTesting),
-      };
-    } catch {
-      // malformed JSON — show nothing
-    }
-  }
+  // Parse whichever sections are already available
+  let workflow: WorkflowStep[] | null = null;
+  let backend: BackendPlan | null = null;
+  let frontend: FrontendPlan | null = null;
+  let testing: TestingPlan | null = null;
+
+  try { if (feature.devPlanWorkflow) workflow = JSON.parse(feature.devPlanWorkflow); } catch {}
+  try { if (feature.devPlanBackend)  backend  = JSON.parse(feature.devPlanBackend);  } catch {}
+  try { if (feature.devPlanFrontend) frontend = JSON.parse(feature.devPlanFrontend); } catch {}
+  try { if (feature.devPlanTesting)  testing  = JSON.parse(feature.devPlanTesting);  } catch {}
+
+  const hasWorkflowBackend = !!(workflow && backend);
+  const hasFrontend = !!frontend;
 
   return (
     <div className="border-t px-4 py-4 space-y-4">
-      <div className="flex items-center gap-2">
+      {/* Top action bar */}
+      <div className="flex items-center gap-2 flex-wrap">
         {(status === 'idle' || status === 'failed') && (
           <>
             <button
@@ -75,7 +123,7 @@ export function PipelineStep4({
                 ? <Loader2 size={13} className="animate-spin" />
                 : status === 'failed' ? <RefreshCw size={13} /> : <Play size={13} />
               }
-              {status === 'failed' ? 'Retry Step 4' : 'Run Step 4'}
+              {status === 'failed' ? 'Retry All' : 'Generate All'}
             </button>
             {manualStep !== 4 && (
               <button
@@ -95,9 +143,12 @@ export function PipelineStep4({
         )}
         {status === 'completed' && (
           <>
-            <button disabled={!canRun} onClick={() => runStep(4)}
-              className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50">
-              <RefreshCw size={13} /> Re-run
+            <button
+              disabled={!canRun}
+              onClick={() => runStep(4)}
+              className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50"
+            >
+              <RefreshCw size={13} /> Re-run All
             </button>
             <CopyMarkdownButton
               getText={() => step4ToMarkdown(feature)}
@@ -121,7 +172,104 @@ export function PipelineStep4({
         />
       )}
 
-      {devPlan && <DevPlanPanel devPlan={devPlan} />}
+      {/* Per-section panels — always visible when previousStepCompleted */}
+      {previousStepCompleted && (
+        <div className="space-y-3">
+          {/* Workflow + Backend */}
+          <div className="border rounded-md overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
+              <span className="text-sm font-medium">
+                Workflow + Backend
+                {workflow && backend && (
+                  <span className="ml-2 text-xs text-muted-foreground font-normal">
+                    {workflow.length} steps · {backend.apiRoutes?.length ?? 0} routes
+                  </span>
+                )}
+              </span>
+              <SectionGenerateButton
+                label="Workflow + Backend"
+                section="workflow-backend"
+                featureId={featureId}
+                disabled={!canRun}
+              />
+            </div>
+            {workflow && backend && (
+              <div className="px-3 py-3">
+                <DevPlanPanel
+                  devPlan={{ workflow, backend, frontend: frontend ?? { components: [], pages: [], store: [], hooks: [], utils: [], services: [] }, testing: testing ?? { backendUnitTests: [], frontendTests: [] } }}
+                  sectionsFilter={['workflow', 'backend']}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Frontend */}
+          <div className="border rounded-md overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
+              <span className="text-sm font-medium">
+                Frontend Architecture
+                {frontend && (
+                  <span className="ml-2 text-xs text-muted-foreground font-normal">
+                    {frontend.components?.length ?? 0} components
+                  </span>
+                )}
+              </span>
+              <SectionGenerateButton
+                label="Frontend"
+                section="frontend"
+                featureId={featureId}
+                disabled={!canRun || !hasWorkflowBackend}
+              />
+            </div>
+            {!hasWorkflowBackend && (
+              <p className="px-3 py-2 text-xs text-muted-foreground italic">
+                Generate Workflow + Backend first.
+              </p>
+            )}
+            {frontend && (
+              <div className="px-3 py-3">
+                <DevPlanPanel
+                  devPlan={{ workflow: workflow ?? [], backend: backend ?? { database: { entities: [], relationships: [] }, apiRoutes: [], folderStructure: [] }, frontend, testing: testing ?? { backendUnitTests: [], frontendTests: [] } }}
+                  sectionsFilter={['frontend']}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Testing */}
+          <div className="border rounded-md overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
+              <span className="text-sm font-medium">
+                Testing Plan
+                {testing && (
+                  <span className="ml-2 text-xs text-muted-foreground font-normal">
+                    {(testing.backendUnitTests?.length ?? 0) + (testing.frontendTests?.length ?? 0)} tests
+                  </span>
+                )}
+              </span>
+              <SectionGenerateButton
+                label="Testing"
+                section="testing"
+                featureId={featureId}
+                disabled={!canRun || !hasWorkflowBackend || !hasFrontend}
+              />
+            </div>
+            {(!hasWorkflowBackend || !hasFrontend) && (
+              <p className="px-3 py-2 text-xs text-muted-foreground italic">
+                Generate Workflow + Backend and Frontend first.
+              </p>
+            )}
+            {testing && (
+              <div className="px-3 py-3">
+                <DevPlanPanel
+                  devPlan={{ workflow: workflow ?? [], backend: backend ?? { database: { entities: [], relationships: [] }, apiRoutes: [], folderStructure: [] }, frontend: frontend ?? { components: [], pages: [], store: [], hooks: [], utils: [], services: [] }, testing }}
+                  sectionsFilter={['testing']}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
