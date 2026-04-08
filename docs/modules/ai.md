@@ -34,12 +34,14 @@
 1. Consumer requests `AIProvider` from factory.
 2. Consumer calls abstract methods for extraction/planning/generation/chat.
 3. For Step 4, consumers call separate generation methods for `workflow-backend`, `frontend`, `testing-backend`, and `testing-frontend`.
-4. Concrete provider executes model-specific implementation.
+4. All generation methods accept optional runtime `promptAppend` instructions and append them to the final prompt while preserving output schema constraints.
+5. Concrete provider executes model-specific implementation.
 
 ## Constraints
 - Supported providers are limited to `gemini`, `claude`, `openai`.
 - Unknown provider selection throws immediately.
 - Provider visibility in API is gated by configured API keys.
+- `promptAppend` handling is runtime-only; persistence and validation are owned by the `test-case` module.
 
 ## Dependencies
 - Depends on: `ConfigService`, provider implementations, Nest DI module wiring

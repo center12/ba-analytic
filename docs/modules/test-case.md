@@ -24,9 +24,9 @@
 | DELETE | `/api/test-cases/:id` | path:`id` | `204 No Content` | `404` |
 | POST | `/api/test-cases/feature/:featureId/generate` | query:`provider?`,`model?` | full pipeline result payload | step failures, `404/400` prereq errors |
 | POST | `/api/test-cases/feature/:featureId/resume` | query:`provider?`,`model?` | resumed pipeline result | `400` if pipeline not failed |
-| POST | `/api/test-cases/feature/:featureId/run-step/:step` | query:`provider?`,`model?`, body:`override?` | step-specific result | `400 invalid step/prereq` |
-| POST | `/api/test-cases/feature/:featureId/run-step-4-section/:section` | `section` in `workflow-backend` \| `frontend` \| `testing-backend` \| `testing-frontend`; API also accepts high-level `testing` as a convenience wrapper, query provider/model | section result | `400 invalid section/prereq` |
-| POST | `/api/test-cases/feature/:featureId/run-step-5-section/:section` | `section` in `backend` \| `frontend` \| `testing`; API also accepts `api` alias for backend, query provider/model | section result | `400 invalid section/prereq` |
+| POST | `/api/test-cases/feature/:featureId/run-step/:step` | query:`provider?`,`model?`, body:`override?`, `promptAppend?` | step-specific result | `400 invalid step/prereq`, `400 promptAppend > 2000 chars` |
+| POST | `/api/test-cases/feature/:featureId/run-step-4-section/:section` | `section` in `workflow-backend` \| `frontend` \| `testing-backend` \| `testing-frontend`; API also accepts high-level `testing` as a convenience wrapper, query provider/model, body:`promptAppend?` | section result | `400 invalid section/prereq`, `400 promptAppend > 2000 chars` |
+| POST | `/api/test-cases/feature/:featureId/run-step-5-section/:section` | `section` in `backend` \| `frontend` \| `testing`; API also accepts `api` alias for backend, query provider/model, body:`promptAppend?` | section result | `400 invalid section/prereq`, `400 promptAppend > 2000 chars` |
 | POST | `/api/test-cases/feature/:featureId/resume-step1` | query provider/model | resumed extraction result | `400` if step1 not failed |
 | PATCH | `/api/test-cases/feature/:featureId/step-results` | body edited step payload | persisted step output summary | `400` invalid body |
 
@@ -43,7 +43,8 @@
 1. `runStepForFeature` dispatches to pipeline step handlers (1-5).
 2. Step 4 sectional endpoint dispatches to `runStep4a`, `runStep4b`, `runStep4cBackend`, `runStep4cFrontend`, or the convenience `runStep4c` wrapper for high-level `testing`.
 3. Step 5 sectional endpoint dispatches to `runStep5Backend`, `runStep5Frontend`, and `runStep5Testing` (with `api` alias mapped to backend).
-4. Each step validates prerequisites and sets pipeline status (`RUNNING`/`FAILED`/`COMPLETED`).
+4. Optional `promptAppend` can be passed on full-step and section runs; pipeline appends it to the final AI prompt as additional runtime instructions.
+5. Each step validates prerequisites and sets pipeline status (`RUNNING`/`FAILED`/`COMPLETED`).
 
 ### Manual edit persistence
 1. `saveStepResults` accepts user-edited payload for step 1-5.
@@ -56,6 +57,8 @@
 - Chunking limits: `MAX_DOC_CHARS 120000`, `CHUNK_MAX_CHARS 40000`, overlap `1500`, delay `2000ms`.
 - Scenario generation batches use `SCENARIO_BATCH 15`.
 - Retry uses exponential backoff for quota/429 failures.
+- `promptAppend` is trimmed, ignored when empty, and limited to 2000 chars.
+- `promptAppend` is runtime-only and is never persisted to `Feature` or `DeveloperTask` storage.
 - Step prerequisites enforced:
   - Step 2 needs Step 1 output.
   - `frontend` requires `workflow-backend`.
