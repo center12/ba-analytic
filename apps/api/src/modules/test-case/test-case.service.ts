@@ -54,14 +54,16 @@ export class TestCaseService {
 
   async runStep4SectionForFeature(
     featureId: string,
-    section: 'workflow-backend' | 'frontend' | 'testing',
+    section: 'workflow-backend' | 'frontend' | 'testing' | 'testing-backend' | 'testing-frontend',
     providerName?: string,
     model?: string,
   ) {
     switch (section) {
-      case 'workflow-backend': return this.pipeline.runStep4a(featureId, providerName, model);
-      case 'frontend':         return this.pipeline.runStep4b(featureId, providerName, model);
-      case 'testing':          return this.pipeline.runStep4c(featureId, providerName, model);
+      case 'workflow-backend':  return this.pipeline.runStep4a(featureId, providerName, model);
+      case 'frontend':          return this.pipeline.runStep4b(featureId, providerName, model);
+      case 'testing':           return this.pipeline.runStep4c(featureId, providerName, model);
+      case 'testing-backend':   return this.pipeline.runStep4cBackend(featureId, providerName, model);
+      case 'testing-frontend':  return this.pipeline.runStep4cFrontend(featureId, providerName, model);
       default: throw new Error(`Invalid step 4 section: ${section}`);
     }
   }

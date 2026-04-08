@@ -196,7 +196,7 @@ export function PipelineStep4({
             {workflow && backend && (
               <div className="px-3 py-3">
                 <DevPlanPanel
-                  devPlan={{ workflow, backend, frontend: frontend ?? { components: [], pages: [], store: [], hooks: [], utils: [], services: [] }, testing: testing ?? { backendUnitTests: [], frontendTests: [] } }}
+                  devPlan={{ workflow, backend, frontend: frontend ?? { components: [], pages: [], store: [], hooks: [], utils: [], services: [] }, testing: testing ?? { backend: { testScenarios: [], apiTestCases: [], databaseTesting: [], businessLogicTesting: [], paginationQueryTesting: [], performanceTesting: [], securityTesting: [], errorHandlingTesting: [], tasks: [] }, frontend: { testScenarios: [], uiTestCases: [], validationTesting: [], uxStateTesting: [], apiIntegrationTesting: [], routingNavigationTesting: [], crossBrowserTesting: [], edgeCases: [], tasks: [] } } }}
                   sectionsFilter={['workflow', 'backend']}
                 />
               </div>
@@ -229,7 +229,7 @@ export function PipelineStep4({
             {frontend && (
               <div className="px-3 py-3">
                 <DevPlanPanel
-                  devPlan={{ workflow: workflow ?? [], backend: backend ?? { database: { entities: [], relationships: [] }, apiRoutes: [], folderStructure: [] }, frontend, testing: testing ?? { backendUnitTests: [], frontendTests: [] } }}
+                  devPlan={{ workflow: workflow ?? [], backend: backend ?? { database: { entities: [], relationships: [] }, apiRoutes: [], folderStructure: [] }, frontend, testing: testing ?? { backend: { testScenarios: [], apiTestCases: [], databaseTesting: [], businessLogicTesting: [], paginationQueryTesting: [], performanceTesting: [], securityTesting: [], errorHandlingTesting: [], tasks: [] }, frontend: { testScenarios: [], uiTestCases: [], validationTesting: [], uxStateTesting: [], apiIntegrationTesting: [], routingNavigationTesting: [], crossBrowserTesting: [], edgeCases: [], tasks: [] } } }}
                   sectionsFilter={['frontend']}
                 />
               </div>
@@ -243,7 +243,7 @@ export function PipelineStep4({
                 Testing Plan
                 {testing && (
                   <span className="ml-2 text-xs text-muted-foreground font-normal">
-                    {(testing.backendUnitTests?.length ?? 0) + (testing.frontendTests?.length ?? 0)} tests
+                    {(testing.backend?.tasks?.length ?? 0) + (testing.frontend?.tasks?.length ?? 0)} tasks
                   </span>
                 )}
               </span>

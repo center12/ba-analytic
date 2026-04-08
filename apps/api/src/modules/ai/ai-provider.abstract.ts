@@ -171,9 +171,62 @@ export interface FrontendPlan {
   frontendTasks?: FrontendTask[];
 }
 
+export interface TestingTask {
+  id: string;          // "QA-BE-01" or "QA-FE-01"
+  title: string;
+  description: string;
+}
+
+export interface ApiTestScenario {
+  name: string;        // "Valid request — happy path"
+  steps: string[];
+  expectedResponse: string;
+  expectedStatus: number;
+}
+
+export interface ApiEndpointTests {
+  endpoint: string;    // "POST /api/orders"
+  scenarios: ApiTestScenario[];
+}
+
+export interface UiTestScenario {
+  name: string;        // "Renders empty state"
+  steps: string[];
+  expectedBehavior: string;
+}
+
+export interface UiScreenTests {
+  screen: string;      // "OrderList Page"
+  scenarios: UiTestScenario[];
+}
+
+export interface BackendTestingPlan {
+  testScenarios: string[];
+  apiTestCases: ApiEndpointTests[];
+  databaseTesting: string[];
+  businessLogicTesting: string[];
+  paginationQueryTesting: string[];
+  performanceTesting: string[];
+  securityTesting: string[];
+  errorHandlingTesting: string[];
+  tasks: TestingTask[];   // QA-BE-xx
+}
+
+export interface FrontendTestingPlan {
+  testScenarios: string[];
+  uiTestCases: UiScreenTests[];
+  validationTesting: string[];
+  uxStateTesting: string[];
+  apiIntegrationTesting: string[];
+  routingNavigationTesting: string[];
+  crossBrowserTesting: string[];
+  edgeCases: string[];
+  tasks: TestingTask[];   // QA-FE-xx
+}
+
 export interface TestingPlan {
-  backendUnitTests: string[];
-  frontendTests: string[];
+  backend: BackendTestingPlan;
+  frontend: FrontendTestingPlan;
 }
 
 export interface DevPlan {
@@ -409,7 +462,11 @@ ${devPlan.backend.backendTasks.map((t, i) => `${i + 1}. **${t.title}** — ${t.d
 ${devPlan.frontend.components.join('\n')}
 ${devPlan.frontend.frontendTasks?.length ? `
 ### Pre-scoped Frontend Tasks
-${devPlan.frontend.frontendTasks.map(t => `${t.id}. **${t.title}** — ${t.description}`).join('\n')}` : ''}
+${devPlan.frontend.frontendTasks.map(t => `${t.id}. **${t.title}** — ${t.description}`).join('\n')}` : ''}${devPlan.testing?.backend?.tasks?.length ? `
+### Pre-scoped Backend Testing Tasks
+${devPlan.testing.backend.tasks.map(t => `${t.id}. **${t.title}** — ${t.description}`).join('\n')}` : ''}${devPlan.testing?.frontend?.tasks?.length ? `
+### Pre-scoped Frontend Testing Tasks
+${devPlan.testing.frontend.tasks.map(t => `${t.id}. **${t.title}** — ${t.description}`).join('\n')}` : ''}
 ` : '';
 
   return `You are a senior software architect. Based on the feature analysis below, generate developer implementation prompts split into sub-tasks — one set for API/backend (4A), one for frontend/UI (4B), and one for test automation (4C).
@@ -758,54 +815,239 @@ Return ONLY valid JSON (no markdown, no explanation):
 }
 
 /**
- * Builds the prompt for Step 4 Call C — testing plan.
- * Receives only condensed lists from Calls A & B to keep token count low.
+ * Builds the prompt for Step 4C Backend — comprehensive backend testing plan.
  */
-export function buildDevPlanTestingPrompt(
+export function buildDevPlanBackendTestingPrompt(
   requirements: ExtractedRequirements,
-  scenarios: TestScenario[],
-  apiRoutes: ApiRoute[],
-  components: string[],
+  behaviors: ExtractedBehaviors,
+  backendPlan: BackendPlan,
 ): string {
-  const routeList = apiRoutes.map(r => `${r.method} ${r.path} — ${r.description}`).join('\n');
-  const componentList = components.join('\n');
+  const routeList = backendPlan.apiRoutes.map(r =>
+    `${r.method} ${r.path} — ${r.description}` +
+    (r.params?.length ? `\n  Params: ${r.params.map(p => `${p.name} (${p.in}, ${p.type}${p.required ? ', required' : ''})`).join('; ')}` : '') +
+    (r.requestBody ? `\n  Request body: ${r.requestBody}` : '') +
+    (r.jsonResponse ? `\n  Response: ${r.jsonResponse}` : '') +
+    (r.errorCases?.length ? `\n  Errors: ${r.errorCases.join(' | ')}` : '')
+  ).join('\n');
 
-  return `You are a senior QA engineer. Based on the feature analysis below, create a testing plan.
+  const entityList = backendPlan.database.entities.map(e =>
+    `**${e.name}** (table: \`${e.tableName}\`)` +
+    (e.constraints?.length ? ` — constraints: ${e.constraints.join(', ')}` : '') +
+    (e.softDelete ? ' [soft-delete]' : '')
+  ).join('\n');
+
+  return `You are a senior QA engineer. Using the BA document analysis and backend design below, create a comprehensive backend testing plan.
 
 LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values in that same language. Do not translate or mix languages.
 
-## Test Scenarios
-${scenarios.map((s, i) => `${i + 1}. [${s.type.toUpperCase()}] ${s.title}`).join('\n')}
+## Feature: ${behaviors.feature}
 
 ## Business Rules
 ${requirements.businessRules.map(r => `- ${r}`).join('\n')}
 
-## API Routes
+## Acceptance Criteria
+${requirements.acceptanceCriteria.map(c => `- ${c}`).join('\n')}
+
+## Backend API Routes
 ${routeList}
 
-## Frontend Components
-${componentList}
+## Database Entities
+${entityList}
+
+## Relationships
+${backendPlan.database.relationships.map(r => `- ${r}`).join('\n')}
+${backendPlan.validationRules?.length ? `
+## Validation Rules
+${backendPlan.validationRules.map(r => `- ${r}`).join('\n')}` : ''}${backendPlan.security?.length ? `
+## Security Requirements
+${backendPlan.security.map(s => `- ${s}`).join('\n')}` : ''}${backendPlan.transactions?.length ? `
+## Transactions
+${backendPlan.transactions.map(t => `- ${t.where}: ${t.why}`).join('\n')}` : ''}
 
 ---
 
 ## Output Requirements
 
-### Backend Unit Tests (NestJS Jest)
-For each service method that corresponds to an API route, define test cases as strings.
-Format: "ServiceName.method — scenario description" (e.g. "FeatureService.create — returns 400 when name is empty").
-Cover: success cases, validation errors, not-found errors, authorization errors.
+### 1. Test Scenarios
+Group by feature area (e.g. "Auth — Login success with valid credentials").
+Cover all backend functionalities from the API routes.
 
-### Frontend Tests (React Testing Library + Vitest)
-For each page or key component, define test cases as strings.
-Format: "ComponentName — scenario description" (e.g. "FeatureForm — shows validation error when submitted empty").
-Cover: render tests, user interaction tests, API error display tests.
+### 2. API Test Cases
+For each endpoint, provide test cases covering:
+- Valid request (happy path)
+- Invalid input / missing fields
+- Unauthorized access
+- Edge cases and error conditions
+Each test case must have: name, steps (array of strings), expectedResponse (JSON example), expectedStatus (HTTP code).
+
+### 3. Database Testing
+Test data integrity, unique constraints, NOT NULL constraints, soft-delete behavior, FK cascades.
+
+### 4. Business Logic Testing
+Validate all rules from BA document. Include edge cases and failure scenarios.
+
+### 5. Pagination & Query Testing
+Cursor-based pagination correctness, no duplicate/missing data, sorting consistency.
+
+### 6. Performance Testing
+Load scenarios (concurrent requests), slow query identification, index impact.
+
+### 7. Security Testing
+Authentication & authorization checks, rate limiting, injection attack prevention.
+
+### 8. Error Handling Testing
+Validate error response format consistency, proper HTTP status codes.
+
+### 9. Backend Testing Tasks (QA-BE-xx)
+Atomic, actionable tasks each completable in ≤ 1 day.
 
 ---
 
+Rules:
+- Be highly technical — reference real NestJS/Prisma/PostgreSQL patterns
+- Focus on real backend failure cases
+- Do NOT include frontend/UI testing
+
 Return ONLY valid JSON (no markdown, no explanation):
 {
-  "backendUnitTests": ["string"],
-  "frontendTests": ["string"]
+  "testScenarios": ["Feature Area — scenario description"],
+  "apiTestCases": [
+    {
+      "endpoint": "METHOD /path",
+      "scenarios": [
+        {
+          "name": "string",
+          "steps": ["string"],
+          "expectedResponse": "string",
+          "expectedStatus": 200
+        }
+      ]
+    }
+  ],
+  "databaseTesting": ["string"],
+  "businessLogicTesting": ["string"],
+  "paginationQueryTesting": ["string"],
+  "performanceTesting": ["string"],
+  "securityTesting": ["string"],
+  "errorHandlingTesting": ["string"],
+  "tasks": [{ "id": "QA-BE-01", "title": "string", "description": "string" }]
+}`;
+}
+
+/**
+ * Builds the prompt for Step 4C Frontend — comprehensive frontend testing plan.
+ */
+export function buildDevPlanFrontendTestingPrompt(
+  requirements: ExtractedRequirements,
+  behaviors: ExtractedBehaviors,
+  backendPlan: BackendPlan,
+  frontendPlan: FrontendPlan,
+): string {
+  const routeList = backendPlan.apiRoutes.map(r =>
+    `${r.method} ${r.path} — ${r.description}` +
+    (r.errorCases?.length ? ` | errors: ${r.errorCases.join(', ')}` : '')
+  ).join('\n');
+
+  const pageList = frontendPlan.pages.join('\n');
+  const componentList = frontendPlan.components.join('\n');
+  const routingList = frontendPlan.routing?.join('\n') ?? '';
+  const uxStatesList = frontendPlan.uxStates?.join('\n') ?? '';
+  const validationList = frontendPlan.validation?.join('\n') ?? '';
+
+  return `You are a senior frontend QA engineer. Using the BA document analysis, backend API contract, and frontend plan below, create a comprehensive frontend testing plan.
+
+LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values in that same language. Do not translate or mix languages.
+
+## Feature: ${behaviors.feature}
+
+## Acceptance Criteria
+${requirements.acceptanceCriteria.map(c => `- ${c}`).join('\n')}
+
+## Business Rules
+${requirements.businessRules.map(r => `- ${r}`).join('\n')}
+
+## Backend API Routes (for integration testing context)
+${routeList}
+
+## Frontend Pages
+${pageList}
+
+## Frontend Components
+${componentList}
+${routingList ? `
+## Routing
+${routingList}` : ''}${uxStatesList ? `
+## UX States
+${uxStatesList}` : ''}${validationList ? `
+## Validation Rules
+${validationList}` : ''}
+
+---
+
+## Output Requirements
+
+### 1. Test Scenarios
+Group by screen/page (e.g. "OrderList Page — user sees paginated orders").
+Cover all UI interactions.
+
+### 2. UI Test Cases
+For each screen, provide test cases covering:
+- Correct rendering
+- Input handling
+- Button actions
+- Error display
+Each test case must have: name, steps (array of strings), expectedBehavior.
+
+### 3. Validation Testing
+Field validation (format, required, length), error messages, timing (onBlur, onSubmit).
+
+### 4. UX State Testing
+Loading state, error state (API failure), empty state, success state.
+
+### 5. API Integration Testing (Frontend perspective)
+Correct API calls triggered, success/error handling, mock API behavior.
+
+### 6. Routing & Navigation Testing
+Page navigation, protected route guards, redirect behavior.
+
+### 7. Cross-Browser / Responsive Testing
+Key layouts and interactions across browsers and screen sizes.
+
+### 8. Edge Cases
+Network failure, slow API response, unexpected/malformed API responses.
+
+### 9. Frontend Testing Tasks (QA-FE-xx)
+Atomic, actionable tasks each completable in ≤ 1 day.
+
+---
+
+Rules:
+- Focus on UI behavior and user experience
+- Do NOT test backend logic directly
+- Assume backend API is already defined
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "testScenarios": ["PageName — scenario description"],
+  "uiTestCases": [
+    {
+      "screen": "string",
+      "scenarios": [
+        {
+          "name": "string",
+          "steps": ["string"],
+          "expectedBehavior": "string"
+        }
+      ]
+    }
+  ],
+  "validationTesting": ["string"],
+  "uxStateTesting": ["string"],
+  "apiIntegrationTesting": ["string"],
+  "routingNavigationTesting": ["string"],
+  "crossBrowserTesting": ["string"],
+  "edgeCases": ["string"],
+  "tasks": [{ "id": "QA-FE-01", "title": "string", "description": "string" }]
 }`;
 }
 
@@ -888,15 +1130,23 @@ export abstract class AIProvider {
   ): Promise<FrontendPlan>;
 
   /**
-   * Step 4 Call C — Generate testing plan.
-   * Receives condensed API routes and component lists from Calls A & B.
+   * Step 4C Backend — Generate comprehensive backend testing plan.
    */
-  abstract generateDevPlanTesting(
+  abstract generateDevPlanBackendTesting(
     requirements: ExtractedRequirements,
-    scenarios: TestScenario[],
-    apiRoutes: ApiRoute[],
-    components: string[],
-  ): Promise<TestingPlan>;
+    behaviors: ExtractedBehaviors,
+    backendPlan: BackendPlan,
+  ): Promise<BackendTestingPlan>;
+
+  /**
+   * Step 4C Frontend — Generate comprehensive frontend testing plan.
+   */
+  abstract generateDevPlanFrontendTesting(
+    requirements: ExtractedRequirements,
+    behaviors: ExtractedBehaviors,
+    backendPlan: BackendPlan,
+    frontendPlan: FrontendPlan,
+  ): Promise<FrontendTestingPlan>;
 
   /**
    * Layer 4 (Step 5) — Synthesize all pipeline outputs into a ready-to-copy prompt

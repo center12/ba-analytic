@@ -5,10 +5,11 @@ import { generateObject, streamText } from 'ai';
 import { z } from 'zod';
 import {
   AIProvider,
-  ApiRoute,
   BackendPlan,
+  BackendTestingPlan,
+  buildDevPlanBackendTestingPrompt,
   buildDevPlanFrontendPrompt,
-  buildDevPlanTestingPrompt,
+  buildDevPlanFrontendTestingPrompt,
   buildDevPlanWorkflowBackendPrompt,
   buildDevPromptInput,
   buildExtractAllPrompt,
@@ -22,8 +23,8 @@ import {
   ExtractedBehaviors,
   ExtractedRequirements,
   FrontendPlan,
+  FrontendTestingPlan,
   GeneratedTestCase,
-  TestingPlan,
   TestScenario,
   WorkflowStep,
 } from '../ai-provider.abstract';
@@ -180,9 +181,55 @@ const FrontendPlanSchema = z.object({
   errorHandling: z.array(z.string()).default([]),
   frontendTasks: z.array(FrontendTaskSchema).default([]),
 });
-const TestingPlanSchema = z.object({
-  backendUnitTests: z.array(z.string()),
-  frontendTests: z.array(z.string()),
+const TestingTaskSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+});
+
+const ApiTestScenarioSchema = z.object({
+  name: z.string(),
+  steps: z.array(z.string()).default([]),
+  expectedResponse: z.string().default(''),
+  expectedStatus: z.number().default(200),
+});
+const ApiEndpointTestsSchema = z.object({
+  endpoint: z.string(),
+  scenarios: z.array(ApiTestScenarioSchema).default([]),
+});
+
+const UiTestScenarioSchema = z.object({
+  name: z.string(),
+  steps: z.array(z.string()).default([]),
+  expectedBehavior: z.string().default(''),
+});
+const UiScreenTestsSchema = z.object({
+  screen: z.string(),
+  scenarios: z.array(UiTestScenarioSchema).default([]),
+});
+
+const BackendTestingPlanSchema = z.object({
+  testScenarios: z.array(z.string()).default([]),
+  apiTestCases: z.array(ApiEndpointTestsSchema).default([]),
+  databaseTesting: z.array(z.string()).default([]),
+  businessLogicTesting: z.array(z.string()).default([]),
+  paginationQueryTesting: z.array(z.string()).default([]),
+  performanceTesting: z.array(z.string()).default([]),
+  securityTesting: z.array(z.string()).default([]),
+  errorHandlingTesting: z.array(z.string()).default([]),
+  tasks: z.array(TestingTaskSchema).default([]),
+});
+
+const FrontendTestingPlanSchema = z.object({
+  testScenarios: z.array(z.string()).default([]),
+  uiTestCases: z.array(UiScreenTestsSchema).default([]),
+  validationTesting: z.array(z.string()).default([]),
+  uxStateTesting: z.array(z.string()).default([]),
+  apiIntegrationTesting: z.array(z.string()).default([]),
+  routingNavigationTesting: z.array(z.string()).default([]),
+  crossBrowserTesting: z.array(z.string()).default([]),
+  edgeCases: z.array(z.string()).default([]),
+  tasks: z.array(TestingTaskSchema).default([]),
 });
 
 @Injectable()
@@ -394,23 +441,41 @@ ${baDocumentContent}`;
 
   // ── Step 4C: Dev Plan — Testing ──────────────────────────────────────────────
 
-  async generateDevPlanTesting(
+  async generateDevPlanBackendTesting(
     requirements: ExtractedRequirements,
-    scenarios: TestScenario[],
-    apiRoutes: ApiRoute[],
-    components: string[],
-  ): Promise<TestingPlan> {
-    this.logger.log('[Step 4C] Generating testing plan...');
-    const prompt4c = buildDevPlanTestingPrompt(requirements, scenarios, apiRoutes, components);
-    this.logPromptSize('[Step 4C]', prompt4c);
+    behaviors: ExtractedBehaviors,
+    backendPlan: BackendPlan,
+  ): Promise<BackendTestingPlan> {
+    this.logger.log('[Step 4C-BE] Generating backend testing plan...');
+    const prompt = buildDevPlanBackendTestingPrompt(requirements, behaviors, backendPlan);
+    this.logPromptSize('[Step 4C-BE]', prompt);
     const { object, usage, response } = await generateObject({
       model: google(this.modelVersion),
-      schema: TestingPlanSchema,
-      prompt: prompt4c,
+      schema: BackendTestingPlanSchema,
+      prompt,
     });
-    this.logger.log(`[Step 4C] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
-    this.logRateLimit('[Step 4C]', response.headers);
-    return object as TestingPlan;
+    this.logger.log(`[Step 4C-BE] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Step 4C-BE]', response.headers);
+    return object as BackendTestingPlan;
+  }
+
+  async generateDevPlanFrontendTesting(
+    requirements: ExtractedRequirements,
+    behaviors: ExtractedBehaviors,
+    backendPlan: BackendPlan,
+    frontendPlan: FrontendPlan,
+  ): Promise<FrontendTestingPlan> {
+    this.logger.log('[Step 4C-FE] Generating frontend testing plan...');
+    const prompt = buildDevPlanFrontendTestingPrompt(requirements, behaviors, backendPlan, frontendPlan);
+    this.logPromptSize('[Step 4C-FE]', prompt);
+    const { object, usage, response } = await generateObject({
+      model: google(this.modelVersion),
+      schema: FrontendTestingPlanSchema,
+      prompt,
+    });
+    this.logger.log(`[Step 4C-FE] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Step 4C-FE]', response.headers);
+    return object as FrontendTestingPlan;
   }
 
   // ── Step 5 (Layer 4): Dev Prompt Generator (4A API · 4B Frontend · 4C Testing) ─

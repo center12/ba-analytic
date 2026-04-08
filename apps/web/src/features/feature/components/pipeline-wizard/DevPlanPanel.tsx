@@ -246,14 +246,18 @@ export function DevPlanPanel({ devPlan, sectionsFilter }: Props) {
       {show('testing') && (
         <Section title="Testing Plan">
           <div className="space-y-3">
-            <div>
-              <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Backend Unit Tests</p>
-              <StringList items={testing.backendUnitTests} />
-            </div>
-            <div>
-              <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Frontend Tests</p>
-              <StringList items={testing.frontendTests} />
-            </div>
+            {testing.backend && (
+              <div>
+                <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Backend Test Scenarios</p>
+                <StringList items={testing.backend.testScenarios ?? []} />
+              </div>
+            )}
+            {testing.frontend && (
+              <div>
+                <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Frontend Test Scenarios</p>
+                <StringList items={testing.frontend.testScenarios ?? []} />
+              </div>
+            )}
           </div>
         </Section>
       )}

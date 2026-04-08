@@ -6,6 +6,7 @@ import { STORAGE_PROVIDER, IStorageProvider } from '../storage/storage.interface
 import {
   AIProvider,
   BackendPlan,
+  BackendTestingPlan,
   buildDevPlanWorkflowBackendPrompt,
   buildDevPromptInput,
   buildExtractAllPrompt,
@@ -17,6 +18,7 @@ import {
   ExtractedBehaviors,
   ExtractedRequirements,
   FrontendPlan,
+  FrontendTestingPlan,
   GeneratedTestCase,
   TestScenario,
   WorkflowStep,
@@ -242,11 +244,16 @@ export class PipelineService {
         provider.generateDevPlanFrontend(compReq, compBeh, workflowSummary)
       );
 
-      // Call C: Testing (receives condensed API routes + component list)
-      this.logger.log('[Pipeline] Step 4C — generating testing plan');
-      const testing = await withRetry(() =>
-        provider.generateDevPlanTesting(compReq, testScenarios, backend.apiRoutes, frontend.components)
+      // Call C: Testing — backend first, then frontend
+      this.logger.log('[Pipeline] Step 4C-BE — generating backend testing plan');
+      const backendTesting = await withRetry(() =>
+        provider.generateDevPlanBackendTesting(compReq, compBeh, backend)
       );
+      this.logger.log('[Pipeline] Step 4C-FE — generating frontend testing plan');
+      const frontendTesting = await withRetry(() =>
+        provider.generateDevPlanFrontendTesting(compReq, compBeh, backend, frontend)
+      );
+      const testing = { backend: backendTesting, frontend: frontendTesting };
 
       const devPlan: DevPlan = { workflow, backend, frontend, testing };
 
@@ -343,41 +350,87 @@ export class PipelineService {
     return { frontend };
   }
 
-  /** Step 4C (manual): Generate Testing plan only — requires backend + frontend to exist */
-  async runStep4c(featureId: string, providerName?: string, model?: string) {
+  /** Step 4C-Backend (manual): Generate Backend Testing plan only — requires backend plan to exist */
+  async runStep4cBackend(featureId: string, providerName?: string, model?: string) {
     const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
     if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
-    const req          = feature.extractedRequirements as ExtractedRequirements | null;
-    const beh          = feature.extractedBehaviors    as ExtractedBehaviors    | null;
-    const testScenarios = feature.testScenarios         as TestScenario[]       | null;
-    const rawBackend   = (feature as any).devPlanBackend   as string | null;
-    const rawFrontend  = (feature as any).devPlanFrontend  as string | null;
-    if (!req || !beh)           throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
-    if (!testScenarios?.length) throw new BadRequestException(`Feature ${featureId} has no scenarios — run Step 2 first`);
-    if (!rawBackend)            throw new BadRequestException(`Feature ${featureId} has no backend plan — generate Workflow+Backend first`);
-    if (!rawFrontend)           throw new BadRequestException(`Feature ${featureId} has no frontend plan — generate Frontend first`);
+    const req      = feature.extractedRequirements as ExtractedRequirements | null;
+    const beh      = feature.extractedBehaviors    as ExtractedBehaviors    | null;
+    const rawBackend = (feature as any).devPlanBackend as string | null;
+    if (!req || !beh)  throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
+    if (!rawBackend)   throw new BadRequestException(`Feature ${featureId} has no backend plan — generate Workflow+Backend first`);
 
-    const backend:  BackendPlan  = JSON.parse(rawBackend);
-    const frontend: FrontendPlan = JSON.parse(rawFrontend);
-
+    const backend: BackendPlan = JSON.parse(rawBackend);
     const provider = await this._resolveProvider(featureId, 4, providerName, model);
-    const { req: compReq } = compressForDownstream(req, beh);
+    const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
 
-    this.logger.log('[Pipeline] Step 4C (manual) — generating testing plan');
-    const testing = await withRetry(() =>
-      provider.generateDevPlanTesting(compReq, testScenarios, backend.apiRoutes, frontend.components)
+    this.logger.log('[Pipeline] Step 4C-BE (manual) — generating backend testing plan');
+    const backendTesting: BackendTestingPlan = await withRetry(() =>
+      provider.generateDevPlanBackendTesting(compReq, compBeh, backend)
     );
+
+    // Merge into existing devPlanTesting (preserve frontend if it exists)
+    const existing = (feature as any).devPlanTesting as string | null;
+    let currentTesting: Record<string, unknown> = {};
+    if (existing) { try { currentTesting = JSON.parse(existing); } catch { /* ignore */ } }
+    const merged = { ...currentTesting, backend: backendTesting };
 
     await this.prisma.feature.update({
       where: { id: featureId },
       data: ({
-        devPlanTesting:  JSON.stringify(testing),
+        devPlanTesting:  JSON.stringify(merged),
         pipelineStep:    4,
         pipelineStatus:  'COMPLETED',
         pipelineFailedAt: null,
       } as any),
     });
-    return { testing };
+    return { backendTesting };
+  }
+
+  /** Step 4C-Frontend (manual): Generate Frontend Testing plan only — requires backend + frontend plans to exist */
+  async runStep4cFrontend(featureId: string, providerName?: string, model?: string) {
+    const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
+    if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
+    const req        = feature.extractedRequirements as ExtractedRequirements | null;
+    const beh        = feature.extractedBehaviors    as ExtractedBehaviors    | null;
+    const rawBackend  = (feature as any).devPlanBackend  as string | null;
+    const rawFrontend = (feature as any).devPlanFrontend as string | null;
+    if (!req || !beh)  throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
+    if (!rawBackend)   throw new BadRequestException(`Feature ${featureId} has no backend plan — generate Workflow+Backend first`);
+    if (!rawFrontend)  throw new BadRequestException(`Feature ${featureId} has no frontend plan — generate Frontend first`);
+
+    const backend:  BackendPlan  = JSON.parse(rawBackend);
+    const frontend: FrontendPlan = JSON.parse(rawFrontend);
+    const provider = await this._resolveProvider(featureId, 4, providerName, model);
+    const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+
+    this.logger.log('[Pipeline] Step 4C-FE (manual) — generating frontend testing plan');
+    const frontendTesting: FrontendTestingPlan = await withRetry(() =>
+      provider.generateDevPlanFrontendTesting(compReq, compBeh, backend, frontend)
+    );
+
+    // Merge into existing devPlanTesting (preserve backend if it exists)
+    const existing = (feature as any).devPlanTesting as string | null;
+    let currentTesting: Record<string, unknown> = {};
+    if (existing) { try { currentTesting = JSON.parse(existing); } catch { /* ignore */ } }
+    const merged = { ...currentTesting, frontend: frontendTesting };
+
+    await this.prisma.feature.update({
+      where: { id: featureId },
+      data: ({
+        devPlanTesting:  JSON.stringify(merged),
+        pipelineStep:    4,
+        pipelineStatus:  'COMPLETED',
+        pipelineFailedAt: null,
+      } as any),
+    });
+    return { frontendTesting };
+  }
+
+  /** Step 4C (manual): Generate both Backend + Frontend Testing plans */
+  async runStep4c(featureId: string, providerName?: string, model?: string) {
+    await this.runStep4cBackend(featureId, providerName, model);
+    return this.runStep4cFrontend(featureId, providerName, model);
   }
 
   /** Step 5: Run Layer 4 dev prompt generation using saved Layer 1+2 results */
@@ -781,10 +834,15 @@ export class PipelineService {
       provider4.generateDevPlanFrontend(compReq, compBeh, workflowSummary),
     );
 
-    this.logger.log('[Pipeline] Step 4C — generating testing plan');
-    const testing = await withRetry(() =>
-      provider4.generateDevPlanTesting(compReq, testScenarios, (backend as BackendPlan).apiRoutes, (frontend as FrontendPlan).components),
+    this.logger.log('[Pipeline] Step 4C-BE — generating backend testing plan');
+    const backendTesting = await withRetry(() =>
+      provider4.generateDevPlanBackendTesting(compReq, compBeh, backend as BackendPlan),
     );
+    this.logger.log('[Pipeline] Step 4C-FE — generating frontend testing plan');
+    const frontendTesting = await withRetry(() =>
+      provider4.generateDevPlanFrontendTesting(compReq, compBeh, backend as BackendPlan, frontend as FrontendPlan),
+    );
+    const testing = { backend: backendTesting, frontend: frontendTesting };
 
     await this.prisma.feature.update({
       where: { id: featureId },

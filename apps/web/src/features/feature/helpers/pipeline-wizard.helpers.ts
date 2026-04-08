@@ -389,15 +389,135 @@ export function step4ToMarkdown(feature: Feature): string {
   }
 
   lines.push('## Testing Plan', '');
-  if (devPlan.testing.backendUnitTests.length) {
-    lines.push('### Backend Unit Tests', '');
-    devPlan.testing.backendUnitTests.forEach((t) => lines.push(`- ${t}`));
-    lines.push('');
+
+  // ── Backend Testing Plan ──────────────────────────────────────────────────────
+  if (devPlan.testing?.backend) {
+    const be = devPlan.testing.backend;
+    lines.push('### Backend Testing Plan', '');
+
+    if (be.testScenarios?.length) {
+      lines.push('#### Test Scenarios', '');
+      be.testScenarios.forEach((s) => lines.push(`- ${s}`));
+      lines.push('');
+    }
+    if (be.apiTestCases?.length) {
+      lines.push('#### API Test Cases', '');
+      be.apiTestCases.forEach((ep) => {
+        lines.push(`##### ${ep.endpoint}`, '');
+        if (ep.scenarios?.length) {
+          lines.push('| Scenario | Steps | Expected Response | Status |');
+          lines.push('|----------|-------|------------------|--------|');
+          ep.scenarios.forEach((sc) => {
+            const steps = sc.steps?.join(' → ') ?? '';
+            lines.push(`| ${sc.name} | ${steps} | ${sc.expectedResponse} | ${sc.expectedStatus} |`);
+          });
+        }
+        lines.push('');
+      });
+    }
+    if (be.databaseTesting?.length) {
+      lines.push('#### Database Testing', '');
+      be.databaseTesting.forEach((t) => lines.push(`- ${t}`));
+      lines.push('');
+    }
+    if (be.businessLogicTesting?.length) {
+      lines.push('#### Business Logic Testing', '');
+      be.businessLogicTesting.forEach((t) => lines.push(`- ${t}`));
+      lines.push('');
+    }
+    if (be.paginationQueryTesting?.length) {
+      lines.push('#### Pagination & Query Testing', '');
+      be.paginationQueryTesting.forEach((t) => lines.push(`- ${t}`));
+      lines.push('');
+    }
+    if (be.performanceTesting?.length) {
+      lines.push('#### Performance Testing', '');
+      be.performanceTesting.forEach((t) => lines.push(`- ${t}`));
+      lines.push('');
+    }
+    if (be.securityTesting?.length) {
+      lines.push('#### Security Testing', '');
+      be.securityTesting.forEach((t) => lines.push(`- ${t}`));
+      lines.push('');
+    }
+    if (be.errorHandlingTesting?.length) {
+      lines.push('#### Error Handling Testing', '');
+      be.errorHandlingTesting.forEach((t) => lines.push(`- ${t}`));
+      lines.push('');
+    }
+    if (be.tasks?.length) {
+      lines.push('#### Backend Testing Tasks', '');
+      be.tasks.forEach((t) => {
+        lines.push(`${t.id}. **${t.title}**`);
+        lines.push(`   ${t.description}`);
+        lines.push('');
+      });
+    }
   }
-  if (devPlan.testing.frontendTests.length) {
-    lines.push('### Frontend Tests', '');
-    devPlan.testing.frontendTests.forEach((t) => lines.push(`- ${t}`));
-    lines.push('');
+
+  // ── Frontend Testing Plan ─────────────────────────────────────────────────────
+  if (devPlan.testing?.frontend) {
+    const fe = devPlan.testing.frontend;
+    lines.push('### Frontend Testing Plan', '');
+
+    if (fe.testScenarios?.length) {
+      lines.push('#### Test Scenarios', '');
+      fe.testScenarios.forEach((s) => lines.push(`- ${s}`));
+      lines.push('');
+    }
+    if (fe.uiTestCases?.length) {
+      lines.push('#### UI Test Cases', '');
+      fe.uiTestCases.forEach((sc) => {
+        lines.push(`##### ${sc.screen}`, '');
+        if (sc.scenarios?.length) {
+          lines.push('| Scenario | Steps | Expected Behavior |');
+          lines.push('|----------|-------|------------------|');
+          sc.scenarios.forEach((s) => {
+            const steps = s.steps?.join(' → ') ?? '';
+            lines.push(`| ${s.name} | ${steps} | ${s.expectedBehavior} |`);
+          });
+        }
+        lines.push('');
+      });
+    }
+    if (fe.validationTesting?.length) {
+      lines.push('#### Validation Testing', '');
+      fe.validationTesting.forEach((t) => lines.push(`- ${t}`));
+      lines.push('');
+    }
+    if (fe.uxStateTesting?.length) {
+      lines.push('#### UX State Testing', '');
+      fe.uxStateTesting.forEach((t) => lines.push(`- ${t}`));
+      lines.push('');
+    }
+    if (fe.apiIntegrationTesting?.length) {
+      lines.push('#### API Integration Testing', '');
+      fe.apiIntegrationTesting.forEach((t) => lines.push(`- ${t}`));
+      lines.push('');
+    }
+    if (fe.routingNavigationTesting?.length) {
+      lines.push('#### Routing & Navigation Testing', '');
+      fe.routingNavigationTesting.forEach((t) => lines.push(`- ${t}`));
+      lines.push('');
+    }
+    if (fe.crossBrowserTesting?.length) {
+      lines.push('#### Cross-Browser Testing', '');
+      fe.crossBrowserTesting.forEach((t) => lines.push(`- ${t}`));
+      lines.push('');
+    }
+    if (fe.edgeCases?.length) {
+      lines.push('#### Edge Cases', '');
+      fe.edgeCases.forEach((t) => lines.push(`- ${t}`));
+      lines.push('');
+    }
+    if (fe.tasks?.length) {
+      lines.push('#### Frontend Testing Tasks', '');
+      fe.tasks.forEach((t) => {
+        lines.push(`${t.id}. **${t.title}**`);
+        lines.push(`   ${t.description}`);
+        lines.push('');
+      });
+    }
   }
 
   return lines.join('\n');

@@ -156,7 +156,7 @@ export const api = {
     },
     runStep4Section: (
       featureId: string,
-      section: 'workflow-backend' | 'frontend' | 'testing',
+      section: 'workflow-backend' | 'frontend' | 'testing' | 'testing-backend' | 'testing-frontend',
       provider?: string,
       model?: string,
     ) => {
@@ -450,9 +450,62 @@ export interface FrontendPlan {
   frontendTasks?: FrontendTask[];
 }
 
+export interface TestingTask {
+  id: string;
+  title: string;
+  description: string;
+}
+
+export interface ApiTestScenario {
+  name: string;
+  steps: string[];
+  expectedResponse: string;
+  expectedStatus: number;
+}
+
+export interface ApiEndpointTests {
+  endpoint: string;
+  scenarios: ApiTestScenario[];
+}
+
+export interface UiTestScenario {
+  name: string;
+  steps: string[];
+  expectedBehavior: string;
+}
+
+export interface UiScreenTests {
+  screen: string;
+  scenarios: UiTestScenario[];
+}
+
+export interface BackendTestingPlan {
+  testScenarios: string[];
+  apiTestCases: ApiEndpointTests[];
+  databaseTesting: string[];
+  businessLogicTesting: string[];
+  paginationQueryTesting: string[];
+  performanceTesting: string[];
+  securityTesting: string[];
+  errorHandlingTesting: string[];
+  tasks: TestingTask[];
+}
+
+export interface FrontendTestingPlan {
+  testScenarios: string[];
+  uiTestCases: UiScreenTests[];
+  validationTesting: string[];
+  uxStateTesting: string[];
+  apiIntegrationTesting: string[];
+  routingNavigationTesting: string[];
+  crossBrowserTesting: string[];
+  edgeCases: string[];
+  tasks: TestingTask[];
+}
+
 export interface TestingPlan {
-  backendUnitTests: string[];
-  frontendTests: string[];
+  backend: BackendTestingPlan;
+  frontend: FrontendTestingPlan;
 }
 
 export interface DevPlan {

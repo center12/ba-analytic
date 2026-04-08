@@ -100,7 +100,7 @@ export class TestCaseController {
   @Post('feature/:featureId/run-step-4-section/:section')
   runStep4Section(
     @Param('featureId') featureId: string,
-    @Param('section') section: 'workflow-backend' | 'frontend' | 'testing',
+    @Param('section') section: 'workflow-backend' | 'frontend' | 'testing' | 'testing-backend' | 'testing-frontend',
     @Query('provider') provider?: string,
     @Query('model') model?: string,
   ) {
