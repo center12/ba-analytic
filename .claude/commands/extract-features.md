@@ -15,56 +15,113 @@ If $ARGUMENTS is set, process only the matching feature folder. Otherwise proces
 ## Step 2 — Read each feature
 
 For `apps/web/src/features/<name>/`, read in order (skip absent files):
-1. `types/<name>.types.ts` — exported interface/type signatures only
-2. `constants/<name>.constants.ts` — exported constant names (skip large template strings; note "see file")
-3. `helpers/<name>.helpers.ts` — exported function signatures (name + params, no bodies)
+1. `types/<name>.types.ts` — exported interface/type signatures (fields + types only, no bodies)
+2. `constants/<name>.constants.ts` — exported constant names; note "see file" for large strings
+3. `helpers/<name>.helpers.ts` — exported function names + param list only
 4. `*.tsx` in the feature root — default export name + one-sentence purpose
 5. `components/*.tsx` and `components/**/*.tsx` — export name + one-sentence purpose
+6. `services/<name>.service.ts` — function names + HTTP method/path
+7. `stores/<name>.store.ts` — exported state field names
+
+When extracting, emit markdown bullet lines only:
+- Use `-` bullets for lists
+- Use numbered `1.`/`2.`/`3.` only for ordered user flow steps
+- Never emit table syntax (`| col | col |`) or row-like output
 
 ## Step 3 — Write docs/features/<name>.md
 
 Use this template. Omit any section whose content is empty.
-Overwrite the file completely if it already exists.
+Keep the file under 60 lines. Overwrite completely if it already exists.
 
 ```
-# Feature: <name>
-**Purpose**: <one sentence describing what this feature does for the user>
+# Feature: <Name>
 
-## Pages / Entry Components
-| File | Export | Purpose |
-|------|--------|---------|
+## Purpose
+- What user can do
+
+---
+
+## User Flow
+1. Step 1
+2. Step 2
+3. Step 3
+
+---
+
+## Screens
+### <Page>
+- Elements:
+  - <element>
+  - <element>
+
+---
 
 ## Components
-| File | Purpose |
-|------|---------|
+- `Name` — purpose
+
+---
+
+## State
+### Local:
+- field
+- field
+
+### Global (store):
+- field — storeName
+
+---
 
 ## Types
-​```ts
-// interface/type signatures only — no implementations
-​```
+- `TypeName` — { field: type }
 
-## Exported Helpers
-| Function | Signature |
-|----------|-----------|
+---
 
-## Constants
-| Name | Value / Notes |
-|------|---------------|
+## API
+### METHOD /path — trigger (e.g. onSubmit)
 
-## TanStack Query Keys
-- `['<key>', ...]`
+Request:
+- field: type
+
+Response:
+- field: type
+
+Behavior:
+- Success -> <what happens in UI>
+- Error -> <what happens in UI>
+
+Validation:
+- field: rule
+
+---
+
+## UX States
+- Loading: <behavior>
+- Error: <behavior>
+- Empty: <optional>
+- Success: <behavior>
+
+---
+
+## Routing
+- /path -> page
+- Guard: condition
+
+---
+
+## Edge Cases
+- scenario
+
+---
 
 ## Dependencies
-- **API calls**: lib/api.ts functions used (names only)
-- **State**: Zustand store fields used
+- API: serviceName
+- Store: storeName
 ```
-
-Keep each file under 120 lines. Do not paste function bodies.
 
 ## Step 4 — Extract global shared code
 
 Scan the global frontend folders (outside `features/`):
-- `src/components/**/*.tsx` (or `apps/web/src/components/`)
+- `src/components/**/*.tsx`
 - `src/hooks/**/*.ts`
 - `src/services/**/*.ts`
 - `src/stores/**/*.ts`
@@ -72,35 +129,43 @@ Scan the global frontend folders (outside `features/`):
 - `src/lib/**/*.ts`
 
 For each file found, read to extract: export name + one-line purpose.
+Emit markdown bullet lines only (no tables), using this style:
+- `ExportName` (`file.ts/tsx`) — one-line purpose
 
-Write `docs/features/_global.md` using this template (omit empty sections):
+Write `docs/features/_global.md` using this template (omit empty sections).
+Keep the file under 100 lines. Overwrite if it already exists.
 
 ```
 # Global Frontend Shared Code
-**Purpose**: Shared utilities, components, hooks, services, and stores used across two or more features.
+
+## Purpose
+- Shared utilities, components, hooks, services, and stores used across two or more features.
+
+---
 
 ## Components
-| File | Export | Purpose |
-|------|--------|---------|
+- `ComponentName` — purpose
+
+---
 
 ## Hooks
-| File | Export | Purpose |
-|------|--------|---------|
+- `useHookName` — purpose
+
+---
 
 ## Services
-| File | Export | Purpose |
-|------|--------|---------|
+- `functionName` (`service.ts`) — purpose
+
+---
 
 ## Stores
-| File | Export | Purpose |
-|------|--------|---------|
+- `useStoreName` — fields: `field`, `field`
+
+---
 
 ## Utils / Lib
-| File | Export | Purpose |
-|------|--------|---------|
+- `functionName` (`file.ts`) — purpose
 ```
-
-Keep the file under 150 lines. Overwrite if it already exists.
 
 ## Step 5 — Update docs/INDEX.md
 

@@ -1,24 +1,52 @@
-# Feature: project
-**Purpose**: CRUD management of projects and their features, plus per-project AI pipeline configuration.
+# Feature: Project
 
-## Pages / Entry Components
-| File | Export | Purpose |
-|------|--------|---------|
-| `ProjectsPage.tsx` | `ProjectsPage` | Lists all projects with create/delete actions and logout |
-| `ProjectDetailPage.tsx` | `ProjectDetailPage` | Shows project features list with create/delete and pipeline config |
+## Purpose
+- Manage projects and project-scoped features, including per-step AI pipeline defaults.
+
+---
+
+## User Flow
+1. View all projects, create/delete projects, or navigate into one project.
+2. Inside project detail, create/delete features and open a feature detail page.
+3. Configure pipeline step overrides (provider/model) and save project defaults.
+
+---
+
+## Screens
+### ProjectsPage
+- Elements:
+  - Project list with feature counts
+  - New project form toggle
+  - User management and logout actions
+
+### ProjectDetailPage
+- Elements:
+  - Project metadata header
+  - Features list and create form
+  - `PipelineConfigEditor` in collapsible section
+
+---
 
 ## Components
-| File | Purpose |
-|------|---------|
-| `components/PipelineConfigEditor.tsx` | Per-step AI provider/model overrides for the 4-layer pipeline |
+- `ProjectsPage` — top-level project CRUD list and auth shortcuts.
+- `ProjectDetailPage` — feature CRUD within one project.
+- `PipelineConfigEditor` — edit/save per-step provider-model overrides.
 
-## TanStack Query Keys
-- `['projects']`
-- `['projects', projectId]`
-- `['features', projectId]`
-- `['ai-providers']`
-- `['project-pipeline-config', projectId]`
+---
+
+## API
+### GET `/projects` / POST `/projects` / DELETE `/projects/:id`
+### GET `/projects/:id`
+### GET `/projects/:projectId/features` / POST `/projects/:projectId/features`
+### DELETE `/projects/features/:featureId`
+### GET `/projects/:projectId/pipeline-config`
+### PUT `/projects/:projectId/pipeline-config`
+### DELETE `/projects/:projectId/pipeline-config/:step`
+### GET `/ai/providers`
+
+---
 
 ## Dependencies
-- **API calls**: `api.projects.list`, `api.projects.create`, `api.projects.delete`, `api.projects.get`, `api.projects.getPipelineConfig`, `api.projects.upsertPipelineConfig`, `api.projects.deletePipelineConfigStep`, `api.features.list`, `api.features.create`, `api.features.delete`, `api.ai.getProviders`
-- **State**: `useAuthStore` — `user`, `logout`
+- Query keys: `['projects']`, `['projects', projectId]`, `['features', projectId]`, `['ai-providers']`, `['project-pipeline-config', projectId]`
+- API: `api.projects`, `api.features`, `api.ai.getProviders`
+- Store: `useAuthStore` (`user`, `logout`)

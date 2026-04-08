@@ -1,19 +1,52 @@
-# Feature: user
-**Purpose**: Admin interface for creating and listing application users.
+# Feature: User
 
-## Pages / Entry Components
-| File | Export | Purpose |
-|------|--------|---------|
-| `UserManagementPage.tsx` | `UserManagementPage` | Page that composes user creation form and user list |
+## Purpose
+- Provide admin UI to create users and browse existing user accounts.
+
+---
+
+## User Flow
+1. Open `/users` from project screen.
+2. Create a user with username/password in `CreateUserForm`.
+3. Refresh and display user list from API.
+
+---
+
+## Screens
+### UserManagementPage
+- Elements:
+  - Back button to projects page
+  - `CreateUserForm`
+  - `UserList`
+
+---
 
 ## Components
-| File | Purpose |
-|------|---------|
-| `components/CreateUserForm.tsx` | Togglable form to create a new user via API |
-| `components/UserList.tsx` | Fetches and renders all users as cards |
+- `UserManagementPage` — page composition and navigation shell.
+- `CreateUserForm` — toggled create form with validation-friendly hints and mutation handling.
+- `UserList` — query-backed user list cards with loading/empty states.
 
-## TanStack Query Keys
-- `['users']`
+---
+
+## API
+### GET `/users` — list users
+### POST `/users` — create user
+
+---
+
+## UX States
+- Loading: user list shows loading text while query runs.
+- Error: create mutation error is shown inline in form.
+- Empty: list shows "No users yet." when no data.
+- Success: create invalidates `['users']` and resets form.
+
+---
+
+## Routing
+- `/users` -> `UserManagementPage`
+
+---
 
 ## Dependencies
-- **API calls**: `api.users.create`, `api.users.list`
+- Query key: `['users']`
+- API: `api.users.list`, `api.users.create`

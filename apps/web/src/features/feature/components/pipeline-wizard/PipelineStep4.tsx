@@ -1,6 +1,16 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { FileText, Loader2, Play, RefreshCw } from 'lucide-react';
-import { api, Feature, WorkflowStep, BackendPlan, FrontendPlan, TestingPlan } from '@/lib/api';
+import {
+  api,
+  Feature,
+  WorkflowStep,
+  BackendPlan,
+  FrontendPlan,
+  TestingPlan,
+  BackendTestingPlan,
+  FrontendTestingPlan,
+  DevPlan,
+} from '@/lib/api';
 import { useAppStore } from '@/store';
 import { toast } from '@/hooks/use-toast';
 import { MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
@@ -27,7 +37,64 @@ interface PipelineStep4Props {
   runStep: (step: number) => void;
 }
 
-type Section = 'workflow-backend' | 'frontend' | 'testing';
+type Step4Section = 'workflow-backend' | 'frontend' | 'testing-backend' | 'testing-frontend';
+type PartialTestingPlan = Partial<TestingPlan>;
+
+const EMPTY_BACKEND: BackendPlan = {
+  database: { entities: [], relationships: [] },
+  apiRoutes: [],
+  folderStructure: [],
+};
+
+const EMPTY_FRONTEND: FrontendPlan = {
+  components: [],
+  pages: [],
+  store: [],
+  hooks: [],
+  utils: [],
+  services: [],
+};
+
+const EMPTY_BACKEND_TESTING: BackendTestingPlan = {
+  testScenarios: [],
+  apiTestCases: [],
+  databaseTesting: [],
+  businessLogicTesting: [],
+  paginationQueryTesting: [],
+  performanceTesting: [],
+  securityTesting: [],
+  errorHandlingTesting: [],
+  tasks: [],
+};
+
+const EMPTY_FRONTEND_TESTING: FrontendTestingPlan = {
+  testScenarios: [],
+  uiTestCases: [],
+  validationTesting: [],
+  uxStateTesting: [],
+  apiIntegrationTesting: [],
+  routingNavigationTesting: [],
+  crossBrowserTesting: [],
+  edgeCases: [],
+  tasks: [],
+};
+
+function buildDevPlan(
+  workflow: WorkflowStep[] | null,
+  backend: BackendPlan | null,
+  frontend: FrontendPlan | null,
+  testing: PartialTestingPlan | null,
+): DevPlan {
+  return {
+    workflow: workflow ?? [],
+    backend: backend ?? EMPTY_BACKEND,
+    frontend: frontend ?? EMPTY_FRONTEND,
+    testing: {
+      backend: testing?.backend ?? EMPTY_BACKEND_TESTING,
+      frontend: testing?.frontend ?? EMPTY_FRONTEND_TESTING,
+    },
+  };
+}
 
 function SectionGenerateButton({
   label,
@@ -36,7 +103,7 @@ function SectionGenerateButton({
   disabled,
 }: {
   label: string;
-  section: Section;
+  section: Step4Section;
   featureId: string;
   disabled: boolean;
 }) {
@@ -94,7 +161,7 @@ export function PipelineStep4({
   let workflow: WorkflowStep[] | null = null;
   let backend: BackendPlan | null = null;
   let frontend: FrontendPlan | null = null;
-  let testing: TestingPlan | null = null;
+  let testing: PartialTestingPlan | null = null;
 
   try { if (feature.devPlanWorkflow) workflow = JSON.parse(feature.devPlanWorkflow); } catch {}
   try { if (feature.devPlanBackend)  backend  = JSON.parse(feature.devPlanBackend);  } catch {}
@@ -103,6 +170,8 @@ export function PipelineStep4({
 
   const hasWorkflowBackend = !!(workflow && backend);
   const hasFrontend = !!frontend;
+  const hasBackendTesting = !!testing?.backend;
+  const hasFrontendTesting = !!testing?.frontend;
 
   return (
     <div className="border-t px-4 py-4 space-y-4">
@@ -196,7 +265,7 @@ export function PipelineStep4({
             {workflow && backend && (
               <div className="px-3 py-3">
                 <DevPlanPanel
-                  devPlan={{ workflow, backend, frontend: frontend ?? { components: [], pages: [], store: [], hooks: [], utils: [], services: [] }, testing: testing ?? { backend: { testScenarios: [], apiTestCases: [], databaseTesting: [], businessLogicTesting: [], paginationQueryTesting: [], performanceTesting: [], securityTesting: [], errorHandlingTesting: [], tasks: [] }, frontend: { testScenarios: [], uiTestCases: [], validationTesting: [], uxStateTesting: [], apiIntegrationTesting: [], routingNavigationTesting: [], crossBrowserTesting: [], edgeCases: [], tasks: [] } } }}
+                  devPlan={buildDevPlan(workflow, backend, frontend, testing)}
                   sectionsFilter={['workflow', 'backend']}
                 />
               </div>
@@ -229,27 +298,60 @@ export function PipelineStep4({
             {frontend && (
               <div className="px-3 py-3">
                 <DevPlanPanel
-                  devPlan={{ workflow: workflow ?? [], backend: backend ?? { database: { entities: [], relationships: [] }, apiRoutes: [], folderStructure: [] }, frontend, testing: testing ?? { backend: { testScenarios: [], apiTestCases: [], databaseTesting: [], businessLogicTesting: [], paginationQueryTesting: [], performanceTesting: [], securityTesting: [], errorHandlingTesting: [], tasks: [] }, frontend: { testScenarios: [], uiTestCases: [], validationTesting: [], uxStateTesting: [], apiIntegrationTesting: [], routingNavigationTesting: [], crossBrowserTesting: [], edgeCases: [], tasks: [] } } }}
+                  devPlan={buildDevPlan(workflow, backend, frontend, testing)}
                   sectionsFilter={['frontend']}
                 />
               </div>
             )}
           </div>
 
-          {/* Testing */}
+          {/* Backend Testing */}
           <div className="border rounded-md overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
               <span className="text-sm font-medium">
-                Testing Plan
-                {testing && (
+                Backend Testing
+                {hasBackendTesting && (
                   <span className="ml-2 text-xs text-muted-foreground font-normal">
-                    {(testing.backend?.tasks?.length ?? 0) + (testing.frontend?.tasks?.length ?? 0)} tasks
+                    {testing?.backend?.tasks?.length ?? 0} tasks
                   </span>
                 )}
               </span>
               <SectionGenerateButton
-                label="Testing"
-                section="testing"
+                label="Backend Testing"
+                section="testing-backend"
+                featureId={featureId}
+                disabled={!canRun || !hasWorkflowBackend}
+              />
+            </div>
+            {!hasWorkflowBackend && (
+              <p className="px-3 py-2 text-xs text-muted-foreground italic">
+                Generate Workflow + Backend first.
+              </p>
+            )}
+            {hasBackendTesting && (
+              <div className="px-3 py-3">
+                <DevPlanPanel
+                  devPlan={buildDevPlan(workflow, backend, frontend, { backend: testing?.backend })}
+                  sectionsFilter={['testing']}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Frontend Testing */}
+          <div className="border rounded-md overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
+              <span className="text-sm font-medium">
+                Frontend Testing
+                {hasFrontendTesting && (
+                  <span className="ml-2 text-xs text-muted-foreground font-normal">
+                    {testing?.frontend?.tasks?.length ?? 0} tasks
+                  </span>
+                )}
+              </span>
+              <SectionGenerateButton
+                label="Frontend Testing"
+                section="testing-frontend"
                 featureId={featureId}
                 disabled={!canRun || !hasWorkflowBackend || !hasFrontend}
               />
@@ -259,10 +361,10 @@ export function PipelineStep4({
                 Generate Workflow + Backend and Frontend first.
               </p>
             )}
-            {testing && (
+            {hasFrontendTesting && (
               <div className="px-3 py-3">
                 <DevPlanPanel
-                  devPlan={{ workflow: workflow ?? [], backend: backend ?? { database: { entities: [], relationships: [] }, apiRoutes: [], folderStructure: [] }, frontend: frontend ?? { components: [], pages: [], store: [], hooks: [], utils: [], services: [] }, testing }}
+                  devPlan={buildDevPlan(workflow, backend, frontend, { frontend: testing?.frontend })}
                   sectionsFilter={['testing']}
                 />
               </div>

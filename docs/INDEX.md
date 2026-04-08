@@ -1,5 +1,5 @@
 # Documentation Index
-_Last updated: 2026-04-07_
+_Last updated: 2026-04-08_
 
 ## Frontend Features (`apps/web/src/features/`)
 | Feature | Doc | Purpose |
@@ -16,14 +16,14 @@ _Last updated: 2026-04-07_
 ## Backend Modules (`apps/api/src/modules/`)
 | Module | Doc | Purpose |
 |--------|-----|---------|
-| auth | [docs/modules/auth.md](modules/auth.md) | JWT authentication, password hashing, admin seeding |
-| user | [docs/modules/user.md](modules/user.md) | Create and list application users |
-| project | [docs/modules/project.md](modules/project.md) | CRUD for projects/features, file uploads, pipeline config |
-| storage | [docs/modules/storage.md](modules/storage.md) | Swappable file storage abstraction (local disk by default) |
-| ai | [docs/modules/ai.md](modules/ai.md) | AI provider registry and abstract pipeline interface |
-| chat | [docs/modules/chat.md](modules/chat.md) | Chat sessions and SSE streaming AI responses |
-| test-case | [docs/modules/test-case.md](modules/test-case.md) | 4-layer AI pipeline to generate and persist test cases |
-| dev-task | [docs/modules/dev-task.md](modules/dev-task.md) | CRUD for pipeline step-4 developer task records |
+| auth | [docs/modules/auth.md](modules/auth.md) | JWT auth, route guards, and admin bootstrap seeding |
+| user | [docs/modules/user.md](modules/user.md) | User creation/listing with safe response projection |
+| project | [docs/modules/project.md](modules/project.md) | Project/feature CRUD, uploads, and pipeline step config |
+| storage | [docs/modules/storage.md](modules/storage.md) | Pluggable storage provider contract with local adapter |
+| ai | [docs/modules/ai.md](modules/ai.md) | Provider discovery and factory for model-backed operations |
+| chat | [docs/modules/chat.md](modules/chat.md) | Feature chat sessions/messages with SSE AI streaming |
+| test-case | [docs/modules/test-case.md](modules/test-case.md) | Multi-step AI pipeline and test/dev output persistence |
+| dev-task | [docs/modules/dev-task.md](modules/dev-task.md) | Read/delete API for pipeline-generated developer tasks |
 
 ## Usage
 Reference these docs instead of source code to reduce token usage:

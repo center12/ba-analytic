@@ -1,38 +1,47 @@
 # Module: auth
-**Purpose**: Handles JWT-based authentication, password hashing, and admin account seeding.
+**Purpose**: Authenticates users with JWT, enforces route protection, and seeds the initial admin account.
 
-## API Routes
-| Method | Path | Handler | Description |
-|--------|------|---------|-------------|
-| POST | `/api/auth/login` | `login` | Validate credentials and return a JWT access token (public route) |
+## Scope
+- In: login endpoint, password hashing, JWT validation strategies/guards, admin bootstrap seeding
+- Out: user persistence to Prisma `User`, global guard wiring in application bootstrap
 
-## Service Methods
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `login` | `(dto: LoginDto) => Promise<{ accessToken: string }>` | Verify username/password, sign JWT |
-| `hashPassword` | `(plain: string) => Promise<string>` | Bcrypt hash — used by UserService and AdminSeeder |
+## Data Model
+| Entity | Key Fields | Storage |
+|--------|-----------|---------|
+| `User` | `id`, `username` (unique), `passwordHash` | Postgres |
 
-## DTOs
-| Class | Fields |
-|-------|--------|
-| `LoginDto` | `username: string`, `password: string (min 6)` |
+**Relationships**: `User` is referenced by JWT payload (`sub`) for auth checks.
 
-## Constants
-| Name | Value |
-|------|-------|
-| `JWT_SECRET_KEY` | `'JWT_SECRET'` (env var name) |
-| `JWT_EXPIRES_IN` | `'7d'` |
-| `BCRYPT_ROUNDS` | `10` |
+## API Contracts
+| Method | Path | Input | Output | Errors |
+|--------|------|-------|--------|--------|
+| POST | `/api/auth/login` | body: `username`, `password(min 6)` | `{ accessToken: string }` | `401 Invalid username or password` |
 
-## Extra Files
-| File | Responsibility |
-|------|----------------|
-| `jwt.strategy.ts` | Passport JWT strategy — extracts `sub`/`username` from Bearer token |
-| `jwt-auth.guard.ts` | Global guard; skips routes decorated with `@Public()` |
-| `guards/sse-jwt-auth.guard.ts` | Validates JWT from `?token=` query param (for SSE routes) |
-| `decorators/public.decorator.ts` | `@Public()` — sets `isPublic` metadata to bypass `JwtAuthGuard` |
-| `admin.seeder.ts` | `OnApplicationBootstrap` hook — creates admin from `ADMIN_USERNAME`/`ADMIN_PASSWORD` env vars |
+## Core Flows (top 3)
+### Login and token issue
+1. Validate login DTO.
+2. Load user by username from Prisma.
+3. Compare bcrypt hash; throw `UnauthorizedException` on mismatch.
+4. Sign JWT `{ sub, username }` and return `accessToken`.
 
-## NestJS Dependencies
-- Imports: `JwtModule`, `PassportModule`, `ConfigModule`, `PrismaService`
-- Guards: `JwtAuthGuard` registered globally in `main.ts`
+### JWT request guard
+1. Global `JwtAuthGuard` checks `isPublic` metadata.
+2. If public, bypass auth; else use Passport `jwt` strategy.
+3. Strategy verifies signature/expiry and resolves user by `payload.sub`.
+4. Throw `UnauthorizedException` when token invalid or user missing.
+
+### Admin bootstrap seeding
+1. Read `ADMIN_USERNAME`/`ADMIN_PASSWORD` from config on app bootstrap.
+2. Skip when env vars missing or username already exists.
+3. Hash password via `AuthService.hashPassword`.
+4. Create admin user in Prisma.
+
+## Constraints
+- `LoginDto.password` minimum length is 6.
+- JWT secret key from `JWT_SECRET`, expiry fixed at `7d`.
+- Bcrypt cost factor fixed at `10`.
+- SSE auth uses query token (`?token=`) and rejects missing/invalid token with `401`.
+
+## Dependencies
+- Depends on: `PrismaService`, `JwtModule`, `PassportModule`, `ConfigModule`, `Reflector`
+- Used by: `UserModule` (password hashing), global app guard (`JwtAuthGuard`), `ChatModule` (`SseJwtAuthGuard`)

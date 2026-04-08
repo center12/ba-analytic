@@ -15,59 +15,61 @@ If $ARGUMENTS is set, process only the matching module folder. Otherwise process
 ## Step 2 — Read each module
 
 For `apps/api/src/modules/<name>/`, read in order (skip absent files):
-1. `<name>.controller.ts` — every @Get/@Post/@Put/@Patch/@Delete/@Sse decorated method:
-   record HTTP method, path, handler name, one-line description
-2. `<name>.service.ts` — public method signatures only (name + params + return type, no bodies)
-3. `dto/*.ts` — each DTO class name and its fields with types
-4. `constants/<name>.constants.ts` OR root-level `constants.ts` — exported constant names
-   and their scalar values (skip large objects; write "see file" instead)
-5. `helpers/*.ts` — exported function names and param signatures
-6. Any other files (guards, decorators, adapters, strategies, seeders) —
-   filename + one-line responsibility
+1. `<name>.controller.ts` — every @Get/@Post/@Put/@Patch/@Delete/@Sse method:
+   record HTTP method, path, input params/body fields, output shape, error codes
+2. `<name>.service.ts` — top 3 most important public methods; infer core flows
+   from method logic (numbered steps); note thrown exceptions and business rules
+3. `dto/*.ts` — entity names and key fields; infer storage type (Postgres, Redis)
+4. `<name>.module.ts` — imports list and any globally applied guards
+5. `constants/<name>.constants.ts` or root `constants.ts` — scalar constant values
+6. `helpers/*.ts` — exported function names
+7. Any other files (guards, decorators, strategies, seeders) — one-line responsibility
+
+Also infer:
+- **Scope**: what the module owns (In) vs. what it delegates (Out)
+- **Relationships**: foreign keys or cross-service dependencies between entities
+- **Constraints**: validators (business rules), caught/thrown errors (edge cases),
+  rate limits / TTL / concurrency notes (non-functional)
 
 ## Step 3 — Write docs/modules/<name>.md
 
 Use this template. Omit any section whose content is empty.
-Overwrite the file completely if it already exists.
+Overwrite the file completely if it already exists. Keep the file under 100 lines.
 
 ```
 # Module: <name>
-**Purpose**: <one sentence describing what this module does>
+**Purpose**: one sentence describing what this module does
 
-## API Routes
-| Method | Path | Handler | Description |
-|--------|------|---------|-------------|
+## Scope
+- In: (what this module owns / is responsible for)
+- Out: (what it delegates to other modules)
 
-## Service Methods
-| Method | Signature | Description |
-|--------|-----------|-------------|
+## Data Model
+| Entity | Key Fields | Storage |
+|--------|-----------|---------|
 
-## DTOs
-| Class | Fields |
-|-------|--------|
+**Relationships**: <EntityA> (1) → (N) <EntityB>, ...
 
-## Constants
-| Name | Value |
-|------|-------|
+## API Contracts
+| Method | Path | Input | Output | Errors |
+|--------|------|-------|--------|--------|
 
-## Helpers
-| Function | Signature |
-|----------|-----------|
+## Core Flows (top 3)
+### <Flow Name>
+1. step
+2. step
 
-## Extra Files
-| File | Responsibility |
-|------|----------------|
+## Constraints
+- (business rules, edge cases, non-functional: rate limits, TTL, concurrency, expiry)
 
-## NestJS Dependencies
-- Imports: (other modules imported by this module)
-- Guards: (guards applied globally or per-route)
+## Dependencies
+- Depends on: (modules/services this module imports or calls)
+- Used by: (modules/features that depend on this module)
 ```
-
-Keep each file under 100 lines.
 
 ## Step 4 — Extract global shared backend code
 
-Scan backend folders that live outside `modules/` (shared providers, common utilities):
+Scan backend folders outside `modules/` (shared providers, common utilities):
 - `src/common/**/*.ts` (or `apps/api/src/common/`)
 - `src/guards/**/*.ts`
 - `src/decorators/**/*.ts`

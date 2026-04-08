@@ -1,42 +1,60 @@
-# Feature: auth
-**Purpose**: Provides login/logout functionality and JWT token management for authenticating users.
+# Feature: Auth
 
-## Pages / Entry Components
-| File | Export | Purpose |
-|------|--------|---------|
-| `LoginPage.tsx` | `LoginPage` | Full-page login form that authenticates and redirects to `/projects` |
+## Purpose
+- Authenticate users with username/password and persist JWT-based session state.
+
+---
+
+## User Flow
+1. Open `/login` and enter username/password.
+2. Submit credentials to login API via auth store.
+3. On success, persist token and navigate to `/projects`; on failure, show inline error.
+
+---
+
+## Screens
+### LoginPage
+- Elements:
+  - Product heading and sign-in subtitle
+  - `LoginForm` with loading and error states
+
+---
 
 ## Components
-| File | Purpose |
-|------|---------|
-| `components/LoginForm.tsx` | Controlled form with username/password fields and error display |
+- `LoginPage` — orchestrates login submit, loading/error handling, and redirect.
+- `LoginForm` — controlled username/password form with submit button.
+
+---
+
+## State
+- Local: `isLoading`, `error`, `username`, `password`
+- Global (store): `token`, `user`, `isAuthenticated`, `login`, `logout` via `useAuthStore`
+
+---
 
 ## Types
-```ts
-export interface AuthUser { id: string; username: string; }
-export interface LoginCredentials { username: string; password: string; }
-export interface AuthState {
-  user: AuthUser | null;
-  token: string | null;
-  isAuthenticated: boolean;
-  login: (credentials: LoginCredentials) => Promise<void>;
-  logout: () => void;
-}
-```
+- `AuthUser`, `LoginCredentials`, `AuthState`
 
-## Exported Helpers
-| Function | Signature |
-|----------|-----------|
-| `getStoredToken` | `() => string \| null` |
-| `setStoredToken` | `(token: string) => void` |
-| `removeStoredToken` | `() => void` |
-| `decodeTokenPayload` | `(token: string) => { sub: string; username: string } \| null` |
+---
 
-## Constants
-| Name | Value / Notes |
-|------|---------------|
-| `TOKEN_STORAGE_KEY` | `'ba_auth_token'` — localStorage key for JWT |
+## API
+### POST `/auth/login` — authenticate and return access token
+
+---
+
+## UX States
+- Loading: submit button switches to signing-in state.
+- Error: failed login shows message under fields.
+- Success: token stored and route redirects to projects page.
+
+---
+
+## Routing
+- `/login` -> `LoginPage`
+
+---
 
 ## Dependencies
-- **API calls**: `api.auth.login` (via `auth.store.ts`)
-- **State**: `useAuthStore` — `login`, `logout`, `user`, `isAuthenticated`
+- API: `api.auth.login`
+- Helpers: `getStoredToken`, `setStoredToken`, `removeStoredToken`, `decodeTokenPayload`
+- Constants: `TOKEN_STORAGE_KEY`

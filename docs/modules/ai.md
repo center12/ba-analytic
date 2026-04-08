@@ -1,45 +1,46 @@
 # Module: ai
-**Purpose**: Exposes available AI providers and models; wraps Vercel AI SDK providers behind an abstract interface.
+**Purpose**: Centralizes AI provider discovery and provider selection for pipeline generation and chat streaming.
 
-## API Routes
-| Method | Path | Handler | Description |
-|--------|------|---------|-------------|
-| GET | `/api/ai/providers` | `getAvailableProviders` | Returns providers with configured API keys and their model lists |
+## Scope
+- In: provider availability endpoint, provider/model selection, abstract AI contract
+- Out: business-specific orchestration delegated to `test-case` and `chat` modules
 
-## Constants
-| Name | Value |
-|------|-------|
-| `SUPPORTED_MODELS` | `Record<'gemini'\|'claude'\|'openai', ModelInfo[]>` — see file for full model list |
+## Data Model
+| Entity | Key Fields | Storage |
+|--------|-----------|---------|
+| `Provider Catalog` | `provider`, `label`, API-key presence | In-memory/config |
+| `Supported Models` | model `id`, `label` by provider | In-memory constants |
 
-## Extra Files
-| File | Responsibility |
-|------|----------------|
-| `ai-provider.abstract.ts` | `AIProvider` abstract class with all pipeline layer methods + prompt builder functions |
-| `ai-provider.factory.ts` | `AIProviderFactory` — resolves concrete provider by name (`AI_PROVIDER` env var default) |
-| `providers/gemini.provider.ts` | `GeminiProvider` — Vercel AI SDK `@ai-sdk/google` implementation |
-| `providers/claude.provider.ts` | `ClaudeProvider` — Vercel AI SDK `@ai-sdk/anthropic` with `cache_control` |
-| `providers/openai.provider.ts` | `OpenAIProvider` — Vercel AI SDK `@ai-sdk/openai` implementation |
+**Relationships**: `AIProviderFactory` injects concrete providers (`GeminiProvider`, `ClaudeProvider`, `OpenAIProvider`) and returns an `AIProvider` interface.
 
-## Abstract Methods (AIProvider)
-| Method | Description |
-|--------|-------------|
-| `extractAll(baDoc)` | Layer 1 combined — requirements + behaviors in one call |
-| `synthesiseExtraction(merged)` | Layer 1 synthesis — deduplicates multi-chunk merges |
-| `planTestScenarios(req, beh)` | Layer 2 — produce up to 15 test scenarios |
-| `generateTestCasesFromScenarios(scenarios, req)` | Layer 3 — detailed test cases per scenario |
-| `generateDevPlanWorkflowBackend(req, beh, scenarios)` | Step 4A — workflow steps + backend (DB entities, API routes, folder structure) |
-| `generateDevPlanFrontend(req, beh, workflowSummary)` | Step 4B — frontend components, pages, store, hooks, utils, services |
-| `generateDevPlanTesting(req, scenarios, apiRoutes, components)` | Step 4C — backend unit tests and frontend test cases |
-| `generateDevPrompt(req, beh, scenarios, devPlan?)` | Step 5 — API/Frontend/Testing sub-task prompts |
-| `chat(history, userMessage)` | SSE streaming chat (AsyncIterable) |
-| `withModel(model)` | Clone provider with overridden modelVersion |
-| `cacheContext(content)` | Cache large context with provider (returns cache key or null) |
+## API Contracts
+| Method | Path | Input | Output | Errors |
+|--------|------|-------|--------|--------|
+| GET | `/api/ai/providers` | none | `[ { provider, label, models[] } ]` filtered by configured API keys | no explicit module-level errors |
 
-## Factory Methods (AIProviderFactory)
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `getProvider` | `(name?: ProviderName, model?: string): AIProvider` | Resolve provider by name (falls back to `AI_PROVIDER` env); applies model override via `withModel` |
+## Core Flows (top 3)
+### Provider discovery endpoint
+1. Build static catalog of `gemini`/`claude`/`openai`.
+2. Check each provider API key from `ConfigService`.
+3. Return only configured providers with model lists.
 
-## NestJS Dependencies
-- Imports: `ConfigModule`
-- Guards: `JwtAuthGuard` (global)
+### Provider resolution
+1. Resolve requested provider name or fallback to `AI_PROVIDER` default.
+2. Select concrete provider via switch.
+3. Optionally clone provider with model override (`withModel`).
+4. Throw `Error` for unknown provider names.
+
+### Shared AI contract usage
+1. Consumer requests `AIProvider` from factory.
+2. Consumer calls abstract methods for extraction/planning/generation/chat.
+3. For Step 4, consumers call separate generation methods for `workflow-backend`, `frontend`, `testing-backend`, and `testing-frontend`.
+4. Concrete provider executes model-specific implementation.
+
+## Constraints
+- Supported providers are limited to `gemini`, `claude`, `openai`.
+- Unknown provider selection throws immediately.
+- Provider visibility in API is gated by configured API keys.
+
+## Dependencies
+- Depends on: `ConfigService`, provider implementations, Nest DI module wiring
+- Used by: `test-case` pipeline (`AIProviderFactory`) for Step 1-5 generation including split Step 4 runs, `chat` streaming (`AIProviderFactory`), frontend model selector endpoint

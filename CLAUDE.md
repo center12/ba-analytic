@@ -88,13 +88,15 @@ Triggered by `POST /api/test-cases/feature/:id/generate`. Runs in sequence:
 | 1B | Behavior Extraction | `ExtractedBehaviors` (actors, actions, rules) — runs in parallel with 1A |
 | 2 | Scenario Planning | `TestScenario[]` (happy path, edge cases, errors, boundary, security) |
 | 3 | Test Case Generation | `TestCase[]` persisted to DB |
-| 4 | Development Plan | `DevPlan { workflow, backend, frontend, testing }` — 3 independent sub-sections, each callable separately via `runStep4a/b/c` |
+| 4 | Development Plan | `DevPlan { workflow, backend, frontend, testing }` — staged sub-runs: 4A workflow+backend, 4B frontend, 4C backend testing, 4C frontend testing |
 | 5 | Dev Prompt Generation | `DevPrompt { api: DevTaskItem[], frontend: DevTaskItem[], testing: DevTaskItem[] }` → saved to Feature + N `DeveloperTask` records (1 per sub-task; count scales with scenario complexity) |
 
 **Step 4 sub-sections** — callable individually via `POST /api/test-cases/feature/:id/run-step-4-section/:section`:
 - `workflow-backend` (`runStep4a`) — generates `WorkflowStep[]` + `BackendPlan`; no prerequisites beyond Step 2
 - `frontend` (`runStep4b`) — generates `FrontendPlan`; requires `workflow-backend` to be done first
-- `testing` (`runStep4c`) — generates `TestingPlan`; requires both `workflow-backend` and `frontend` first
+- `testing-backend` (`runStep4cBackend`) — generates backend testing plan; requires backend output from `workflow-backend`
+- `testing-frontend` (`runStep4cFrontend`) — generates frontend testing plan; requires backend and frontend outputs
+- `testing` (`runStep4c`) — convenience wrapper that runs backend testing first, then frontend testing
 
 Each re-run of Step 5 deletes existing `DeveloperTask` records for the feature before creating fresh ones.
 

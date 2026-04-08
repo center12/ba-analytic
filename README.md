@@ -240,7 +240,7 @@ BA Document
 
 Steps 1A and 1B run in parallel. Each step's output is saved to the database immediately so the UI can show partial results.
 
-**Step 4 sections are individually regenerable** — each section (Workflow+Backend, Frontend, Testing) has its own generate button in the UI and can be re-run independently. Frontend requires Workflow+Backend first; Testing requires both.
+**Step 4 sections are individually regenerable** — the UI presents Workflow+Backend, Frontend, and Testing controls, while the backend contract uses `workflow-backend`, `frontend`, `testing-backend`, and `testing-frontend`. Frontend requires Workflow+Backend first; backend testing requires backend output; frontend testing requires both backend and frontend.
 
 **Supported providers**: Gemini (`gemini-2.0-flash`), Claude (`claude-sonnet-4-6`), OpenAI (`gpt-4o`). The active provider is selectable in the UI at runtime.
 
@@ -282,7 +282,7 @@ The SSE chat stream (`/api/chat/sessions/:id/stream`) passes the token as a quer
 | GET | `/api/test-cases/feature/:id` | required | List test cases for a feature |
 | POST | `/api/test-cases/feature/:id/generate` | required | Run the full AI pipeline |
 | POST | `/api/test-cases/feature/:id/run-step/:step` | required | Run a single pipeline step (1–5) |
-| POST | `/api/test-cases/feature/:id/run-step-4-section/:section` | required | Generate one Step 4 section (`workflow-backend` / `frontend` / `testing`) |
+| POST | `/api/test-cases/feature/:id/run-step-4-section/:section` | required | Generate one Step 4 section (`workflow-backend` / `frontend` / `testing-backend` / `testing-frontend`; UI may also call high-level `testing`) |
 | GET | `/api/dev-tasks/feature/:id` | required | List developer tasks for a feature |
 | DELETE | `/api/dev-tasks/:id` | required | Delete a developer task |
 | POST | `/api/chat/sessions` | required | Create a chat session |

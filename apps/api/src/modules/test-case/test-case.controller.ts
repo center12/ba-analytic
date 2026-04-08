@@ -95,7 +95,7 @@ export class TestCaseController {
 
   /**
    * POST /api/test-cases/feature/:featureId/run-step-4-section/:section?provider=gemini
-   * Generates a single section of Step 4 (workflow-backend | frontend | testing).
+   * Generates a single section of Step 4 (workflow-backend | frontend | testing | testing-backend | testing-frontend).
    */
   @Post('feature/:featureId/run-step-4-section/:section')
   runStep4Section(
