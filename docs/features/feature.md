@@ -10,7 +10,8 @@
 2. Upload BA document (`.md`) and screenshots.
 3. Run steps 1-5 (or save manual JSON), then review generated outputs.
 4. In Step 4, generate `workflow-backend` first, then `frontend`, then testing sub-runs (`testing-backend`, `testing-frontend`) as prerequisites allow.
-5. Consume test cases, dev plan sections, prompts, and task list.
+5. For Step 4 and Step 5, users can click `Manual`, copy prompt text to external AI tools, then paste customized JSON back via `ManualPanel`.
+6. Consume test cases, dev plan sections, prompts, and task list.
 
 ---
 
@@ -32,6 +33,7 @@
 - `PipelineWizard` — owns query/mutation flow and step state.
 - `PipelineStep1`/`2`/`3`/`4`/`5` — per-step UI for extraction, scenarios, test cases, dev plan, and prompts.
 - `PipelineStep4` — renders section-specific Step 4 generation controls and prerequisite messaging.
+- `ManualPanel` — copy prompt + paste/save JSON for manual external-AI refinement.
 - `DevPlanPanel` and `DevPromptPanel` — viewers for Step 4 and Step 5 outputs.
 
 ---
@@ -60,6 +62,8 @@
 - `frontend` — generates frontend prompts/tasks only
 - `testing` — generates testing prompts/tasks only
 ### GET `/test-cases/feature/:id/step/:step/prompt` — fetch manual prompt
+
+Note: Step 5 UI label `Backend` maps to persisted `devPromptApi` / `API` category for compatibility.
 
 ---
 

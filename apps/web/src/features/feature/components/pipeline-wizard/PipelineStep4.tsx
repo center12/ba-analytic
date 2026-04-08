@@ -227,6 +227,14 @@ export function PipelineStep4({
         )}
       </div>
 
+      {previousStepCompleted && (
+        <p className="text-xs text-muted-foreground">
+          Manual flow: click <span className="font-medium">Manual</span> to copy the Step 4 prompt, refine it in an external chatbot, then paste JSON back to save. Step 4 sections are
+          <span className="font-medium"> workflow-backend</span>, <span className="font-medium">frontend</span>, <span className="font-medium">testing-backend</span>, and
+          <span className="font-medium">testing-frontend</span>.
+        </p>
+      )}
+
       {manualStep === 4 && (
         <ManualPanel
           step={4}

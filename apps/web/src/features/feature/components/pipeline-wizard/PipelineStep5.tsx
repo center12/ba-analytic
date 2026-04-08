@@ -143,6 +143,14 @@ export function PipelineStep5({
       </div>
 
       {previousStepCompleted && (
+        <p className="text-xs text-muted-foreground">
+          Manual flow: click <span className="font-medium">Manual</span> to copy the Step 5 prompt, refine it in an external chatbot, then paste JSON back to save. Step 5 sections are
+          <span className="font-medium"> backend</span>, <span className="font-medium">frontend</span>, and <span className="font-medium">testing</span>. Backend maps to stored
+          <span className="font-medium"> devPromptApi</span> / <span className="font-medium">API</span> for compatibility.
+        </p>
+      )}
+
+      {previousStepCompleted && (
         <div className="flex items-center gap-2 flex-wrap">
           <SectionGenerateButton
             label="Backend"

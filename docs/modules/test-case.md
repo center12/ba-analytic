@@ -49,6 +49,8 @@
 1. `saveStepResults` accepts user-edited payload for step 1-5.
 2. For step 3 and 5, existing `TestCase`/`DeveloperTask` rows are deleted then recreated.
 3. Feature pipeline metadata is updated to completed state for edited step.
+4. Step 4 and Step 5 support manual external-AI flow: copy step prompt (`step-prompt` endpoint), refine in external chatbot, paste JSON, then persist through `saveStepResults`.
+5. Step 5 compatibility naming: UI may show `Backend`, while persistence remains `devPromptApi` and `DeveloperTask.category = API`.
 
 ## Constraints
 - Chunking limits: `MAX_DOC_CHARS 120000`, `CHUNK_MAX_CHARS 40000`, overlap `1500`, delay `2000ms`.
