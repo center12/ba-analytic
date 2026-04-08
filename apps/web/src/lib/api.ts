@@ -416,6 +416,24 @@ export interface BackendPlan {
   backendTasks?: BackendTask[];
 }
 
+export interface FrontendTask {
+  id: string;
+  title: string;
+  description: string;
+}
+
+export interface StateManagement {
+  local: string[];
+  global: string[];
+  tool: string;
+}
+
+export interface ApiIntegration {
+  services: string[];
+  apiMapping: string[];
+  errorMapping: string[];
+}
+
 export interface FrontendPlan {
   components: string[];
   pages: string[];
@@ -423,6 +441,13 @@ export interface FrontendPlan {
   hooks: string[];
   utils: string[];
   services: string[];
+  stateManagement?: StateManagement;
+  apiIntegration?: ApiIntegration;
+  validation?: string[];
+  uxStates?: string[];
+  routing?: string[];
+  errorHandling?: string[];
+  frontendTasks?: FrontendTask[];
 }
 
 export interface TestingPlan {

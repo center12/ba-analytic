@@ -137,6 +137,24 @@ export interface BackendPlan {
   backendTasks?: BackendTask[];
 }
 
+export interface FrontendTask {
+  id: string;          // "FE-01", "FE-02", ...
+  title: string;
+  description: string;
+}
+
+export interface StateManagement {
+  local: string[];    // "ComponentName — stateVar: type"
+  global: string[];   // "storeName (Zustand) — fields"
+  tool: string;       // e.g. "Zustand"
+}
+
+export interface ApiIntegration {
+  services: string[];     // "service.method(params) — VERB /path"
+  apiMapping: string[];   // "METHOD /path → Component — trigger"
+  errorMapping: string[]; // "status → UI behavior"
+}
+
 export interface FrontendPlan {
   components: string[];   // "ComponentName — purpose"
   pages: string[];
@@ -144,6 +162,13 @@ export interface FrontendPlan {
   hooks: string[];
   utils: string[];
   services: string[];
+  stateManagement?: StateManagement;
+  apiIntegration?: ApiIntegration;
+  validation?: string[];    // "field — rule description"
+  uxStates?: string[];      // "ComponentName[loading] — description"
+  routing?: string[];       // "/path → PageComponent — guard"
+  errorHandling?: string[]; // "scenario → UI behavior"
+  frontendTasks?: FrontendTask[];
 }
 
 export interface TestingPlan {
@@ -382,6 +407,9 @@ ${devPlan.backend.cachingStrategy.map(c => `- key \`${c.key}\` (TTL ${c.ttl}): $
 ${devPlan.backend.backendTasks.map((t, i) => `${i + 1}. **${t.title}** — ${t.description}`).join('\n')}` : ''}
 ### Frontend Components
 ${devPlan.frontend.components.join('\n')}
+${devPlan.frontend.frontendTasks?.length ? `
+### Pre-scoped Frontend Tasks
+${devPlan.frontend.frontendTasks.map(t => `${t.id}. **${t.title}** — ${t.description}`).join('\n')}` : ''}
 ` : '';
 
   return `You are a senior software architect. Based on the feature analysis below, generate developer implementation prompts split into sub-tasks — one set for API/backend (4A), one for frontend/UI (4B), and one for test automation (4C).
@@ -620,8 +648,26 @@ export function buildDevPlanFrontendPrompt(
   requirements: ExtractedRequirements,
   behaviors: ExtractedBehaviors,
   workflowSummary: string,
+  backendPlan?: BackendPlan | null,
 ): string {
-  return `You are a senior frontend architect. Based on the feature analysis and workflow below, design the frontend architecture.
+  const backendContractSection = backendPlan ? `
+## Backend Contract
+
+### API Routes
+${backendPlan.apiRoutes.map(r =>
+  `${r.method} ${r.path} — ${r.description}` +
+  (r.params?.length ? `\n  Params: ${r.params.map(p => `${p.name} (${p.in}, ${p.type}${p.required ? ', required' : ''})`).join('; ')}` : '') +
+  (r.requestBody ? `\n  Request body: ${r.requestBody}` : '') +
+  (r.jsonResponse ? `\n  Response: ${r.jsonResponse}` : '') +
+  (r.errorCases?.length ? `\n  Errors: ${r.errorCases.join(' | ')}` : '')
+).join('\n')}
+${backendPlan.validationRules?.length ? `
+### Validation Rules
+${backendPlan.validationRules.map(r => `- ${r}`).join('\n')}` : ''}${backendPlan.security?.length ? `
+### Security
+${backendPlan.security.map(s => `- ${s}`).join('\n')}` : ''}` : '';
+
+  return `You are a senior frontend architect. Based on the feature analysis, workflow, and backend contract below, design the complete frontend architecture.
 
 LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values in that same language. Do not translate or mix languages.
 
@@ -633,21 +679,55 @@ ${behaviors.actors.map(a => `- ${a}`).join('\n')}
 ## Acceptance Criteria
 ${requirements.acceptanceCriteria.map(c => `- ${c}`).join('\n')}
 
+## Business Rules
+${requirements.businessRules.map(r => `- ${r}`).join('\n')}
+
 ## User Workflow
 ${workflowSummary}
-
+${backendContractSection}
 ---
 
 ## Output Requirements
 
-Design the React frontend for this feature. Use Vite + React + TanStack Query + Zustand conventions.
+Design the React frontend using Vite + React + TanStack Query + Zustand conventions.
 
-- **components**: list each component as "ComponentName — one-line purpose". Include all form, list, card, panel, and modal components.
-- **pages**: list page component names (e.g. "FeatureListPage", "FeatureDetailPage").
-- **store**: list Zustand store slices or atoms needed (e.g. "featureStore — holds selected feature and list").
-- **hooks**: list custom hooks (e.g. "useFeature(id) — fetches and caches a single feature").
-- **utils**: list utility/helper functions (e.g. "formatFeatureName(name: string) — trims and capitalises").
-- **services**: list API service functions (e.g. "featureService.create(data) — POST /api/features").
+### Rules:
+- Do NOT invent APIs — follow the Backend Contract exactly
+- Focus on real UI behavior, not just layout
+- Include edge cases (empty state, loading, error, success)
+- Frontend tasks must be atomic (≤ 1 day each) with FE-xx IDs
+
+### 1. Screens & Components
+- **pages**: page-level components ("PageName — purpose")
+- **components**: all reusable components ("ComponentName — one-line purpose"; include forms, lists, cards, panels, modals)
+
+### 2. State Management
+- **store**: Zustand store slices ("storeName — fields")
+- **hooks**: custom TanStack Query hooks ("hookName(params) — description")
+- **utils**: helper/utility functions ("functionName(params) — description")
+- **stateManagement.local**: per-component local state ("ComponentName — stateVar: type")
+- **stateManagement.global**: global Zustand slices ("storeName — fields managed")
+- **stateManagement.tool**: state management library used
+
+### 3. API Integration
+- **services**: API service layer ("service.method(params) — VERB /path")
+- **apiIntegration.apiMapping**: map each API route to the UI that calls it ("METHOD /path → Component — trigger event")
+- **apiIntegration.errorMapping**: map error responses to UI behavior ("status/error → UI behavior")
+
+### 4. Validation
+- **validation**: field-level validation rules derived from business rules ("fieldName — rule description")
+
+### 5. UX States
+- **uxStates**: describe loading/error/empty/success state for each key component ("ComponentName[state] — description")
+
+### 6. Routing
+- **routing**: list all routes with guard info ("/path → PageComponent — guard (e.g. auth required)")
+
+### 7. Error Handling
+- **errorHandling**: global and component-level error scenarios ("scenario → UI behavior")
+
+### 8. Frontend Tasks
+- **frontendTasks**: atomic implementable tasks, each with id (FE-01, FE-02, ...), title, and description
 
 ---
 
@@ -658,7 +738,22 @@ Return ONLY valid JSON (no markdown, no explanation):
   "store": ["string"],
   "hooks": ["string"],
   "utils": ["string"],
-  "services": ["string"]
+  "services": ["string"],
+  "stateManagement": {
+    "local": ["ComponentName — stateVar: type, ..."],
+    "global": ["storeName — fields"],
+    "tool": "Zustand"
+  },
+  "apiIntegration": {
+    "services": ["service.method(params) — VERB /path"],
+    "apiMapping": ["METHOD /path → Component — trigger"],
+    "errorMapping": ["status → UI behavior"]
+  },
+  "validation": ["fieldName — rule description"],
+  "uxStates": ["ComponentName[loading|error|empty|success] — description"],
+  "routing": ["/path → PageComponent — guard"],
+  "errorHandling": ["scenario → UI behavior"],
+  "frontendTasks": [{ "id": "FE-01", "title": "...", "description": "..." }]
 }`;
 }
 
@@ -789,6 +884,7 @@ export abstract class AIProvider {
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
     workflowSummary: string,
+    backendPlan?: BackendPlan | null,
   ): Promise<FrontendPlan>;
 
   /**

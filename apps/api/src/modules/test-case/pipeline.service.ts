@@ -317,12 +317,18 @@ export class PipelineService {
     const workflow: WorkflowStep[] = JSON.parse(rawWorkflow);
     const workflowSummary = workflow.map(s => `${s.order}. ${s.title} (${s.actor}): ${s.description}`).join('\n');
 
+    const rawBackend = (feature as any).devPlanBackend as string | null;
+    let backendPlan: BackendPlan | null = null;
+    if (rawBackend) {
+      try { backendPlan = JSON.parse(rawBackend); } catch { /* ignore */ }
+    }
+
     const provider = await this._resolveProvider(featureId, 4, providerName, model);
     const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
 
     this.logger.log('[Pipeline] Step 4B (manual) — generating frontend plan');
     const frontend = await withRetry(() =>
-      provider.generateDevPlanFrontend(compReq, compBeh, workflowSummary)
+      provider.generateDevPlanFrontend(compReq, compBeh, workflowSummary, backendPlan)
     );
 
     await this.prisma.feature.update({

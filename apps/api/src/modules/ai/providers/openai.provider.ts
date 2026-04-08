@@ -150,13 +150,35 @@ const WorkflowBackendSchema = z.object({
     folderStructure: z.array(z.string()),
   }),
 });
+const FrontendTaskSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+});
+const StateManagementSchema = z.object({
+  local: z.array(z.string()).default([]),
+  global: z.array(z.string()).default([]),
+  tool: z.string().default('Zustand'),
+});
+const ApiIntegrationSchema = z.object({
+  services: z.array(z.string()).default([]),
+  apiMapping: z.array(z.string()).default([]),
+  errorMapping: z.array(z.string()).default([]),
+});
 const FrontendPlanSchema = z.object({
-  components: z.array(z.string()),
-  pages: z.array(z.string()),
-  store: z.array(z.string()),
-  hooks: z.array(z.string()),
-  utils: z.array(z.string()),
-  services: z.array(z.string()),
+  components: z.array(z.string()).default([]),
+  pages: z.array(z.string()).default([]),
+  store: z.array(z.string()).default([]),
+  hooks: z.array(z.string()).default([]),
+  utils: z.array(z.string()).default([]),
+  services: z.array(z.string()).default([]),
+  stateManagement: StateManagementSchema.optional(),
+  apiIntegration: ApiIntegrationSchema.optional(),
+  validation: z.array(z.string()).default([]),
+  uxStates: z.array(z.string()).default([]),
+  routing: z.array(z.string()).default([]),
+  errorHandling: z.array(z.string()).default([]),
+  frontendTasks: z.array(FrontendTaskSchema).default([]),
 });
 const TestingPlanSchema = z.preprocess((input) => {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -399,9 +421,10 @@ ${baDocumentContent}`;
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
     workflowSummary: string,
+    backendPlan?: BackendPlan | null,
   ): Promise<FrontendPlan> {
     this.logger.log('[Step 4B] Generating frontend plan...');
-    const prompt4b = buildDevPlanFrontendPrompt(requirements, behaviors, workflowSummary);
+    const prompt4b = buildDevPlanFrontendPrompt(requirements, behaviors, workflowSummary, backendPlan);
     this.logPromptSize('[Step 4B]', prompt4b);
     const { object, usage, response } = await generateObject({
       model: openai(this.modelVersion),

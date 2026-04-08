@@ -305,6 +305,89 @@ export function step4ToMarkdown(feature: Feature): string {
     }
   });
 
+  if (devPlan.frontend.stateManagement) {
+    const sm = devPlan.frontend.stateManagement;
+    lines.push('### State Management', '');
+    if (sm.tool) lines.push(`**Tool:** ${sm.tool}`, '');
+    if (sm.local.length) {
+      lines.push('**Local State:**', '');
+      sm.local.forEach((s) => lines.push(`- ${s}`));
+      lines.push('');
+    }
+    if (sm.global.length) {
+      lines.push('**Global State:**', '');
+      sm.global.forEach((s) => lines.push(`- ${s}`));
+      lines.push('');
+    }
+  }
+
+  if (devPlan.frontend.apiIntegration) {
+    const ai = devPlan.frontend.apiIntegration;
+    lines.push('### API Integration', '');
+    if (ai.services.length) {
+      lines.push('**Service Layer:**', '');
+      ai.services.forEach((s) => lines.push(`- ${s}`));
+      lines.push('');
+    }
+    if (ai.apiMapping.length) {
+      lines.push('**API Mapping:**', '');
+      ai.apiMapping.forEach((m) => lines.push(`- ${m}`));
+      lines.push('');
+    }
+    if (ai.errorMapping.length) {
+      lines.push('**Error Mapping:**', '');
+      ai.errorMapping.forEach((e) => lines.push(`- ${e}`));
+      lines.push('');
+    }
+  }
+
+  if (devPlan.frontend.validation?.length) {
+    lines.push('### Validation', '');
+    devPlan.frontend.validation.forEach((v) => lines.push(`- ${v}`));
+    lines.push('');
+  }
+
+  if (devPlan.frontend.uxStates?.length) {
+    lines.push('### UX States', '');
+    devPlan.frontend.uxStates.forEach((s) => lines.push(`- ${s}`));
+    lines.push('');
+  }
+
+  if (devPlan.frontend.routing?.length) {
+    lines.push('### Routing', '');
+    lines.push('| Path | Component | Guard |');
+    lines.push('|------|-----------|-------|');
+    devPlan.frontend.routing.forEach((r) => {
+      // Format: "/path → PageComponent — guard"
+      const arrowIdx = r.indexOf('→');
+      const dashIdx  = r.indexOf('—', arrowIdx);
+      if (arrowIdx > -1 && dashIdx > -1) {
+        const path      = r.slice(0, arrowIdx).trim();
+        const component = r.slice(arrowIdx + 1, dashIdx).trim();
+        const guard     = r.slice(dashIdx + 1).trim();
+        lines.push(`| ${path} | ${component} | ${guard} |`);
+      } else {
+        lines.push(`| ${r} | | |`);
+      }
+    });
+    lines.push('');
+  }
+
+  if (devPlan.frontend.errorHandling?.length) {
+    lines.push('### Error Handling', '');
+    devPlan.frontend.errorHandling.forEach((e) => lines.push(`- ${e}`));
+    lines.push('');
+  }
+
+  if (devPlan.frontend.frontendTasks?.length) {
+    lines.push('### Frontend Tasks', '');
+    devPlan.frontend.frontendTasks.forEach((t) => {
+      lines.push(`${t.id}. **${t.title}**`);
+      lines.push(`   ${t.description}`);
+      lines.push('');
+    });
+  }
+
   lines.push('## Testing Plan', '');
   if (devPlan.testing.backendUnitTests.length) {
     lines.push('### Backend Unit Tests', '');
