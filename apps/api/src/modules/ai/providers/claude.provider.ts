@@ -4,6 +4,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { generateObject, streamText } from 'ai';
 import { z } from 'zod';
 import {
+  appendPromptInstructions,
   AIProvider,
   BackendPlan,
   BackendTestingPlan,
@@ -258,13 +259,13 @@ export class ClaudeProvider extends AIProvider {
 
   // ── Layer 1 (combined): Requirements + Behaviors in one cached call ──────────
 
-  async extractAll(baDocumentContent: string): Promise<CombinedExtraction> {
+  async extractAll(baDocumentContent: string, promptAppend?: string): Promise<CombinedExtraction> {
     this.logger.log('[Layer 1] Extracting requirements & behaviors (combined)...');
     const CombinedSchema = z.object({
       requirements: RequirementsSchema,
       behaviors: BehaviorsSchema,
     });
-    const text1 = buildExtractAllPrompt(baDocumentContent);
+    const text1 = appendPromptInstructions(buildExtractAllPrompt(baDocumentContent), promptAppend);
     this.logPromptSize('[Layer 1]', text1);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
@@ -419,9 +420,10 @@ ${baDocumentContent}`;
   async planTestScenarios(
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
+    promptAppend?: string,
   ): Promise<TestScenario[]> {
     this.logger.log('[Layer 2] Planning test scenarios...');
-    const text2 = buildPlanScenariosPrompt(requirements, behaviors);
+    const text2 = appendPromptInstructions(buildPlanScenariosPrompt(requirements, behaviors), promptAppend);
     this.logPromptSize('[Layer 2]', text2);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
@@ -451,9 +453,10 @@ ${baDocumentContent}`;
   async generateTestCasesFromScenarios(
     scenarios: TestScenario[],
     requirements: ExtractedRequirements,
+    promptAppend?: string,
   ): Promise<GeneratedTestCase[]> {
     this.logger.log(`[Layer 3] Generating ${scenarios.length} test cases...`);
-    const text3 = buildGenerateTestCasesPrompt(scenarios, requirements);
+    const text3 = appendPromptInstructions(buildGenerateTestCasesPrompt(scenarios, requirements), promptAppend);
     this.logPromptSize('[Layer 3]', text3);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
@@ -484,9 +487,13 @@ ${baDocumentContent}`;
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
     scenarios: TestScenario[],
+    promptAppend?: string,
   ): Promise<{ workflow: WorkflowStep[]; backend: BackendPlan }> {
     this.logger.log('[Step 4A] Generating workflow + backend plan...');
-    const text4a = buildDevPlanWorkflowBackendPrompt(requirements, behaviors, scenarios);
+    const text4a = appendPromptInstructions(
+      buildDevPlanWorkflowBackendPrompt(requirements, behaviors, scenarios),
+      promptAppend,
+    );
     this.logPromptSize('[Step 4A]', text4a);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
@@ -518,9 +525,13 @@ ${baDocumentContent}`;
     behaviors: ExtractedBehaviors,
     workflowSummary: string,
     backendPlan?: BackendPlan | null,
+    promptAppend?: string,
   ): Promise<FrontendPlan> {
     this.logger.log('[Step 4B] Generating frontend plan...');
-    const text4b = buildDevPlanFrontendPrompt(requirements, behaviors, workflowSummary, backendPlan);
+    const text4b = appendPromptInstructions(
+      buildDevPlanFrontendPrompt(requirements, behaviors, workflowSummary, backendPlan),
+      promptAppend,
+    );
     this.logPromptSize('[Step 4B]', text4b);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
@@ -551,9 +562,13 @@ ${baDocumentContent}`;
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
     backendPlan: BackendPlan,
+    promptAppend?: string,
   ): Promise<BackendTestingPlan> {
     this.logger.log('[Step 4C-BE] Generating backend testing plan...');
-    const text = buildDevPlanBackendTestingPrompt(requirements, behaviors, backendPlan);
+    const text = appendPromptInstructions(
+      buildDevPlanBackendTestingPrompt(requirements, behaviors, backendPlan),
+      promptAppend,
+    );
     this.logPromptSize('[Step 4C-BE]', text);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
@@ -575,9 +590,13 @@ ${baDocumentContent}`;
     behaviors: ExtractedBehaviors,
     backendPlan: BackendPlan,
     frontendPlan: FrontendPlan,
+    promptAppend?: string,
   ): Promise<FrontendTestingPlan> {
     this.logger.log('[Step 4C-FE] Generating frontend testing plan...');
-    const text = buildDevPlanFrontendTestingPrompt(requirements, behaviors, backendPlan, frontendPlan);
+    const text = appendPromptInstructions(
+      buildDevPlanFrontendTestingPrompt(requirements, behaviors, backendPlan, frontendPlan),
+      promptAppend,
+    );
     this.logPromptSize('[Step 4C-FE]', text);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
@@ -602,9 +621,13 @@ ${baDocumentContent}`;
     scenarios: TestScenario[],
     devPlan?: DevPlan,
     targetSection?: DevPromptSection,
+    promptAppend?: string,
   ): Promise<DevPrompt> {
     this.logger.log('[Step 5] Generating dev prompts (API / Frontend / Testing)...');
-    const text4 = buildDevPromptInput(requirements, behaviors, scenarios, devPlan, targetSection);
+    const text4 = appendPromptInstructions(
+      buildDevPromptInput(requirements, behaviors, scenarios, devPlan, targetSection),
+      promptAppend,
+    );
     this.logPromptSize('[Layer 4]', text4);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),

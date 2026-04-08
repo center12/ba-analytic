@@ -25,7 +25,9 @@ interface PipelineStep2Props {
   closeManual: () => void;
   handleManualJsonChange: (v: string) => void;
   handleManualSave: (step: number) => void;
-  runStep: (step: number) => void;
+  runStep: (step: number, promptAppend?: string) => void;
+  promptAppend: string;
+  onPromptAppendChange: (v: string) => void;
   startEdit: (step: number, feature: Feature) => void;
   handleSave: (step: number, feature: Feature) => void;
   cancelEdit: () => void;
@@ -52,6 +54,8 @@ export function PipelineStep2({
   handleManualJsonChange,
   handleManualSave,
   runStep,
+  promptAppend,
+  onPromptAppendChange,
   startEdit,
   handleSave,
   cancelEdit,
@@ -67,7 +71,7 @@ export function PipelineStep2({
           <>
             <button
               disabled={!canRun}
-              onClick={() => runStep(2)}
+              onClick={() => runStep(2, promptAppend)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm disabled:opacity-50 ${
                 status === 'failed'
                   ? 'border border-yellow-500 text-yellow-700 hover:bg-yellow-50'
@@ -102,7 +106,7 @@ export function PipelineStep2({
               className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted">
               <Pencil size={13} /> Edit
             </button>
-            <button disabled={!canRun} onClick={() => runStep(2)}
+            <button disabled={!canRun} onClick={() => runStep(2, promptAppend)}
               className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50">
               <RefreshCw size={13} /> Re-run
             </button>
@@ -126,6 +130,18 @@ export function PipelineStep2({
           </>
         )}
       </div>
+
+      {!isEditing && status !== 'running' && (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">Append instructions for next run (optional)</p>
+          <textarea
+            value={promptAppend}
+            onChange={(e) => onPromptAppendChange(e.target.value)}
+            placeholder="Example: Add more boundary and negative scenarios."
+            className="w-full text-xs border rounded p-2 bg-background min-h-[72px]"
+          />
+        </div>
+      )}
 
       {scenarios.length > 0 && !isEditing && (
         <ul className="space-y-1.5 max-h-64 overflow-y-auto">

@@ -21,6 +21,9 @@ import { PipelineStep3 } from './components/pipeline-wizard/PipelineStep3';
 import { PipelineStep4 } from './components/pipeline-wizard/PipelineStep4';
 import { PipelineStep5 } from './components/pipeline-wizard/PipelineStep5';
 
+type Step4Section = 'workflow-backend' | 'frontend' | 'testing-backend' | 'testing-frontend';
+type Step5Section = 'backend' | 'frontend' | 'testing';
+
 // ── Main wizard ───────────────────────────────────────────────────────────────
 
 interface Props {
@@ -54,6 +57,18 @@ export function PipelineWizard({ featureId }: Props) {
   const [manualStep, setManualStep] = useState<number | null>(null);
   const [manualJson, setManualJson] = useState('');
   const [manualJsonError, setManualJsonError] = useState<string | null>(null);
+  const [stepPromptAppend, setStepPromptAppend] = useState<Record<number, string>>({});
+  const [step4SectionPromptAppend, setStep4SectionPromptAppend] = useState<Record<Step4Section, string>>({
+    'workflow-backend': '',
+    frontend: '',
+    'testing-backend': '',
+    'testing-frontend': '',
+  });
+  const [step5SectionPromptAppend, setStep5SectionPromptAppend] = useState<Record<Step5Section, string>>({
+    backend: '',
+    frontend: '',
+    testing: '',
+  });
 
   function toggleStep(n: number) {
     setOpenStep(v => v === n ? 0 : n);
@@ -131,8 +146,8 @@ export function PipelineWizard({ featureId }: Props) {
   };
 
   const runMutation = useMutation({
-    mutationFn: ({ step }: { step: number }) =>
-      api.testCases.runStep(featureId, step, activeProvider ?? undefined, activeModel),
+    mutationFn: ({ step, promptAppend }: { step: number; promptAppend?: string }) =>
+      api.testCases.runStep(featureId, step, activeProvider ?? undefined, activeModel, undefined, promptAppend),
     onSuccess: (_, { step }) => {
       invalidate();
       toast({ variant: 'success', title: `Step ${step} completed` });
@@ -224,7 +239,7 @@ export function PipelineWizard({ featureId }: Props) {
 
   const statuses = [1, 2, 3, 4, 5].map(n => deriveStatus(n, feature, testCases.length, activeStep));
 
-  const runStep = (step: number) => runMutation.mutate({ step });
+  const runStep = (step: number, promptAppend?: string) => runMutation.mutate({ step, promptAppend });
   const runIsPendingStep = runMutation.isPending ? (runMutation.variables?.step ?? null) : null;
 
   const steps = [
@@ -251,6 +266,8 @@ export function PipelineWizard({ featureId }: Props) {
           handleManualJsonChange={handleManualJsonChange}
           handleManualSave={handleManualSave}
           runStep={runStep}
+          promptAppend={stepPromptAppend[1] ?? ''}
+          onPromptAppendChange={(v) => setStepPromptAppend((prev) => ({ ...prev, 1: v }))}
           resumeStep1={() => resumeMutation.mutate()}
           startEdit={startEdit}
           handleSave={handleSave}
@@ -283,6 +300,8 @@ export function PipelineWizard({ featureId }: Props) {
           handleManualJsonChange={handleManualJsonChange}
           handleManualSave={handleManualSave}
           runStep={runStep}
+          promptAppend={stepPromptAppend[2] ?? ''}
+          onPromptAppendChange={(v) => setStepPromptAppend((prev) => ({ ...prev, 2: v }))}
           startEdit={startEdit}
           handleSave={handleSave}
           cancelEdit={cancelEdit}
@@ -312,6 +331,8 @@ export function PipelineWizard({ featureId }: Props) {
           handleManualJsonChange={handleManualJsonChange}
           handleManualSave={handleManualSave}
           runStep={runStep}
+          promptAppend={stepPromptAppend[3] ?? ''}
+          onPromptAppendChange={(v) => setStepPromptAppend((prev) => ({ ...prev, 3: v }))}
           setOpenStep={setOpenStep}
         />
       ),
@@ -336,6 +357,12 @@ export function PipelineWizard({ featureId }: Props) {
           handleManualJsonChange={handleManualJsonChange}
           handleManualSave={handleManualSave}
           runStep={runStep}
+          promptAppend={stepPromptAppend[4] ?? ''}
+          onPromptAppendChange={(v) => setStepPromptAppend((prev) => ({ ...prev, 4: v }))}
+          sectionPromptAppend={step4SectionPromptAppend}
+          onSectionPromptAppendChange={(section, v) =>
+            setStep4SectionPromptAppend((prev) => ({ ...prev, [section]: v }))
+          }
         />
       ),
     },
@@ -359,6 +386,12 @@ export function PipelineWizard({ featureId }: Props) {
           handleManualJsonChange={handleManualJsonChange}
           handleManualSave={handleManualSave}
           runStep={runStep}
+          promptAppend={stepPromptAppend[5] ?? ''}
+          onPromptAppendChange={(v) => setStepPromptAppend((prev) => ({ ...prev, 5: v }))}
+          sectionPromptAppend={step5SectionPromptAppend}
+          onSectionPromptAppendChange={(section, v) =>
+            setStep5SectionPromptAppend((prev) => ({ ...prev, [section]: v }))
+          }
         />
       ),
     },

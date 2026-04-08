@@ -39,6 +39,7 @@ const {
   CHUNK_DELAY_MS,
   SCENARIO_BATCH,
 } = AI_CONFIG;
+const MAX_PROMPT_APPEND_CHARS = 2000;
 
 type Step5Section = 'api' | 'frontend' | 'testing';
 
@@ -54,10 +55,20 @@ export class PipelineService {
     @Inject(STORAGE_PROVIDER) private readonly storage: IStorageProvider,
   ) {}
 
+  private _normalizePromptAppend(promptAppend?: string): string | undefined {
+    if (typeof promptAppend !== 'string') return undefined;
+    const trimmed = promptAppend.trim();
+    if (!trimmed) return undefined;
+    if (trimmed.length > MAX_PROMPT_APPEND_CHARS) {
+      throw new BadRequestException(`promptAppend must be <= ${MAX_PROMPT_APPEND_CHARS} characters`);
+    }
+    return trimmed;
+  }
+
   // ── Individual step runners ────────────────────────────────────────────────
 
   /** Step 1: Run Layer 1 extraction and save results to Feature */
-  async runStep1(featureId: string, providerName?: string, model?: string) {
+  async runStep1(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
     await this.prisma.feature.update({
       where: { id: featureId },
       // prisma client types may lag behind schema migrations in editor/tsserver;
@@ -66,7 +77,8 @@ export class PipelineService {
     });
     try {
       const provider = await this._resolveProvider(featureId, 1, providerName, model);
-      const extraction = await this._layer1Extraction(featureId, provider, 0, null);
+      const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
+      const extraction = await this._layer1Extraction(featureId, provider, 0, null, normalizedPromptAppend);
       await this.prisma.feature.update({
         where: { id: featureId },
         data: {
@@ -127,7 +139,13 @@ export class PipelineService {
   }
 
   /** Step 2: Run Layer 2 scenario planning using saved Layer 1 results (or override) */
-  async runStep2(featureId: string, providerName?: string, model?: string, override?: CombinedExtraction) {
+  async runStep2(
+    featureId: string,
+    providerName?: string,
+    model?: string,
+    override?: CombinedExtraction,
+    promptAppend?: string,
+  ) {
     await this.prisma.feature.update({
       where: { id: featureId },
       data: ({ pipelineStatus: 'RUNNING', pipelineStep: 2 } as any),
@@ -144,7 +162,8 @@ export class PipelineService {
       const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
 
       this.logger.log(`[Pipeline] Step 2 — planning scenarios`);
-      const testScenarios = await withRetry(() => provider.planTestScenarios(compReq, compBeh));
+      const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
+      const testScenarios = await withRetry(() => provider.planTestScenarios(compReq, compBeh, normalizedPromptAppend));
 
       await this.prisma.feature.update({
         where: { id: featureId },
@@ -161,7 +180,7 @@ export class PipelineService {
   }
 
   /** Step 3: Run Layer 3 test case generation using saved Layer 2 results */
-  async runStep3(featureId: string, providerName?: string, model?: string) {
+  async runStep3(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
     await this.prisma.feature.update({
       where: { id: featureId },
       data: ({ pipelineStatus: 'RUNNING', pipelineStep: 3 } as any),
@@ -178,6 +197,7 @@ export class PipelineService {
 
       const provider = await this._resolveProvider(featureId, 3, providerName, model);
       const { req: compReq } = compressForDownstream(req, { feature: '', actors: [], actions: [], rules: [] });
+      const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
 
       const totalBatches = Math.ceil(testScenarios.length / SCENARIO_BATCH);
       this.logger.log(`[Pipeline] Step 3 — ${testScenarios.length} scenarios in ${totalBatches} batch(es)`);
@@ -185,7 +205,9 @@ export class PipelineService {
       for (let i = 0; i < testScenarios.length; i += SCENARIO_BATCH) {
         const batch = testScenarios.slice(i, i + SCENARIO_BATCH);
         this.logger.log(`[Pipeline] Step 3 — batch ${Math.floor(i / SCENARIO_BATCH) + 1}/${totalBatches}`);
-        const cases = await withRetry(() => provider.generateTestCasesFromScenarios(batch, compReq));
+        const cases = await withRetry(() =>
+          provider.generateTestCasesFromScenarios(batch, compReq, normalizedPromptAppend),
+        );
         allGenerated.push(...cases);
       }
 
@@ -216,7 +238,7 @@ export class PipelineService {
   }
 
   /** Step 4: Generate Development Plan using 3 separate AI calls (workflow+backend, frontend, testing) */
-  async runStep4(featureId: string, providerName?: string, model?: string) {
+  async runStep4(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
     await this.prisma.feature.update({
       where: { id: featureId },
       data: ({ pipelineStatus: 'RUNNING', pipelineStep: 4 } as any),
@@ -233,28 +255,29 @@ export class PipelineService {
 
       const provider = await this._resolveProvider(featureId, 4, providerName, model);
       const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+      const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
 
       // Call A: Workflow + Backend
       this.logger.log('[Pipeline] Step 4A — generating workflow + backend plan');
       const { workflow, backend } = await withRetry(() =>
-        provider.generateDevPlanWorkflowBackend(compReq, compBeh, testScenarios)
+        provider.generateDevPlanWorkflowBackend(compReq, compBeh, testScenarios, normalizedPromptAppend)
       );
 
       // Call B: Frontend (receives condensed workflow text summary)
       const workflowSummary = workflow.map(s => `${s.order}. ${s.title} (${s.actor}): ${s.description}`).join('\n');
       this.logger.log('[Pipeline] Step 4B — generating frontend plan');
       const frontend = await withRetry(() =>
-        provider.generateDevPlanFrontend(compReq, compBeh, workflowSummary)
+        provider.generateDevPlanFrontend(compReq, compBeh, workflowSummary, undefined, normalizedPromptAppend)
       );
 
       // Call C: Testing — backend first, then frontend
       this.logger.log('[Pipeline] Step 4C-BE — generating backend testing plan');
       const backendTesting = await withRetry(() =>
-        provider.generateDevPlanBackendTesting(compReq, compBeh, backend)
+        provider.generateDevPlanBackendTesting(compReq, compBeh, backend, normalizedPromptAppend)
       );
       this.logger.log('[Pipeline] Step 4C-FE — generating frontend testing plan');
       const frontendTesting = await withRetry(() =>
-        provider.generateDevPlanFrontendTesting(compReq, compBeh, backend, frontend)
+        provider.generateDevPlanFrontendTesting(compReq, compBeh, backend, frontend, normalizedPromptAppend)
       );
       const testing = { backend: backendTesting, frontend: frontendTesting };
 
@@ -284,7 +307,7 @@ export class PipelineService {
   }
 
   /** Step 4A (manual): Generate Workflow + Backend only */
-  async runStep4a(featureId: string, providerName?: string, model?: string) {
+  async runStep4a(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
     const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
     if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
     const req          = feature.extractedRequirements as ExtractedRequirements | null;
@@ -295,10 +318,11 @@ export class PipelineService {
 
     const provider = await this._resolveProvider(featureId, 4, providerName, model);
     const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+    const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
 
     this.logger.log('[Pipeline] Step 4A (manual) — generating workflow + backend');
     const { workflow, backend } = await withRetry(() =>
-      provider.generateDevPlanWorkflowBackend(compReq, compBeh, testScenarios)
+      provider.generateDevPlanWorkflowBackend(compReq, compBeh, testScenarios, normalizedPromptAppend)
     );
 
     await this.prisma.feature.update({
@@ -315,7 +339,7 @@ export class PipelineService {
   }
 
   /** Step 4B (manual): Generate Frontend plan only — requires workflow to exist */
-  async runStep4b(featureId: string, providerName?: string, model?: string) {
+  async runStep4b(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
     const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
     if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
     const req        = feature.extractedRequirements as ExtractedRequirements | null;
@@ -335,10 +359,11 @@ export class PipelineService {
 
     const provider = await this._resolveProvider(featureId, 4, providerName, model);
     const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+    const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
 
     this.logger.log('[Pipeline] Step 4B (manual) — generating frontend plan');
     const frontend = await withRetry(() =>
-      provider.generateDevPlanFrontend(compReq, compBeh, workflowSummary, backendPlan)
+      provider.generateDevPlanFrontend(compReq, compBeh, workflowSummary, backendPlan, normalizedPromptAppend)
     );
 
     await this.prisma.feature.update({
@@ -354,7 +379,7 @@ export class PipelineService {
   }
 
   /** Step 4C-Backend (manual): Generate Backend Testing plan only — requires backend plan to exist */
-  async runStep4cBackend(featureId: string, providerName?: string, model?: string) {
+  async runStep4cBackend(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
     const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
     if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
     const req      = feature.extractedRequirements as ExtractedRequirements | null;
@@ -366,10 +391,11 @@ export class PipelineService {
     const backend: BackendPlan = JSON.parse(rawBackend);
     const provider = await this._resolveProvider(featureId, 4, providerName, model);
     const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+    const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
 
     this.logger.log('[Pipeline] Step 4C-BE (manual) — generating backend testing plan');
     const backendTesting: BackendTestingPlan = await withRetry(() =>
-      provider.generateDevPlanBackendTesting(compReq, compBeh, backend)
+      provider.generateDevPlanBackendTesting(compReq, compBeh, backend, normalizedPromptAppend)
     );
 
     // Merge into existing devPlanTesting (preserve frontend if it exists)
@@ -391,7 +417,7 @@ export class PipelineService {
   }
 
   /** Step 4C-Frontend (manual): Generate Frontend Testing plan only — requires backend + frontend plans to exist */
-  async runStep4cFrontend(featureId: string, providerName?: string, model?: string) {
+  async runStep4cFrontend(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
     const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
     if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
     const req        = feature.extractedRequirements as ExtractedRequirements | null;
@@ -406,10 +432,11 @@ export class PipelineService {
     const frontend: FrontendPlan = JSON.parse(rawFrontend);
     const provider = await this._resolveProvider(featureId, 4, providerName, model);
     const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+    const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
 
     this.logger.log('[Pipeline] Step 4C-FE (manual) — generating frontend testing plan');
     const frontendTesting: FrontendTestingPlan = await withRetry(() =>
-      provider.generateDevPlanFrontendTesting(compReq, compBeh, backend, frontend)
+      provider.generateDevPlanFrontendTesting(compReq, compBeh, backend, frontend, normalizedPromptAppend)
     );
 
     // Merge into existing devPlanTesting (preserve backend if it exists)
@@ -431,21 +458,24 @@ export class PipelineService {
   }
 
   /** Step 4C (manual): Generate both Backend + Frontend Testing plans */
-  async runStep4c(featureId: string, providerName?: string, model?: string) {
-    await this.runStep4cBackend(featureId, providerName, model);
-    return this.runStep4cFrontend(featureId, providerName, model);
+  async runStep4c(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
+    await this.runStep4cBackend(featureId, providerName, model, promptAppend);
+    return this.runStep4cFrontend(featureId, providerName, model, promptAppend);
   }
 
   /** Step 5: Run Layer 4 dev prompt generation using saved Layer 1+2 results */
-  async runStep5(featureId: string, providerName?: string, model?: string) {
+  async runStep5(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
     await this.prisma.feature.update({
       where: { id: featureId },
       data: ({ pipelineStatus: 'RUNNING', pipelineStep: 5 } as any),
     });
     try {
+      const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
       const { provider, compReq, compBeh, testScenarios, devPlan } = await this._loadStep5Context(featureId, providerName, model);
       this.logger.log('[Pipeline] Step 5 — generating dev prompts');
-      const devPrompt = await withRetry(() => provider.generateDevPrompt(compReq, compBeh, testScenarios, devPlan));
+      const devPrompt = await withRetry(() =>
+        provider.generateDevPrompt(compReq, compBeh, testScenarios, devPlan, undefined, normalizedPromptAppend),
+      );
       await this._applyStep5Full(featureId, devPrompt);
 
       const taskRowsCount = devPrompt.api.length + devPrompt.frontend.length + devPrompt.testing.length;
@@ -461,18 +491,18 @@ export class PipelineService {
   }
 
   /** Step 5A (manual): Generate Backend/API prompts only */
-  async runStep5Backend(featureId: string, providerName?: string, model?: string) {
-    return this.runStep5Section(featureId, 'api', providerName, model);
+  async runStep5Backend(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
+    return this.runStep5Section(featureId, 'api', providerName, model, promptAppend);
   }
 
   /** Step 5B (manual): Generate Frontend prompts only */
-  async runStep5Frontend(featureId: string, providerName?: string, model?: string) {
-    return this.runStep5Section(featureId, 'frontend', providerName, model);
+  async runStep5Frontend(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
+    return this.runStep5Section(featureId, 'frontend', providerName, model, promptAppend);
   }
 
   /** Step 5C (manual): Generate Testing prompts only */
-  async runStep5Testing(featureId: string, providerName?: string, model?: string) {
-    return this.runStep5Section(featureId, 'testing', providerName, model);
+  async runStep5Testing(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
+    return this.runStep5Section(featureId, 'testing', providerName, model, promptAppend);
   }
 
   private async runStep5Section(
@@ -480,6 +510,7 @@ export class PipelineService {
     section: Step5Section,
     providerName?: string,
     model?: string,
+    promptAppend?: string,
   ) {
     await this.prisma.feature.update({
       where: { id: featureId },
@@ -487,9 +518,12 @@ export class PipelineService {
     });
 
     try {
+      const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
       const { provider, compReq, compBeh, testScenarios, devPlan } = await this._loadStep5Context(featureId, providerName, model);
       this.logger.log(`[Pipeline] Step 5 (${section}) — generating section prompts`);
-      const devPrompt = await withRetry(() => provider.generateDevPrompt(compReq, compBeh, testScenarios, devPlan, section));
+      const devPrompt = await withRetry(() =>
+        provider.generateDevPrompt(compReq, compBeh, testScenarios, devPlan, section, normalizedPromptAppend),
+      );
       const sectionTasks = devPrompt[section] ?? [];
 
       await this._applyStep5Section(featureId, section, sectionTasks);
@@ -698,6 +732,7 @@ export class PipelineService {
     provider: AIProvider,
     startChunk: number,
     previousPartial: CombinedExtraction | null,
+    promptAppend?: string,
   ): Promise<CombinedExtraction> {
     const feature = await this.prisma.feature.findUnique({
       where: { id: featureId },
@@ -723,7 +758,7 @@ export class PipelineService {
     this.logger.log(`[Pipeline] Layer 1 — ${chunks.length} chunk(s) from ${(baContent.match(/^## /gm) ?? []).length} section(s), ~${estimateTokens(baContent)} tokens (provider: ${provider.providerName}, starting at chunk ${startChunk})`);
 
     if (chunks.length === 1 && startChunk === 0) {
-      return withRetry(() => provider.extractAll(chunks[0]));
+      return withRetry(() => provider.extractAll(chunks[0], promptAppend));
     }
 
     const completedParts: CombinedExtraction[] = previousPartial ? [previousPartial] : [];
@@ -732,7 +767,7 @@ export class PipelineService {
       if (i > startChunk) await new Promise(r => setTimeout(r, CHUNK_DELAY_MS));
       try {
         const chunkWithContext = `[Chunk ${i + 1} of ${chunks.length} — partial section of a larger document. Extract every item present; similar items from other chunks will be merged.]\n\n${chunks[i]}`;
-        const part = await withRetry(() => provider.extractAll(chunkWithContext));
+        const part = await withRetry(() => provider.extractAll(chunkWithContext, promptAppend));
         completedParts.push(part);
         const runningMerge = mergeExtractions(completedParts);
         await this.prisma.feature.update({

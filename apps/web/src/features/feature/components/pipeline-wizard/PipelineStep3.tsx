@@ -23,7 +23,9 @@ interface PipelineStep3Props {
   closeManual: () => void;
   handleManualJsonChange: (v: string) => void;
   handleManualSave: (step: number) => void;
-  runStep: (step: number) => void;
+  runStep: (step: number, promptAppend?: string) => void;
+  promptAppend: string;
+  onPromptAppendChange: (v: string) => void;
   setOpenStep: (step: number) => void;
 }
 
@@ -45,6 +47,8 @@ export function PipelineStep3({
   handleManualJsonChange,
   handleManualSave,
   runStep,
+  promptAppend,
+  onPromptAppendChange,
   setOpenStep,
 }: PipelineStep3Props) {
   const canRun = previousStepCompleted && !isRunning;
@@ -56,7 +60,7 @@ export function PipelineStep3({
           <>
             <button
               disabled={!canRun}
-              onClick={() => runStep(3)}
+              onClick={() => runStep(3, promptAppend)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm disabled:opacity-50 ${
                 status === 'failed'
                   ? 'border border-yellow-500 text-yellow-700 hover:bg-yellow-50'
@@ -88,7 +92,7 @@ export function PipelineStep3({
         {status === 'completed' && (
           <>
             <span className="text-xs text-green-700">{testCasesCount} test cases generated</span>
-            <button disabled={!canRun} onClick={() => runStep(3)}
+            <button disabled={!canRun} onClick={() => runStep(3, promptAppend)}
               className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50 ml-2">
               <RefreshCw size={13} /> Re-run
             </button>
@@ -99,6 +103,18 @@ export function PipelineStep3({
           </>
         )}
       </div>
+
+      {status !== 'running' && (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">Append instructions for next run (optional)</p>
+          <textarea
+            value={promptAppend}
+            onChange={(e) => onPromptAppendChange(e.target.value)}
+            placeholder="Example: Keep test case steps concise and prioritize high-risk flows."
+            className="w-full text-xs border rounded p-2 bg-background min-h-[72px]"
+          />
+        </div>
+      )}
 
       {manualStep === 3 && (
         <ManualPanel

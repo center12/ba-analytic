@@ -144,14 +144,25 @@ export const api = {
         { method: 'POST' },
       );
     },
-    runStep: (featureId: string, step: number, provider?: string, model?: string, override?: unknown) => {
+    runStep: (
+      featureId: string,
+      step: number,
+      provider?: string,
+      model?: string,
+      override?: unknown,
+      promptAppend?: string,
+    ) => {
       const params = new URLSearchParams();
       if (provider) params.set('provider', provider);
       if (model) params.set('model', model);
       const qs = params.toString();
+      const body =
+        override !== undefined || promptAppend !== undefined
+          ? JSON.stringify({ override, promptAppend })
+          : undefined;
       return request<unknown>(
         `/test-cases/feature/${featureId}/run-step/${step}${qs ? `?${qs}` : ''}`,
-        { method: 'POST', body: override ? JSON.stringify({ override }) : undefined },
+        { method: 'POST', body },
       );
     },
     runStep4Section: (
@@ -159,6 +170,7 @@ export const api = {
       section: 'workflow-backend' | 'frontend' | 'testing' | 'testing-backend' | 'testing-frontend',
       provider?: string,
       model?: string,
+      promptAppend?: string,
     ) => {
       const params = new URLSearchParams();
       if (provider) params.set('provider', provider);
@@ -166,7 +178,7 @@ export const api = {
       const qs = params.toString();
       return request<unknown>(
         `/test-cases/feature/${featureId}/run-step-4-section/${section}${qs ? `?${qs}` : ''}`,
-        { method: 'POST' },
+        { method: 'POST', body: promptAppend ? JSON.stringify({ promptAppend }) : undefined },
       );
     },
     runStep5Section: (
@@ -174,6 +186,7 @@ export const api = {
       section: 'backend' | 'api' | 'frontend' | 'testing',
       provider?: string,
       model?: string,
+      promptAppend?: string,
     ) => {
       const params = new URLSearchParams();
       if (provider) params.set('provider', provider);
@@ -181,7 +194,7 @@ export const api = {
       const qs = params.toString();
       return request<unknown>(
         `/test-cases/feature/${featureId}/run-step-5-section/${section}${qs ? `?${qs}` : ''}`,
-        { method: 'POST' },
+        { method: 'POST', body: promptAppend ? JSON.stringify({ promptAppend }) : undefined },
       );
     },
     resumeStep1: (featureId: string, provider?: string, model?: string) => {

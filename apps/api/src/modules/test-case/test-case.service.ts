@@ -41,13 +41,20 @@ export class TestCaseService {
     return this.pipeline.resume(featureId, providerName, model);
   }
 
-  async runStepForFeature(featureId: string, step: number, providerName?: string, model?: string, override?: unknown) {
+  async runStepForFeature(
+    featureId: string,
+    step: number,
+    providerName?: string,
+    model?: string,
+    override?: unknown,
+    promptAppend?: string,
+  ) {
     switch (step) {
-      case 1: return this.pipeline.runStep1(featureId, providerName, model);
-      case 2: return this.pipeline.runStep2(featureId, providerName, model, override as any);
-      case 3: return this.pipeline.runStep3(featureId, providerName, model);
-      case 4: return this.pipeline.runStep4(featureId, providerName, model);
-      case 5: return this.pipeline.runStep5(featureId, providerName, model);
+      case 1: return this.pipeline.runStep1(featureId, providerName, model, promptAppend);
+      case 2: return this.pipeline.runStep2(featureId, providerName, model, override as any, promptAppend);
+      case 3: return this.pipeline.runStep3(featureId, providerName, model, promptAppend);
+      case 4: return this.pipeline.runStep4(featureId, providerName, model, promptAppend);
+      case 5: return this.pipeline.runStep5(featureId, providerName, model, promptAppend);
       default: throw new Error(`Invalid pipeline step: ${step}`);
     }
   }
@@ -57,13 +64,14 @@ export class TestCaseService {
     section: 'workflow-backend' | 'frontend' | 'testing' | 'testing-backend' | 'testing-frontend',
     providerName?: string,
     model?: string,
+    promptAppend?: string,
   ) {
     switch (section) {
-      case 'workflow-backend':  return this.pipeline.runStep4a(featureId, providerName, model);
-      case 'frontend':          return this.pipeline.runStep4b(featureId, providerName, model);
-      case 'testing':           return this.pipeline.runStep4c(featureId, providerName, model);
-      case 'testing-backend':   return this.pipeline.runStep4cBackend(featureId, providerName, model);
-      case 'testing-frontend':  return this.pipeline.runStep4cFrontend(featureId, providerName, model);
+      case 'workflow-backend':  return this.pipeline.runStep4a(featureId, providerName, model, promptAppend);
+      case 'frontend':          return this.pipeline.runStep4b(featureId, providerName, model, promptAppend);
+      case 'testing':           return this.pipeline.runStep4c(featureId, providerName, model, promptAppend);
+      case 'testing-backend':   return this.pipeline.runStep4cBackend(featureId, providerName, model, promptAppend);
+      case 'testing-frontend':  return this.pipeline.runStep4cFrontend(featureId, providerName, model, promptAppend);
       default: throw new Error(`Invalid step 4 section: ${section}`);
     }
   }
@@ -73,15 +81,16 @@ export class TestCaseService {
     section: 'backend' | 'api' | 'frontend' | 'testing',
     providerName?: string,
     model?: string,
+    promptAppend?: string,
   ) {
     switch (section) {
       case 'backend':
       case 'api':
-        return this.pipeline.runStep5Backend(featureId, providerName, model);
+        return this.pipeline.runStep5Backend(featureId, providerName, model, promptAppend);
       case 'frontend':
-        return this.pipeline.runStep5Frontend(featureId, providerName, model);
+        return this.pipeline.runStep5Frontend(featureId, providerName, model, promptAppend);
       case 'testing':
-        return this.pipeline.runStep5Testing(featureId, providerName, model);
+        return this.pipeline.runStep5Testing(featureId, providerName, model, promptAppend);
       default:
         throw new Error(`Invalid step 5 section: ${section}`);
     }

@@ -88,9 +88,9 @@ export class TestCaseController {
     @Param('step', ParseIntPipe) step: number,
     @Query('provider') provider?: string,
     @Query('model') model?: string,
-    @Body() body?: { override?: unknown },
+    @Body() body?: { override?: unknown; promptAppend?: string },
   ) {
-    return this.service.runStepForFeature(featureId, step, provider, model, body?.override);
+    return this.service.runStepForFeature(featureId, step, provider, model, body?.override, body?.promptAppend);
   }
 
   /**
@@ -103,8 +103,9 @@ export class TestCaseController {
     @Param('section') section: 'workflow-backend' | 'frontend' | 'testing' | 'testing-backend' | 'testing-frontend',
     @Query('provider') provider?: string,
     @Query('model') model?: string,
+    @Body() body?: { promptAppend?: string },
   ) {
-    return this.service.runStep4SectionForFeature(featureId, section, provider, model);
+    return this.service.runStep4SectionForFeature(featureId, section, provider, model, body?.promptAppend);
   }
 
   /**
@@ -117,8 +118,9 @@ export class TestCaseController {
     @Param('section') section: 'backend' | 'api' | 'frontend' | 'testing',
     @Query('provider') provider?: string,
     @Query('model') model?: string,
+    @Body() body?: { promptAppend?: string },
   ) {
-    return this.service.runStep5SectionForFeature(featureId, section, provider, model);
+    return this.service.runStep5SectionForFeature(featureId, section, provider, model, body?.promptAppend);
   }
 
   /**

@@ -4,6 +4,7 @@ import { google } from '@ai-sdk/google';
 import { generateObject, streamText } from 'ai';
 import { z } from 'zod';
 import {
+  appendPromptInstructions,
   AIProvider,
   BackendPlan,
   BackendTestingPlan,
@@ -258,13 +259,13 @@ export class GeminiProvider extends AIProvider {
 
   // ── Layer 1 (combined): Requirements + Behaviors in one call ─────────────────
 
-  async extractAll(baDocumentContent: string): Promise<CombinedExtraction> {
+  async extractAll(baDocumentContent: string, promptAppend?: string): Promise<CombinedExtraction> {
     this.logger.log('[Layer 1] Extracting requirements & behaviors (combined)...');
     const CombinedSchema = z.object({
       requirements: RequirementsSchema,
       behaviors: BehaviorsSchema,
     });
-    const prompt1 = buildExtractAllPrompt(baDocumentContent);
+    const prompt1 = appendPromptInstructions(buildExtractAllPrompt(baDocumentContent), promptAppend);
     this.logPromptSize('[Layer 1]', prompt1);
     const { object, usage, response } = await generateObject({
       model: google(this.modelVersion),
@@ -366,9 +367,10 @@ ${baDocumentContent}`;
   async planTestScenarios(
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
+    promptAppend?: string,
   ): Promise<TestScenario[]> {
     this.logger.log('[Layer 2] Planning test scenarios...');
-    const prompt2 = buildPlanScenariosPrompt(requirements, behaviors);
+    const prompt2 = appendPromptInstructions(buildPlanScenariosPrompt(requirements, behaviors), promptAppend);
     this.logPromptSize('[Layer 2]', prompt2);
     const { object, usage, response } = await generateObject({
       model: google(this.modelVersion),
@@ -385,9 +387,10 @@ ${baDocumentContent}`;
   async generateTestCasesFromScenarios(
     scenarios: TestScenario[],
     requirements: ExtractedRequirements,
+    promptAppend?: string,
   ): Promise<GeneratedTestCase[]> {
     this.logger.log(`[Layer 3] Generating ${scenarios.length} test cases...`);
-    const prompt3 = buildGenerateTestCasesPrompt(scenarios, requirements);
+    const prompt3 = appendPromptInstructions(buildGenerateTestCasesPrompt(scenarios, requirements), promptAppend);
     this.logPromptSize('[Layer 3]', prompt3);
     const { object, usage, response } = await generateObject({
       model: google(this.modelVersion),
@@ -405,9 +408,13 @@ ${baDocumentContent}`;
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
     scenarios: TestScenario[],
+    promptAppend?: string,
   ): Promise<{ workflow: WorkflowStep[]; backend: BackendPlan }> {
     this.logger.log('[Step 4A] Generating workflow + backend plan...');
-    const prompt4a = buildDevPlanWorkflowBackendPrompt(requirements, behaviors, scenarios);
+    const prompt4a = appendPromptInstructions(
+      buildDevPlanWorkflowBackendPrompt(requirements, behaviors, scenarios),
+      promptAppend,
+    );
     this.logPromptSize('[Step 4A]', prompt4a);
     const { object, usage, response } = await generateObject({
       model: google(this.modelVersion),
@@ -426,9 +433,13 @@ ${baDocumentContent}`;
     behaviors: ExtractedBehaviors,
     workflowSummary: string,
     backendPlan?: BackendPlan | null,
+    promptAppend?: string,
   ): Promise<FrontendPlan> {
     this.logger.log('[Step 4B] Generating frontend plan...');
-    const prompt4b = buildDevPlanFrontendPrompt(requirements, behaviors, workflowSummary, backendPlan);
+    const prompt4b = appendPromptInstructions(
+      buildDevPlanFrontendPrompt(requirements, behaviors, workflowSummary, backendPlan),
+      promptAppend,
+    );
     this.logPromptSize('[Step 4B]', prompt4b);
     const { object, usage, response } = await generateObject({
       model: google(this.modelVersion),
@@ -446,9 +457,13 @@ ${baDocumentContent}`;
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
     backendPlan: BackendPlan,
+    promptAppend?: string,
   ): Promise<BackendTestingPlan> {
     this.logger.log('[Step 4C-BE] Generating backend testing plan...');
-    const prompt = buildDevPlanBackendTestingPrompt(requirements, behaviors, backendPlan);
+    const prompt = appendPromptInstructions(
+      buildDevPlanBackendTestingPrompt(requirements, behaviors, backendPlan),
+      promptAppend,
+    );
     this.logPromptSize('[Step 4C-BE]', prompt);
     const { object, usage, response } = await generateObject({
       model: google(this.modelVersion),
@@ -465,9 +480,13 @@ ${baDocumentContent}`;
     behaviors: ExtractedBehaviors,
     backendPlan: BackendPlan,
     frontendPlan: FrontendPlan,
+    promptAppend?: string,
   ): Promise<FrontendTestingPlan> {
     this.logger.log('[Step 4C-FE] Generating frontend testing plan...');
-    const prompt = buildDevPlanFrontendTestingPrompt(requirements, behaviors, backendPlan, frontendPlan);
+    const prompt = appendPromptInstructions(
+      buildDevPlanFrontendTestingPrompt(requirements, behaviors, backendPlan, frontendPlan),
+      promptAppend,
+    );
     this.logPromptSize('[Step 4C-FE]', prompt);
     const { object, usage, response } = await generateObject({
       model: google(this.modelVersion),
@@ -487,9 +506,13 @@ ${baDocumentContent}`;
     scenarios: TestScenario[],
     devPlan?: DevPlan,
     targetSection?: DevPromptSection,
+    promptAppend?: string,
   ): Promise<DevPrompt> {
     this.logger.log('[Step 5] Generating dev prompts (API / Frontend / Testing)...');
-    const prompt4 = buildDevPromptInput(requirements, behaviors, scenarios, devPlan, targetSection);
+    const prompt4 = appendPromptInstructions(
+      buildDevPromptInput(requirements, behaviors, scenarios, devPlan, targetSection),
+      promptAppend,
+    );
     this.logPromptSize('[Step 5]', prompt4);
     const { object, usage, response } = await generateObject({
       model: google(this.modelVersion),

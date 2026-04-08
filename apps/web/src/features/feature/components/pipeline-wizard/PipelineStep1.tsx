@@ -25,7 +25,9 @@ interface PipelineStep1Props {
   closeManual: () => void;
   handleManualJsonChange: (v: string) => void;
   handleManualSave: (step: number) => void;
-  runStep: (step: number) => void;
+  runStep: (step: number, promptAppend?: string) => void;
+  promptAppend: string;
+  onPromptAppendChange: (v: string) => void;
   resumeStep1: () => void;
   startEdit: (step: number, feature: Feature) => void;
   handleSave: (step: number, feature: Feature) => void;
@@ -52,6 +54,8 @@ export function PipelineStep1({
   handleManualJsonChange,
   handleManualSave,
   runStep,
+  promptAppend,
+  onPromptAppendChange,
   resumeStep1,
   startEdit,
   handleSave,
@@ -69,7 +73,7 @@ export function PipelineStep1({
           <>
             <button
               disabled={!canRun}
-              onClick={() => runStep(1)}
+              onClick={() => runStep(1, promptAppend)}
               className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-1.5 rounded text-sm hover:opacity-90 disabled:opacity-50"
             >
               <Play size={13} /> Run Step 1
@@ -101,7 +105,7 @@ export function PipelineStep1({
             </button>
             <button
               disabled={!canRun}
-              onClick={() => runStep(1)}
+              onClick={() => runStep(1, promptAppend)}
               className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50"
             >
               <RefreshCw size={13} /> Restart from scratch
@@ -126,7 +130,7 @@ export function PipelineStep1({
             </button>
             <button
               disabled={!canRun}
-              onClick={() => runStep(1)}
+              onClick={() => runStep(1, promptAppend)}
               className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50"
             >
               <RefreshCw size={13} /> Re-run
@@ -153,6 +157,18 @@ export function PipelineStep1({
           </>
         )}
       </div>
+
+      {!isEditing && status !== 'running' && (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">Append instructions for next run (optional)</p>
+          <textarea
+            value={promptAppend}
+            onChange={(e) => onPromptAppendChange(e.target.value)}
+            placeholder="Example: Focus on edge cases around validation and error handling."
+            className="w-full text-xs border rounded p-2 bg-background min-h-[72px]"
+          />
+        </div>
+      )}
 
       {req && beh && (
         <div className="grid grid-cols-2 gap-6">

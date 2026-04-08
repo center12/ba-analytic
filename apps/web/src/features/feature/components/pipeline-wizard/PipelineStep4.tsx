@@ -34,7 +34,11 @@ interface PipelineStep4Props {
   closeManual: () => void;
   handleManualJsonChange: (v: string) => void;
   handleManualSave: (step: number) => void;
-  runStep: (step: number) => void;
+  runStep: (step: number, promptAppend?: string) => void;
+  promptAppend: string;
+  onPromptAppendChange: (v: string) => void;
+  sectionPromptAppend: Record<Step4Section, string>;
+  onSectionPromptAppendChange: (section: Step4Section, v: string) => void;
 }
 
 type Step4Section = 'workflow-backend' | 'frontend' | 'testing-backend' | 'testing-frontend';
@@ -101,11 +105,13 @@ function SectionGenerateButton({
   section,
   featureId,
   disabled,
+  promptAppend,
 }: {
   label: string;
   section: Step4Section;
   featureId: string;
   disabled: boolean;
+  promptAppend?: string;
 }) {
   const activeProvider = useAppStore(s => s.activeProvider);
   const activeModel = useAppStore(s => s.activeModel);
@@ -113,7 +119,7 @@ function SectionGenerateButton({
 
   const mutation = useMutation({
     mutationFn: () =>
-      api.testCases.runStep4Section(featureId, section, activeProvider ?? undefined, activeModel),
+      api.testCases.runStep4Section(featureId, section, activeProvider ?? undefined, activeModel, promptAppend),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['features', featureId] });
       toast({ variant: 'success', title: `${label} generated` });
@@ -154,6 +160,10 @@ export function PipelineStep4({
   handleManualJsonChange,
   handleManualSave,
   runStep,
+  promptAppend,
+  onPromptAppendChange,
+  sectionPromptAppend,
+  onSectionPromptAppendChange,
 }: PipelineStep4Props) {
   const canRun = previousStepCompleted && !isRunning;
 
@@ -181,7 +191,7 @@ export function PipelineStep4({
           <>
             <button
               disabled={!canRun}
-              onClick={() => runStep(4)}
+              onClick={() => runStep(4, promptAppend)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm disabled:opacity-50 ${
                 status === 'failed'
                   ? 'border border-yellow-500 text-yellow-700 hover:bg-yellow-50'
@@ -214,7 +224,7 @@ export function PipelineStep4({
           <>
             <button
               disabled={!canRun}
-              onClick={() => runStep(4)}
+              onClick={() => runStep(4, promptAppend)}
               className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50"
             >
               <RefreshCw size={13} /> Re-run All
@@ -226,6 +236,18 @@ export function PipelineStep4({
           </>
         )}
       </div>
+
+      {status !== 'running' && (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">Append instructions for Step 4 re-run (optional)</p>
+          <textarea
+            value={promptAppend}
+            onChange={(e) => onPromptAppendChange(e.target.value)}
+            placeholder="Example: Keep the architecture pragmatic for existing module boundaries."
+            className="w-full text-xs border rounded p-2 bg-background min-h-[72px]"
+          />
+        </div>
+      )}
 
       {previousStepCompleted && (
         <p className="text-xs text-muted-foreground">
@@ -268,6 +290,15 @@ export function PipelineStep4({
                 section="workflow-backend"
                 featureId={featureId}
                 disabled={!canRun}
+                promptAppend={sectionPromptAppend['workflow-backend']}
+              />
+            </div>
+            <div className="px-3 py-2 border-t bg-background/40">
+              <textarea
+                value={sectionPromptAppend['workflow-backend']}
+                onChange={(e) => onSectionPromptAppendChange('workflow-backend', e.target.value)}
+                placeholder="Append instructions for Workflow + Backend generation..."
+                className="w-full text-xs border rounded p-2 bg-background min-h-[60px]"
               />
             </div>
             {workflow && backend && (
@@ -296,6 +327,15 @@ export function PipelineStep4({
                 section="frontend"
                 featureId={featureId}
                 disabled={!canRun || !hasWorkflowBackend}
+                promptAppend={sectionPromptAppend.frontend}
+              />
+            </div>
+            <div className="px-3 py-2 border-t bg-background/40">
+              <textarea
+                value={sectionPromptAppend.frontend}
+                onChange={(e) => onSectionPromptAppendChange('frontend', e.target.value)}
+                placeholder="Append instructions for Frontend architecture generation..."
+                className="w-full text-xs border rounded p-2 bg-background min-h-[60px]"
               />
             </div>
             {!hasWorkflowBackend && (
@@ -329,6 +369,15 @@ export function PipelineStep4({
                 section="testing-backend"
                 featureId={featureId}
                 disabled={!canRun || !hasWorkflowBackend}
+                promptAppend={sectionPromptAppend['testing-backend']}
+              />
+            </div>
+            <div className="px-3 py-2 border-t bg-background/40">
+              <textarea
+                value={sectionPromptAppend['testing-backend']}
+                onChange={(e) => onSectionPromptAppendChange('testing-backend', e.target.value)}
+                placeholder="Append instructions for Backend Testing generation..."
+                className="w-full text-xs border rounded p-2 bg-background min-h-[60px]"
               />
             </div>
             {!hasWorkflowBackend && (
@@ -362,6 +411,15 @@ export function PipelineStep4({
                 section="testing-frontend"
                 featureId={featureId}
                 disabled={!canRun || !hasWorkflowBackend || !hasFrontend}
+                promptAppend={sectionPromptAppend['testing-frontend']}
+              />
+            </div>
+            <div className="px-3 py-2 border-t bg-background/40">
+              <textarea
+                value={sectionPromptAppend['testing-frontend']}
+                onChange={(e) => onSectionPromptAppendChange('testing-frontend', e.target.value)}
+                placeholder="Append instructions for Frontend Testing generation..."
+                className="w-full text-xs border rounded p-2 bg-background min-h-[60px]"
               />
             </div>
             {(!hasWorkflowBackend || !hasFrontend) && (

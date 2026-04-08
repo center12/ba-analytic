@@ -246,6 +246,17 @@ export interface TestScenario {
   requirementRefs: string[];
 }
 
+export function appendPromptInstructions(basePrompt: string, promptAppend?: string): string {
+  const extra = promptAppend?.trim();
+  if (!extra) return basePrompt;
+  return `${basePrompt}
+
+---
+
+Additional user instructions (must still follow every output schema and format rule above):
+${extra}`;
+}
+
 /**
  * Builds the prompt for Layer 1 combined extraction (requirements + behaviors).
  * Shared across all provider implementations.
@@ -1090,7 +1101,7 @@ export abstract class AIProvider {
    * Layer 1 (combined) — Extract both domain requirements and behaviors in a single API call.
    * Preferred over the separate methods to avoid sending the BA document twice.
    */
-  abstract extractAll(baDocumentContent: string): Promise<CombinedExtraction>;
+  abstract extractAll(baDocumentContent: string, promptAppend?: string): Promise<CombinedExtraction>;
 
   /**
    * Layer 1 (synthesis) — Consolidates near-duplicate items from multi-chunk merges.
@@ -1114,6 +1125,7 @@ export abstract class AIProvider {
   abstract planTestScenarios(
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
+    promptAppend?: string,
   ): Promise<TestScenario[]>;
 
   /**
@@ -1122,6 +1134,7 @@ export abstract class AIProvider {
   abstract generateTestCasesFromScenarios(
     scenarios: TestScenario[],
     requirements: ExtractedRequirements,
+    promptAppend?: string,
   ): Promise<GeneratedTestCase[]>;
 
   /**
@@ -1131,6 +1144,7 @@ export abstract class AIProvider {
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
     scenarios: TestScenario[],
+    promptAppend?: string,
   ): Promise<{ workflow: WorkflowStep[]; backend: BackendPlan }>;
 
   /**
@@ -1142,6 +1156,7 @@ export abstract class AIProvider {
     behaviors: ExtractedBehaviors,
     workflowSummary: string,
     backendPlan?: BackendPlan | null,
+    promptAppend?: string,
   ): Promise<FrontendPlan>;
 
   /**
@@ -1151,6 +1166,7 @@ export abstract class AIProvider {
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
     backendPlan: BackendPlan,
+    promptAppend?: string,
   ): Promise<BackendTestingPlan>;
 
   /**
@@ -1161,6 +1177,7 @@ export abstract class AIProvider {
     behaviors: ExtractedBehaviors,
     backendPlan: BackendPlan,
     frontendPlan: FrontendPlan,
+    promptAppend?: string,
   ): Promise<FrontendTestingPlan>;
 
   /**
@@ -1174,6 +1191,7 @@ export abstract class AIProvider {
     scenarios: TestScenario[],
     devPlan?: DevPlan,
     targetSection?: DevPromptSection,
+    promptAppend?: string,
   ): Promise<DevPrompt>;
 
   /**

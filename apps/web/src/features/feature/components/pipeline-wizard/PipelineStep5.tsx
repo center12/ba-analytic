@@ -24,7 +24,11 @@ interface PipelineStep5Props {
   closeManual: () => void;
   handleManualJsonChange: (v: string) => void;
   handleManualSave: (step: number) => void;
-  runStep: (step: number) => void;
+  runStep: (step: number, promptAppend?: string) => void;
+  promptAppend: string;
+  onPromptAppendChange: (v: string) => void;
+  sectionPromptAppend: Record<Step5Section, string>;
+  onSectionPromptAppendChange: (section: Step5Section, v: string) => void;
 }
 
 type Step5Section = 'backend' | 'frontend' | 'testing';
@@ -34,11 +38,13 @@ function SectionGenerateButton({
   section,
   featureId,
   disabled,
+  promptAppend,
 }: {
   label: string;
   section: Step5Section;
   featureId: string;
   disabled: boolean;
+  promptAppend?: string;
 }) {
   const activeProvider = useAppStore(s => s.activeProvider);
   const activeModel = useAppStore(s => s.activeModel);
@@ -46,7 +52,7 @@ function SectionGenerateButton({
 
   const mutation = useMutation({
     mutationFn: () =>
-      api.testCases.runStep5Section(featureId, section, activeProvider ?? undefined, activeModel),
+      api.testCases.runStep5Section(featureId, section, activeProvider ?? undefined, activeModel, promptAppend),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['features', featureId] });
       qc.invalidateQueries({ queryKey: ['dev-tasks', featureId] });
@@ -88,6 +94,10 @@ export function PipelineStep5({
   handleManualJsonChange,
   handleManualSave,
   runStep,
+  promptAppend,
+  onPromptAppendChange,
+  sectionPromptAppend,
+  onSectionPromptAppendChange,
 }: PipelineStep5Props) {
   const canRun = previousStepCompleted && !isRunning;
   const hasAnyPrompt = !!(feature.devPromptApi || feature.devPromptFrontend || feature.devPromptTesting);
@@ -99,7 +109,7 @@ export function PipelineStep5({
           <>
             <button
               disabled={!canRun}
-              onClick={() => runStep(5)}
+              onClick={() => runStep(5, promptAppend)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm disabled:opacity-50 ${
                 status === 'failed'
                   ? 'border border-yellow-500 text-yellow-700 hover:bg-yellow-50'
@@ -130,7 +140,7 @@ export function PipelineStep5({
         )}
         {status === 'completed' && (
           <>
-            <button disabled={!canRun} onClick={() => runStep(5)}
+            <button disabled={!canRun} onClick={() => runStep(5, promptAppend)}
               className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50">
               <RefreshCw size={13} /> Re-run All
             </button>
@@ -142,6 +152,18 @@ export function PipelineStep5({
         )}
       </div>
 
+      {status !== 'running' && (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">Append instructions for Step 5 re-run (optional)</p>
+          <textarea
+            value={promptAppend}
+            onChange={(e) => onPromptAppendChange(e.target.value)}
+            placeholder="Example: Prefer smaller, implementation-ready tasks with clear acceptance checks."
+            className="w-full text-xs border rounded p-2 bg-background min-h-[72px]"
+          />
+        </div>
+      )}
+
       {previousStepCompleted && (
         <p className="text-xs text-muted-foreground">
           Manual flow: click <span className="font-medium">Manual</span> to copy the Step 5 prompt, refine it in an external chatbot, then paste JSON back to save. Step 5 sections are
@@ -151,25 +173,50 @@ export function PipelineStep5({
       )}
 
       {previousStepCompleted && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <SectionGenerateButton
-            label="Backend"
-            section="backend"
-            featureId={featureId}
-            disabled={!canRun}
-          />
-          <SectionGenerateButton
-            label="Frontend"
-            section="frontend"
-            featureId={featureId}
-            disabled={!canRun}
-          />
-          <SectionGenerateButton
-            label="Testing"
-            section="testing"
-            featureId={featureId}
-            disabled={!canRun}
-          />
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <SectionGenerateButton
+              label="Backend"
+              section="backend"
+              featureId={featureId}
+              disabled={!canRun}
+              promptAppend={sectionPromptAppend.backend}
+            />
+            <SectionGenerateButton
+              label="Frontend"
+              section="frontend"
+              featureId={featureId}
+              disabled={!canRun}
+              promptAppend={sectionPromptAppend.frontend}
+            />
+            <SectionGenerateButton
+              label="Testing"
+              section="testing"
+              featureId={featureId}
+              disabled={!canRun}
+              promptAppend={sectionPromptAppend.testing}
+            />
+          </div>
+          <div className="grid gap-2">
+            <textarea
+              value={sectionPromptAppend.backend}
+              onChange={(e) => onSectionPromptAppendChange('backend', e.target.value)}
+              placeholder="Append instructions for Backend generation..."
+              className="w-full text-xs border rounded p-2 bg-background min-h-[60px]"
+            />
+            <textarea
+              value={sectionPromptAppend.frontend}
+              onChange={(e) => onSectionPromptAppendChange('frontend', e.target.value)}
+              placeholder="Append instructions for Frontend generation..."
+              className="w-full text-xs border rounded p-2 bg-background min-h-[60px]"
+            />
+            <textarea
+              value={sectionPromptAppend.testing}
+              onChange={(e) => onSectionPromptAppendChange('testing', e.target.value)}
+              placeholder="Append instructions for Testing generation..."
+              className="w-full text-xs border rounded p-2 bg-background min-h-[60px]"
+            />
+          </div>
         </div>
       )}
 
