@@ -162,15 +162,32 @@ export function step4ToMarkdown(feature: Feature): string {
   });
 
   lines.push('## Backend Architecture', '');
+
+  if (devPlan.backend.featureOverview) {
+    lines.push('### Feature Overview', '');
+    lines.push(devPlan.backend.featureOverview, '');
+  }
+
   lines.push('### Database', '');
   devPlan.backend.database.entities.forEach((entity) => {
-    lines.push(`#### ${entity.name} (\`${entity.tableName}\`)`, '');
+    const softDeleteNote = entity.softDelete ? ' _(soft-delete)_' : '';
+    lines.push(`#### ${entity.name} (\`${entity.tableName}\`)${softDeleteNote}`, '');
     if (entity.fields?.length) {
       lines.push('| Field | Type | PK | Nullable | Notes |');
       lines.push('|-------|------|----|---------|-------|');
       entity.fields.forEach((f) => {
         lines.push(`| ${f.name} | ${f.type} | ${f.isPrimaryKey ? '✓' : ''} | ${f.isNullable ? '✓' : ''} | ${f.description ?? ''} |`);
       });
+      lines.push('');
+    }
+    if (entity.indexes?.length) {
+      lines.push('**Indexes:**', '');
+      entity.indexes.forEach((idx) => lines.push(`- \`${idx}\``));
+      lines.push('');
+    }
+    if (entity.constraints?.length) {
+      lines.push('**Constraints:**', '');
+      entity.constraints.forEach((c) => lines.push(`- \`${c}\``));
       lines.push('');
     }
   });
@@ -193,13 +210,78 @@ export function step4ToMarkdown(feature: Feature): string {
       });
       lines.push('');
     }
+    if (route.requestBody) {
+      lines.push('**Request Body:**', '');
+      lines.push('```json');
+      lines.push(route.requestBody);
+      lines.push('```', '');
+    }
     if (route.jsonResponse) {
       lines.push('**Response:**', '');
       lines.push('```json');
       lines.push(route.jsonResponse);
       lines.push('```', '');
     }
+    if (route.errorCases?.length) {
+      lines.push('**Error Cases:**', '');
+      route.errorCases.forEach((e) => lines.push(`- ${e}`));
+      lines.push('');
+    }
   });
+
+  if (devPlan.backend.businessLogicFlow?.length) {
+    lines.push('### Business Logic Flow', '');
+    devPlan.backend.businessLogicFlow.forEach((step, i) => lines.push(`${i + 1}. ${step}`));
+    lines.push('');
+  }
+
+  if (devPlan.backend.queryDesign?.length) {
+    lines.push('### Query Design', '');
+    devPlan.backend.queryDesign.forEach((q) => {
+      const paginatedNote = q.isPaginated ? ' _(cursor-paginated)_' : '';
+      lines.push(`#### ${q.name}${paginatedNote}`, '');
+      lines.push('```sql');
+      lines.push(q.sql);
+      lines.push('```', '');
+    });
+  }
+
+  if (devPlan.backend.transactions?.length) {
+    lines.push('### Transactions', '');
+    lines.push('| Operation | Reason |');
+    lines.push('|-----------|--------|');
+    devPlan.backend.transactions.forEach((t) => lines.push(`| ${t.where} | ${t.why} |`));
+    lines.push('');
+  }
+
+  if (devPlan.backend.cachingStrategy?.length) {
+    lines.push('### Caching Strategy (Redis)', '');
+    lines.push('| Key Pattern | TTL | Description |');
+    lines.push('|-------------|-----|-------------|');
+    devPlan.backend.cachingStrategy.forEach((c) => lines.push(`| \`${c.key}\` | ${c.ttl} | ${c.description} |`));
+    lines.push('');
+  }
+
+  if (devPlan.backend.validationRules?.length) {
+    lines.push('### Validation & Business Rules', '');
+    devPlan.backend.validationRules.forEach((r) => lines.push(`- ${r}`));
+    lines.push('');
+  }
+
+  if (devPlan.backend.security?.length) {
+    lines.push('### Security', '');
+    devPlan.backend.security.forEach((s) => lines.push(`- ${s}`));
+    lines.push('');
+  }
+
+  if (devPlan.backend.backendTasks?.length) {
+    lines.push('### Backend Tasks', '');
+    devPlan.backend.backendTasks.forEach((t, i) => {
+      lines.push(`${i + 1}. **${t.title}**`);
+      lines.push(`   ${t.description}`);
+      lines.push('');
+    });
+  }
 
   lines.push('### Folder Structure', '');
   lines.push('```');

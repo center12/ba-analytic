@@ -358,6 +358,9 @@ export interface DatabaseEntity {
   name: string;
   tableName: string;
   fields: DatabaseField[];
+  indexes?: string[];
+  constraints?: string[];
+  softDelete?: boolean;
 }
 
 export interface ApiParam {
@@ -373,12 +376,44 @@ export interface ApiRoute {
   description: string;
   params: ApiParam[];
   jsonResponse: string;
+  requestBody?: string;
+  errorCases?: string[];
+}
+
+export interface QueryDesign {
+  name: string;
+  sql: string;
+  isPaginated: boolean;
+}
+
+export interface TransactionBoundary {
+  where: string;
+  why: string;
+}
+
+export interface CacheEntry {
+  key: string;
+  ttl: string;
+  description: string;
+}
+
+export interface BackendTask {
+  title: string;
+  description: string;
 }
 
 export interface BackendPlan {
   database: { entities: DatabaseEntity[]; relationships: string[] };
   apiRoutes: ApiRoute[];
   folderStructure: string[];
+  featureOverview?: string;
+  businessLogicFlow?: string[];
+  queryDesign?: QueryDesign[];
+  transactions?: TransactionBoundary[];
+  cachingStrategy?: CacheEntry[];
+  validationRules?: string[];
+  security?: string[];
+  backendTasks?: BackendTask[];
 }
 
 export interface FrontendPlan {

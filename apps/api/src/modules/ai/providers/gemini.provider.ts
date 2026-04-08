@@ -89,7 +89,9 @@ const ApiRouteSchema = z.object({
   path: z.string(),
   description: z.string(),
   params: z.array(ApiParamSchema).default([]),
+  requestBody: z.string().default(''),
   jsonResponse: z.string().default(''),
+  errorCases: z.array(z.string()).default([]),
 });
 const DatabaseFieldSchema = z.object({
   name: z.string(),
@@ -102,6 +104,27 @@ const DatabaseEntitySchema = z.object({
   name: z.string(),
   tableName: z.string(),
   fields: z.array(DatabaseFieldSchema),
+  indexes: z.array(z.string()).default([]),
+  constraints: z.array(z.string()).default([]),
+  softDelete: z.boolean().default(false),
+});
+const QueryDesignSchema = z.object({
+  name: z.string(),
+  sql: z.string(),
+  isPaginated: z.boolean(),
+});
+const TransactionSchema = z.object({
+  where: z.string(),
+  why: z.string(),
+});
+const CacheEntrySchema = z.object({
+  key: z.string(),
+  ttl: z.string(),
+  description: z.string(),
+});
+const BackendTaskSchema = z.object({
+  title: z.string(),
+  description: z.string(),
 });
 const WorkflowBackendSchema = z.object({
   workflow: z.array(z.object({
@@ -111,11 +134,19 @@ const WorkflowBackendSchema = z.object({
     actor: z.string(),
   })),
   backend: z.object({
+    featureOverview: z.string().default(''),
     database: z.object({
       entities: z.array(DatabaseEntitySchema),
       relationships: z.array(z.string()),
     }),
     apiRoutes: z.array(ApiRouteSchema),
+    businessLogicFlow: z.array(z.string()).default([]),
+    queryDesign: z.array(QueryDesignSchema).default([]),
+    transactions: z.array(TransactionSchema).default([]),
+    cachingStrategy: z.array(CacheEntrySchema).default([]),
+    validationRules: z.array(z.string()).default([]),
+    security: z.array(z.string()).default([]),
+    backendTasks: z.array(BackendTaskSchema).default([]),
     folderStructure: z.array(z.string()),
   }),
 });

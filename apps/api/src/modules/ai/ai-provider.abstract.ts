@@ -76,6 +76,9 @@ export interface DatabaseEntity {
   name: string;
   tableName: string;
   fields: DatabaseField[];
+  indexes?: string[];      // e.g. "idx_orders_user_id ON orders(user_id)"
+  constraints?: string[];  // e.g. "UNIQUE(user_id, date)", "CHECK(amount > 0)"
+  softDelete?: boolean;    // true if table uses deleted_at soft-delete pattern
 }
 
 export interface ApiParam {
@@ -90,7 +93,31 @@ export interface ApiRoute {
   path: string;
   description: string;
   params: ApiParam[];
-  jsonResponse: string;  // JSON example as string, e.g. '{"id":"uuid","name":"string"}'
+  jsonResponse: string;   // JSON example as string, e.g. '{"id":"uuid","name":"string"}'
+  requestBody?: string;   // JSON example for POST/PUT/PATCH request payload
+  errorCases?: string[];  // e.g. "404 — resource not found", "422 — invalid input"
+}
+
+export interface QueryDesign {
+  name: string;        // e.g. "List orders with cursor pagination"
+  sql: string;         // The SQL query
+  isPaginated: boolean;
+}
+
+export interface TransactionBoundary {
+  where: string;  // operation / endpoint
+  why: string;    // reason atomicity is needed
+}
+
+export interface CacheEntry {
+  key: string;         // Redis key pattern, e.g. "order:{id}"
+  ttl: string;         // e.g. "300s", "1h"
+  description: string;
+}
+
+export interface BackendTask {
+  title: string;
+  description: string;  // Implementation detail, ≤ 1 day scope
 }
 
 export interface BackendPlan {
@@ -100,6 +127,14 @@ export interface BackendPlan {
   };
   apiRoutes: ApiRoute[];
   folderStructure: string[];
+  featureOverview?: string;
+  businessLogicFlow?: string[];
+  queryDesign?: QueryDesign[];
+  transactions?: TransactionBoundary[];
+  cachingStrategy?: CacheEntry[];
+  validationRules?: string[];
+  security?: string[];
+  backendTasks?: BackendTask[];
 }
 
 export interface FrontendPlan {
@@ -334,9 +369,17 @@ ${devPlan.backend.database.entities.map(e =>
 ${devPlan.backend.apiRoutes.map(r =>
   `${r.method} ${r.path} — ${r.description}` +
   (r.params?.length ? `\n  Params: ${r.params.map(p => `${p.name} (${p.in}, ${p.type}${p.required ? ', required' : ''})`).join('; ')}` : '') +
-  (r.jsonResponse ? `\n  Response: ${r.jsonResponse}` : '')
+  (r.requestBody ? `\n  Request: ${r.requestBody}` : '') +
+  (r.jsonResponse ? `\n  Response: ${r.jsonResponse}` : '') +
+  (r.errorCases?.length ? `\n  Errors: ${r.errorCases.join(' | ')}` : '')
 ).join('\n')}
-
+${devPlan.backend.security?.length ? `
+### Security Requirements
+${devPlan.backend.security.map(s => `- ${s}`).join('\n')}` : ''}${devPlan.backend.cachingStrategy?.length ? `
+### Caching (Redis)
+${devPlan.backend.cachingStrategy.map(c => `- key \`${c.key}\` (TTL ${c.ttl}): ${c.description}`).join('\n')}` : ''}${devPlan.backend.backendTasks?.length ? `
+### Pre-scoped Backend Tasks
+${devPlan.backend.backendTasks.map((t, i) => `${i + 1}. **${t.title}** — ${t.description}`).join('\n')}` : ''}
 ### Frontend Components
 ${devPlan.frontend.components.join('\n')}
 ` : '';
@@ -413,7 +456,7 @@ export function buildDevPlanWorkflowBackendPrompt(
   behaviors: ExtractedBehaviors,
   scenarios: TestScenario[],
 ): string {
-  return `You are a senior software architect. Based on the feature analysis below, define the user workflow and design the backend architecture.
+  return `You are a senior software architect. Based on the feature analysis below, define the user workflow and produce a comprehensive, highly technical backend plan.
 
 LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values in that same language. Do not translate or mix languages.
 
@@ -446,31 +489,75 @@ Produce an ordered list of user-facing workflow steps (the happy path from start
 Each step: order (1-based), title (short action name), description (one sentence), actor (who performs this step).
 Limit to 8 steps maximum.
 
-### 2. Backend Plan
+### 2. Feature Overview
+One paragraph summarising what this feature does from a technical perspective.
 
-**Database Entities**: For each entity define:
-- name: PascalCase model name (e.g. "Feature")
-- tableName: snake_case DB table name (e.g. "features")
-- fields: array of all fields needed to implement the feature. Each field:
-  - name: camelCase field name
-  - type: SQL-style type (e.g. "uuid", "varchar(255)", "int", "boolean", "timestamp", "text")
-  - isPrimaryKey: true only for the primary key field
-  - isNullable: true if the field can be null
-  - description: optional one-sentence note (omit if obvious)
-Also include relationships as plain strings (e.g. "User has many Orders").
+### 3. Database Design (PostgreSQL)
+For each entity define:
+- name: PascalCase model name (e.g. "Order")
+- tableName: snake_case table name (e.g. "orders")
+- fields: all columns. Each field: name (camelCase), type (SQL-style: "uuid", "varchar(255)", "int", "boolean", "timestamp", "text", "jsonb"), isPrimaryKey, isNullable, description (optional).
+  Prefer UUID primary keys. Include created_at / updated_at timestamps on every table.
+- indexes: CREATE INDEX statements for query-pattern-driven indexes (e.g. "CREATE INDEX idx_orders_user_id ON orders(user_id)"). List only meaningful indexes.
+- constraints: UNIQUE or CHECK constraints (e.g. "UNIQUE(user_id, date)", "CHECK(amount > 0)").
+- softDelete: true if the table should support soft-delete via a deleted_at column.
 
-**API Routes**: For each endpoint define:
-- method: GET/POST/PUT/PATCH/DELETE
-- path: e.g. /api/features/:id
+### 4. Relationships
+Plain-text relationship descriptions (e.g. "User has many Orders", "Order belongs to User").
+
+### 5. API Design
+For each endpoint define:
+- method: GET / POST / PUT / PATCH / DELETE
+- path: e.g. /api/orders/:id
 - description: one sentence
-- params: array of parameters. Each param: name, in ("path"|"query"|"body"), type (e.g. "string", "uuid", "number"), required (boolean). Include path params, key query params, and body fields for POST/PUT/PATCH.
-- jsonResponse: a short JSON example string showing the response shape (e.g. '{"id":"uuid","name":"string"}' or '[{"id":"uuid"}]'). For DELETE use '{"message":"string"}'.
-Include all CRUD routes plus any special operations needed.
+- params: path params, key query params, body fields for POST/PUT/PATCH. Each param: name, in ("path"|"query"|"body"), type, required.
+- requestBody: JSON example string for POST/PUT/PATCH (e.g. '{"userId":"uuid","amount":100}'). Empty string for GET/DELETE.
+- jsonResponse: JSON example string of the success response shape.
+- errorCases: list of possible error responses (e.g. "404 — order not found", "422 — amount must be positive", "409 — duplicate entry").
+Include all CRUD routes plus any special operations (e.g. status transitions, bulk actions).
 
-**Folder Structure**: List file paths for the NestJS module (controller, service, module, DTOs, constants, helpers).
-Follow the pattern: src/modules/<name>/<name>.controller.ts, etc.
+### 6. Business Logic Flow
+Step-by-step description of the core processing logic (not the user workflow — this is the server-side logic). Each item is one sentence describing what happens inside the service layer.
+
+### 7. Query Design
+For each significant query (list endpoints, searches, reports) provide:
+- name: descriptive name (e.g. "List orders by user with cursor pagination")
+- sql: the SQL query (use cursor-based pagination with WHERE id > :cursor LIMIT :limit for list queries; include relevant JOINs and WHERE clauses)
+- isPaginated: true if the query uses pagination
+MUST include cursor-based pagination for any list/search query that could return more than 20 rows.
+
+### 8. Transactions
+List operations that must be wrapped in a database transaction:
+- where: the operation or endpoint (e.g. "POST /api/orders — create order + deduct stock")
+- why: reason atomicity is needed (e.g. "Both writes must succeed or neither should persist")
+
+### 9. Caching Strategy (Redis)
+For each cacheable resource:
+- key: Redis key pattern (e.g. "order:{id}", "user:{userId}:orders:page:{cursor}")
+- ttl: expiry (e.g. "300s", "1h", "24h")
+- description: what is cached and when to invalidate
+
+### 10. Validation & Business Rules
+List all input validation and business rule checks that must be enforced server-side (e.g. "amount must be > 0", "user must be in ACTIVE status to place an order").
+
+### 11. Security
+List security controls to implement (e.g. "JWT bearer auth required on all routes", "Rate limit: 100 req/min per user on POST /api/orders", "Validate that the requesting user owns the resource before returning or mutating it").
+
+### 12. Backend Tasks
+Break implementation into atomic tasks, each completable in ≤ 1 day:
+- title: short task name
+- description: exactly what to implement (specific, not vague)
+No more than 12 tasks total. Order by implementation dependency.
+
+### 13. Folder Structure
+List file paths for the NestJS module. Follow the pattern: src/modules/<name>/<name>.controller.ts, etc.
 
 ---
+
+Rules:
+- Be highly technical. No vague descriptions.
+- All SQL must be valid PostgreSQL.
+- Optimize for performance and scalability.
 
 Return ONLY valid JSON (no markdown, no explanation):
 {
@@ -478,6 +565,7 @@ Return ONLY valid JSON (no markdown, no explanation):
     { "order": 1, "title": "string", "description": "string", "actor": "string" }
   ],
   "backend": {
+    "featureOverview": "string",
     "database": {
       "entities": [
         {
@@ -485,7 +573,10 @@ Return ONLY valid JSON (no markdown, no explanation):
           "tableName": "string",
           "fields": [
             { "name": "string", "type": "string", "isPrimaryKey": false, "isNullable": false, "description": "string" }
-          ]
+          ],
+          "indexes": ["string"],
+          "constraints": ["string"],
+          "softDelete": false
         }
       ],
       "relationships": ["string"]
@@ -496,8 +587,25 @@ Return ONLY valid JSON (no markdown, no explanation):
         "path": "string",
         "description": "string",
         "params": [{ "name": "string", "in": "path|query|body", "type": "string", "required": true }],
-        "jsonResponse": "string"
+        "requestBody": "string",
+        "jsonResponse": "string",
+        "errorCases": ["string"]
       }
+    ],
+    "businessLogicFlow": ["string"],
+    "queryDesign": [
+      { "name": "string", "sql": "string", "isPaginated": true }
+    ],
+    "transactions": [
+      { "where": "string", "why": "string" }
+    ],
+    "cachingStrategy": [
+      { "key": "string", "ttl": "string", "description": "string" }
+    ],
+    "validationRules": ["string"],
+    "security": ["string"],
+    "backendTasks": [
+      { "title": "string", "description": "string" }
     ],
     "folderStructure": ["string"]
   }

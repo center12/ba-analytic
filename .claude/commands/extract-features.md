@@ -61,7 +61,48 @@ Overwrite the file completely if it already exists.
 
 Keep each file under 120 lines. Do not paste function bodies.
 
-## Step 4 — Update docs/INDEX.md
+## Step 4 — Extract global shared code
+
+Scan the global frontend folders (outside `features/`):
+- `src/components/**/*.tsx` (or `apps/web/src/components/`)
+- `src/hooks/**/*.ts`
+- `src/services/**/*.ts`
+- `src/stores/**/*.ts`
+- `src/utils/**/*.ts`
+- `src/lib/**/*.ts`
+
+For each file found, read to extract: export name + one-line purpose.
+
+Write `docs/features/_global.md` using this template (omit empty sections):
+
+```
+# Global Frontend Shared Code
+**Purpose**: Shared utilities, components, hooks, services, and stores used across two or more features.
+
+## Components
+| File | Export | Purpose |
+|------|--------|---------|
+
+## Hooks
+| File | Export | Purpose |
+|------|--------|---------|
+
+## Services
+| File | Export | Purpose |
+|------|--------|---------|
+
+## Stores
+| File | Export | Purpose |
+|------|--------|---------|
+
+## Utils / Lib
+| File | Export | Purpose |
+|------|--------|---------|
+```
+
+Keep the file under 150 lines. Overwrite if it already exists.
+
+## Step 5 — Update docs/INDEX.md
 
 If `docs/INDEX.md` exists, update only the rows in the "Frontend Features" table
 for the features just processed, preserving all other content.
@@ -90,7 +131,7 @@ Read docs/features/chat.md, then add a "mark as read" button to ChatSidebar.
 ​```
 ```
 
-## Step 5 — Print summary
+## Step 6 — Print summary
 
 After all files are written, output:
 
@@ -98,8 +139,9 @@ After all files are written, output:
 Frontend docs extracted:
   docs/features/<name>.md
   ...
+  docs/features/_global.md
   docs/INDEX.md (updated)
 
-Total: X feature docs written
+Total: X feature docs + 1 global doc written
 Refresh a single feature: /extract-features <name>
 ```

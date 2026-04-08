@@ -65,7 +65,45 @@ Overwrite the file completely if it already exists.
 
 Keep each file under 100 lines.
 
-## Step 4 — Update docs/INDEX.md
+## Step 4 — Extract global shared backend code
+
+Scan backend folders that live outside `modules/` (shared providers, common utilities):
+- `src/common/**/*.ts` (or `apps/api/src/common/`)
+- `src/guards/**/*.ts`
+- `src/decorators/**/*.ts`
+- `src/filters/**/*.ts`
+- `src/interceptors/**/*.ts`
+- `src/pipes/**/*.ts`
+- `src/lib/**/*.ts`
+
+For each file found, read to extract: export name + one-line purpose.
+
+Write `docs/modules/_global.md` using this template (omit empty sections):
+
+```
+# Global Backend Shared Code
+**Purpose**: Shared guards, decorators, filters, interceptors, and utilities used across two or more modules.
+
+## Guards
+| File | Export | Purpose |
+|------|--------|---------|
+
+## Decorators
+| File | Export | Purpose |
+|------|--------|---------|
+
+## Filters / Interceptors / Pipes
+| File | Export | Purpose |
+|------|--------|---------|
+
+## Common Utilities / Lib
+| File | Export | Purpose |
+|------|--------|---------|
+```
+
+Keep the file under 150 lines. Overwrite if it already exists.
+
+## Step 5 — Update docs/INDEX.md
 
 If `docs/INDEX.md` exists, update only the rows in the "Backend Modules" table
 for the modules just processed, preserving all other content.
@@ -94,7 +132,7 @@ Read docs/modules/test-case.md, then add a new pipeline step.
 ​```
 ```
 
-## Step 5 — Print summary
+## Step 6 — Print summary
 
 After all files are written, output:
 
@@ -102,8 +140,9 @@ After all files are written, output:
 Backend docs extracted:
   docs/modules/<name>.md
   ...
+  docs/modules/_global.md
   docs/INDEX.md (updated)
 
-Total: Y module docs written
+Total: Y module docs + 1 global doc written
 Refresh a single module: /extract-modules <name>
 ```
