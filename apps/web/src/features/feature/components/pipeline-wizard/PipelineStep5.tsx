@@ -1,5 +1,8 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { FileText, Loader2, Play, RefreshCw } from 'lucide-react';
-import { Feature } from '@/lib/api';
+import { api, Feature } from '@/lib/api';
+import { useAppStore } from '@/store';
+import { toast } from '@/hooks/use-toast';
 import { MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
 import { step5ToMarkdown } from '../../helpers/pipeline-wizard.helpers';
 import { ManualPanel } from './ManualPanel';
@@ -24,6 +27,51 @@ interface PipelineStep5Props {
   runStep: (step: number) => void;
 }
 
+type Step5Section = 'backend' | 'frontend' | 'testing';
+
+function SectionGenerateButton({
+  label,
+  section,
+  featureId,
+  disabled,
+}: {
+  label: string;
+  section: Step5Section;
+  featureId: string;
+  disabled: boolean;
+}) {
+  const activeProvider = useAppStore(s => s.activeProvider);
+  const activeModel = useAppStore(s => s.activeModel);
+  const qc = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      api.testCases.runStep5Section(featureId, section, activeProvider ?? undefined, activeModel),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['features', featureId] });
+      qc.invalidateQueries({ queryKey: ['dev-tasks', featureId] });
+      toast({ variant: 'success', title: `${label} prompts generated` });
+    },
+    onError: (err: Error) => {
+      toast({ variant: 'destructive', title: `${label} generation failed`, description: err.message });
+    },
+  });
+
+  return (
+    <button
+      disabled={disabled || mutation.isPending}
+      onClick={() => mutation.mutate()}
+      className="flex items-center gap-1.5 border px-2.5 py-1 rounded text-xs hover:bg-muted disabled:opacity-50"
+    >
+      {mutation.isPending
+        ? <Loader2 size={12} className="animate-spin" />
+        : <Play size={12} />
+      }
+      {mutation.isPending ? 'Generating…' : `Generate ${label}`}
+    </button>
+  );
+}
+
 export function PipelineStep5({
   feature,
   featureId,
@@ -42,10 +90,11 @@ export function PipelineStep5({
   runStep,
 }: PipelineStep5Props) {
   const canRun = previousStepCompleted && !isRunning;
+  const hasAnyPrompt = !!(feature.devPromptApi || feature.devPromptFrontend || feature.devPromptTesting);
 
   return (
     <div className="border-t px-4 py-4 space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         {(status === 'idle' || status === 'failed') && (
           <>
             <button
@@ -61,7 +110,7 @@ export function PipelineStep5({
                 ? <Loader2 size={13} className="animate-spin" />
                 : status === 'failed' ? <RefreshCw size={13} /> : <Play size={13} />
               }
-              {status === 'failed' ? 'Retry Step 5' : 'Run Step 5'}
+              {status === 'failed' ? 'Retry All' : 'Generate All'}
             </button>
             {manualStep !== 5 && (
               <button
@@ -83,7 +132,7 @@ export function PipelineStep5({
           <>
             <button disabled={!canRun} onClick={() => runStep(5)}
               className="flex items-center gap-1.5 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50">
-              <RefreshCw size={13} /> Re-run
+              <RefreshCw size={13} /> Re-run All
             </button>
             <CopyMarkdownButton
               getText={() => step5ToMarkdown(feature)}
@@ -92,6 +141,29 @@ export function PipelineStep5({
           </>
         )}
       </div>
+
+      {previousStepCompleted && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <SectionGenerateButton
+            label="Backend"
+            section="backend"
+            featureId={featureId}
+            disabled={!canRun}
+          />
+          <SectionGenerateButton
+            label="Frontend"
+            section="frontend"
+            featureId={featureId}
+            disabled={!canRun}
+          />
+          <SectionGenerateButton
+            label="Testing"
+            section="testing"
+            featureId={featureId}
+            disabled={!canRun}
+          />
+        </div>
+      )}
 
       {manualStep === 5 && (
         <ManualPanel
@@ -107,7 +179,7 @@ export function PipelineStep5({
         />
       )}
 
-      {feature.devPromptApi && feature.devPromptFrontend && feature.devPromptTesting && (
+      {hasAnyPrompt && (
         <DevPromptPanel
           api={feature.devPromptApi}
           frontend={feature.devPromptFrontend}

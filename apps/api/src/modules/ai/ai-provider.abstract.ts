@@ -55,6 +55,8 @@ export interface DevPrompt {
   testing:  DevTaskItem[];   // 4C — test automation sub-tasks
 }
 
+export type DevPromptSection = 'api' | 'frontend' | 'testing';
+
 // ── Step 4 — Development Plan types ──────────────────────────────────────────
 
 export interface WorkflowStep {
@@ -424,9 +426,9 @@ export function buildDevPromptInput(
   behaviors: ExtractedBehaviors,
   scenarios: TestScenario[],
   devPlan?: DevPlan,
+  targetSection?: DevPromptSection,
 ): string {
   const scenarioCount = scenarios.length;
-  const subTaskCount  = Math.min(Math.ceil(scenarioCount / 4), 5); // 1 for ≤4, up to 5 for large features
 
   const scenarioList = scenarios
     .map((s, i) => `${i + 1}. [${s.type.toUpperCase()}] ${s.title}`)
@@ -469,6 +471,14 @@ ${devPlan.testing.backend.tasks.map(t => `${t.id}. **${t.title}** — ${t.descri
 ${devPlan.testing.frontend.tasks.map(t => `${t.id}. **${t.title}** — ${t.description}`).join('\n')}` : ''}
 ` : '';
 
+  const sectionScope = targetSection
+    ? `Generate prompts for **${targetSection.toUpperCase()} section only**.`
+    : 'Generate prompts for all three sections: api, frontend, testing.';
+
+  const outputInstruction = targetSection
+    ? `Return all keys (\`api\`, \`frontend\`, \`testing\`). Populate only \`${targetSection}\`; all other keys must be empty arrays.`
+    : 'Return all keys with generated arrays for api, frontend, and testing.';
+
   return `You are a senior software architect. Based on the feature analysis below, generate developer implementation prompts split into sub-tasks — one set for API/backend (4A), one for frontend/UI (4B), and one for test automation (4C).
 
 LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values — titles and prompts — in that same language. Do not translate or mix languages.
@@ -496,10 +506,14 @@ ${scenarioList}
 ${architectureSection}
 ---
 
+## Section Scope
+${sectionScope}
+
 ## Sub-Task Breakdown Rules
 
-- Produce exactly **${subTaskCount} sub-task(s) per category** (api, frontend, testing).
-- Group logically related scenarios together into each sub-task (e.g. "Authentication flows", "Data CRUD", "Error handling").
+- Generate **as many sub-task(s) as needed per category** (api, frontend, testing) to cover all required implementation and verification work.
+- Split tasks by clear vertical slices and keep each task independently deliverable in **<= 8 hours**.
+- Group logically related scenarios together into each sub-task (e.g. "Authentication flows", "Data CRUD", "Error handling"), but do not overload one task beyond the 8-hour scope.
 - Title pattern: \`"API — [theme]"\`, \`"Frontend — [theme]"\`, \`"Testing — [theme]"\`.
 - Each sub-task prompt must be **fully self-contained** (embed all context needed to implement that slice).
 - Keep each sub-task prompt under **400 words**. Use placeholders for boilerplate — do not write full implementations.
@@ -525,6 +539,7 @@ Each prompt must start with "You are an expert [role]." and embed all relevant c
 ---
 
 Return ONLY valid JSON matching this exact structure (no markdown, no explanation):
+${outputInstruction}
 {
   "api":      [{ "title": "API — [theme]",      "prompt": "string" }],
   "frontend": [{ "title": "Frontend — [theme]", "prompt": "string" }],
@@ -1158,6 +1173,7 @@ export abstract class AIProvider {
     behaviors: ExtractedBehaviors,
     scenarios: TestScenario[],
     devPlan?: DevPlan,
+    targetSection?: DevPromptSection,
   ): Promise<DevPrompt>;
 
   /**

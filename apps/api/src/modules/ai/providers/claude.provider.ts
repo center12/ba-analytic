@@ -20,6 +20,7 @@ import {
   CombinedExtraction,
   DevPlan,
   DevPrompt,
+  DevPromptSection,
   ExtractedBehaviors,
   ExtractedRequirements,
   FrontendPlan,
@@ -600,9 +601,10 @@ ${baDocumentContent}`;
     behaviors: ExtractedBehaviors,
     scenarios: TestScenario[],
     devPlan?: DevPlan,
+    targetSection?: DevPromptSection,
   ): Promise<DevPrompt> {
     this.logger.log('[Step 5] Generating dev prompts (API / Frontend / Testing)...');
-    const text4 = buildDevPromptInput(requirements, behaviors, scenarios, devPlan);
+    const text4 = buildDevPromptInput(requirements, behaviors, scenarios, devPlan, targetSection);
     this.logPromptSize('[Layer 4]', text4);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),

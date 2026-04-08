@@ -6,7 +6,7 @@ type Tab = 'api' | 'frontend' | 'testing';
 type FieldValue = string | DevTaskItem[] | undefined;
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'api',      label: '4A — API' },
+  { id: 'api',      label: '4A — Backend' },
   { id: 'frontend', label: '4B — Frontend' },
   { id: 'testing',  label: '4C — Testing' },
 ];
@@ -65,7 +65,7 @@ export function DevPromptPanel({ api, frontend, testing }: Props) {
       >
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         <span className="font-medium">Dev Prompts</span>
-        <span className="ml-auto text-xs text-muted-foreground">4A API · 4B Frontend · 4C Testing</span>
+        <span className="ml-auto text-xs text-muted-foreground">4A Backend · 4B Frontend · 4C Testing</span>
       </button>
 
       {open && (

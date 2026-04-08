@@ -80,7 +80,7 @@ export class TestCaseController {
 
   /**
    * POST /api/test-cases/feature/:featureId/run-step/:step?provider=gemini&model=gemini-2.0-flash
-   * Runs a single pipeline step (1–4) independently.
+   * Runs a single pipeline step (1–5) independently.
    */
   @Post('feature/:featureId/run-step/:step')
   runStep(
@@ -105,6 +105,20 @@ export class TestCaseController {
     @Query('model') model?: string,
   ) {
     return this.service.runStep4SectionForFeature(featureId, section, provider, model);
+  }
+
+  /**
+   * POST /api/test-cases/feature/:featureId/run-step-5-section/:section?provider=gemini
+   * Generates one Step 5 section (backend|api alias | frontend | testing).
+   */
+  @Post('feature/:featureId/run-step-5-section/:section')
+  runStep5Section(
+    @Param('featureId') featureId: string,
+    @Param('section') section: 'backend' | 'api' | 'frontend' | 'testing',
+    @Query('provider') provider?: string,
+    @Query('model') model?: string,
+  ) {
+    return this.service.runStep5SectionForFeature(featureId, section, provider, model);
   }
 
   /**

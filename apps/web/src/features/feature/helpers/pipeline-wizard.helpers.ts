@@ -12,7 +12,7 @@ export function deriveStatus(
     stepNum === 2 ? !!feature.testScenarios :
     stepNum === 3 ? testCaseCount > 0 :
     stepNum === 4 ? !!feature.devPlanWorkflow :
-    !!feature.devPromptApi;
+    !!(feature.devPromptApi || feature.devPromptFrontend || feature.devPromptTesting);
 
   if (isDone) return 'completed';
   if (activeStep === stepNum) return 'running';
@@ -536,7 +536,7 @@ export function step5ToMarkdown(feature: Feature): string {
   const lines: string[] = [`# Dev Prompts — ${feature.name}`, ''];
 
   const categories: [string, string | undefined][] = [
-    ['API', feature.devPromptApi],
+    ['Backend', feature.devPromptApi],
     ['Frontend', feature.devPromptFrontend],
     ['Testing', feature.devPromptTesting],
   ];

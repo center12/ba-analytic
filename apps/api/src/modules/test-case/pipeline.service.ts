@@ -13,6 +13,7 @@ import {
   buildGenerateTestCasesPrompt,
   buildPlanScenariosPrompt,
   CombinedExtraction,
+  DevTaskItem,
   DevPlan,
   DevPrompt,
   ExtractedBehaviors,
@@ -38,6 +39,8 @@ const {
   CHUNK_DELAY_MS,
   SCENARIO_BATCH,
 } = AI_CONFIG;
+
+type Step5Section = 'api' | 'frontend' | 'testing';
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
@@ -440,61 +443,59 @@ export class PipelineService {
       data: ({ pipelineStatus: 'RUNNING', pipelineStep: 5 } as any),
     });
     try {
-      const feature = await this.prisma.feature.findUnique({ where: { id: featureId }, include: { developerTasks: false } });
-      if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
-
-      const req          = feature.extractedRequirements as ExtractedRequirements | null;
-      const beh          = feature.extractedBehaviors    as ExtractedBehaviors    | null;
-      const testScenarios = feature.testScenarios         as TestScenario[]       | null;
-      if (!req || !beh)         throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
-      if (!testScenarios?.length) throw new BadRequestException(`Feature ${featureId} has no scenarios — run Step 2 first`);
-
-      const provider = await this._resolveProvider(featureId, 5, providerName, model);
-      const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
-
-      let devPlan: DevPlan | undefined;
-      const rawWorkflow  = (feature as any).devPlanWorkflow;
-      const rawBackend   = (feature as any).devPlanBackend;
-      const rawFrontend  = (feature as any).devPlanFrontend;
-      const rawTesting   = (feature as any).devPlanTesting;
-      if (rawWorkflow && rawBackend && rawFrontend && rawTesting) {
-        try {
-          devPlan = {
-            workflow: JSON.parse(rawWorkflow),
-            backend:  JSON.parse(rawBackend),
-            frontend: JSON.parse(rawFrontend),
-            testing:  JSON.parse(rawTesting),
-          };
-          this.logger.log('[Pipeline] Step 5 — devPlan loaded from DB, passing as context');
-        } catch {
-          this.logger.warn('[Pipeline] Step 5 — devPlan JSON parse failed, proceeding without it');
-        }
-      }
-
+      const { provider, compReq, compBeh, testScenarios, devPlan } = await this._loadStep5Context(featureId, providerName, model);
       this.logger.log('[Pipeline] Step 5 — generating dev prompts');
       const devPrompt = await withRetry(() => provider.generateDevPrompt(compReq, compBeh, testScenarios, devPlan));
+      await this._applyStep5Full(featureId, devPrompt);
 
+      const taskRowsCount = devPrompt.api.length + devPrompt.frontend.length + devPrompt.testing.length;
+      this.logger.log(`[Pipeline] Step 5 — created ${taskRowsCount} dev task(s) (${devPrompt.api.length} API, ${devPrompt.frontend.length} Frontend, ${devPrompt.testing.length} Testing)`);
+      return { devPrompt };
+    } catch (err) {
       await this.prisma.feature.update({
         where: { id: featureId },
-        data: ({
-          devPromptApi:      JSON.stringify(devPrompt.api),
-          devPromptFrontend: JSON.stringify(devPrompt.frontend),
-          devPromptTesting:  JSON.stringify(devPrompt.testing),
-          pipelineStatus: 'COMPLETED',
-          pipelineStep: 5,
-        } as any),
+        data: ({ pipelineStatus: 'FAILED', pipelineStep: 5 } as any),
       });
+      throw err;
+    }
+  }
 
-      const taskRows = [
-        ...devPrompt.api.map(t      => ({ featureId, category: 'API'      as const, title: t.title, prompt: t.prompt })),
-        ...devPrompt.frontend.map(t => ({ featureId, category: 'FRONTEND' as const, title: t.title, prompt: t.prompt })),
-        ...devPrompt.testing.map(t  => ({ featureId, category: 'TESTING'  as const, title: t.title, prompt: t.prompt })),
-      ];
-      await this.prisma.developerTask.deleteMany({ where: { featureId } });
-      await this.prisma.developerTask.createMany({ data: taskRows });
+  /** Step 5A (manual): Generate Backend/API prompts only */
+  async runStep5Backend(featureId: string, providerName?: string, model?: string) {
+    return this.runStep5Section(featureId, 'api', providerName, model);
+  }
 
-      this.logger.log(`[Pipeline] Step 5 — created ${taskRows.length} dev task(s) (${devPrompt.api.length} API, ${devPrompt.frontend.length} Frontend, ${devPrompt.testing.length} Testing)`);
-      return { devPrompt };
+  /** Step 5B (manual): Generate Frontend prompts only */
+  async runStep5Frontend(featureId: string, providerName?: string, model?: string) {
+    return this.runStep5Section(featureId, 'frontend', providerName, model);
+  }
+
+  /** Step 5C (manual): Generate Testing prompts only */
+  async runStep5Testing(featureId: string, providerName?: string, model?: string) {
+    return this.runStep5Section(featureId, 'testing', providerName, model);
+  }
+
+  private async runStep5Section(
+    featureId: string,
+    section: Step5Section,
+    providerName?: string,
+    model?: string,
+  ) {
+    await this.prisma.feature.update({
+      where: { id: featureId },
+      data: ({ pipelineStatus: 'RUNNING', pipelineStep: 5 } as any),
+    });
+
+    try {
+      const { provider, compReq, compBeh, testScenarios, devPlan } = await this._loadStep5Context(featureId, providerName, model);
+      this.logger.log(`[Pipeline] Step 5 (${section}) — generating section prompts`);
+      const devPrompt = await withRetry(() => provider.generateDevPrompt(compReq, compBeh, testScenarios, devPlan, section));
+      const sectionTasks = devPrompt[section] ?? [];
+
+      await this._applyStep5Section(featureId, section, sectionTasks);
+
+      this.logger.log(`[Pipeline] Step 5 (${section}) — created ${sectionTasks.length} task(s)`);
+      return { section: section === 'api' ? 'backend' : section, tasksGenerated: sectionTasks.length };
     } catch (err) {
       await this.prisma.feature.update({
         where: { id: featureId },
@@ -857,7 +858,7 @@ export class PipelineService {
     // ── Step 5: Generate dev prompts ──────────────────────────────────────────
     this.logger.log('[Pipeline] Step 5 — generating dev prompts');
     const devPrompt = await withRetry(() =>
-      provider5.generateDevPrompt(compReq, compBeh, testScenarios),
+      provider5.generateDevPrompt(compReq, compBeh, testScenarios, { workflow, backend, frontend, testing }),
     );
 
     await this.prisma.feature.update({
@@ -894,6 +895,97 @@ export class PipelineService {
         scenariosCount: testScenarios.length,
       },
     };
+  }
+
+  private _parseStep5DevPlan(feature: any): DevPlan | undefined {
+    const rawWorkflow = feature.devPlanWorkflow;
+    const rawBackend = feature.devPlanBackend;
+    const rawFrontend = feature.devPlanFrontend;
+    const rawTesting = feature.devPlanTesting;
+
+    if (!rawWorkflow || !rawBackend || !rawFrontend || !rawTesting) return undefined;
+    try {
+      return {
+        workflow: JSON.parse(rawWorkflow),
+        backend: JSON.parse(rawBackend),
+        frontend: JSON.parse(rawFrontend),
+        testing: JSON.parse(rawTesting),
+      };
+    } catch {
+      this.logger.warn('[Pipeline] Step 5 — devPlan JSON parse failed, proceeding without it');
+      return undefined;
+    }
+  }
+
+  private async _loadStep5Context(featureId: string, providerName?: string, model?: string) {
+    const feature = await this.prisma.feature.findUnique({ where: { id: featureId }, include: { developerTasks: false } });
+    if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
+
+    const req = feature.extractedRequirements as ExtractedRequirements | null;
+    const beh = feature.extractedBehaviors as ExtractedBehaviors | null;
+    const testScenarios = feature.testScenarios as TestScenario[] | null;
+    if (!req || !beh) throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
+    if (!testScenarios?.length) throw new BadRequestException(`Feature ${featureId} has no scenarios — run Step 2 first`);
+
+    const provider = await this._resolveProvider(featureId, 5, providerName, model);
+    const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+    const devPlan = this._parseStep5DevPlan(feature as any);
+    if (devPlan) this.logger.log('[Pipeline] Step 5 — devPlan loaded from DB, passing as context');
+
+    return { provider, compReq, compBeh, testScenarios, devPlan };
+  }
+
+  private async _applyStep5Full(featureId: string, devPrompt: DevPrompt) {
+    await this.prisma.feature.update({
+      where: { id: featureId },
+      data: ({
+        devPromptApi: JSON.stringify(devPrompt.api),
+        devPromptFrontend: JSON.stringify(devPrompt.frontend),
+        devPromptTesting: JSON.stringify(devPrompt.testing),
+        pipelineStatus: 'COMPLETED',
+        pipelineStep: 5,
+      } as any),
+    });
+
+    const taskRows = [
+      ...devPrompt.api.map(t => ({ featureId, category: 'API' as const, title: t.title, prompt: t.prompt })),
+      ...devPrompt.frontend.map(t => ({ featureId, category: 'FRONTEND' as const, title: t.title, prompt: t.prompt })),
+      ...devPrompt.testing.map(t => ({ featureId, category: 'TESTING' as const, title: t.title, prompt: t.prompt })),
+    ];
+
+    await this.prisma.developerTask.deleteMany({ where: { featureId } });
+    if (taskRows.length > 0) {
+      await this.prisma.developerTask.createMany({ data: taskRows });
+    }
+  }
+
+  private async _applyStep5Section(featureId: string, section: Step5Section, sectionTasks: DevTaskItem[]) {
+    const sectionMeta = section === 'api'
+      ? { field: 'devPromptApi', category: 'API' as const }
+      : section === 'frontend'
+        ? { field: 'devPromptFrontend', category: 'FRONTEND' as const }
+        : { field: 'devPromptTesting', category: 'TESTING' as const };
+
+    await this.prisma.feature.update({
+      where: { id: featureId },
+      data: ({
+        [sectionMeta.field]: JSON.stringify(sectionTasks),
+        pipelineStatus: 'COMPLETED',
+        pipelineStep: 5,
+      } as any),
+    });
+
+    await this.prisma.developerTask.deleteMany({ where: { featureId, category: sectionMeta.category } });
+    if (sectionTasks.length > 0) {
+      await this.prisma.developerTask.createMany({
+        data: sectionTasks.map(t => ({
+          featureId,
+          category: sectionMeta.category,
+          title: t.title,
+          prompt: t.prompt,
+        })),
+      });
+    }
   }
 
   // ── Provider resolution ────────────────────────────────────────────────────

@@ -68,6 +68,25 @@ export class TestCaseService {
     }
   }
 
+  async runStep5SectionForFeature(
+    featureId: string,
+    section: 'backend' | 'api' | 'frontend' | 'testing',
+    providerName?: string,
+    model?: string,
+  ) {
+    switch (section) {
+      case 'backend':
+      case 'api':
+        return this.pipeline.runStep5Backend(featureId, providerName, model);
+      case 'frontend':
+        return this.pipeline.runStep5Frontend(featureId, providerName, model);
+      case 'testing':
+        return this.pipeline.runStep5Testing(featureId, providerName, model);
+      default:
+        throw new Error(`Invalid step 5 section: ${section}`);
+    }
+  }
+
   async resumeStep1ForFeature(featureId: string, providerName?: string, model?: string) {
     return this.pipeline.resumeStep1(featureId, providerName, model);
   }

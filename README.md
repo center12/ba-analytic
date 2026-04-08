@@ -283,6 +283,7 @@ The SSE chat stream (`/api/chat/sessions/:id/stream`) passes the token as a quer
 | POST | `/api/test-cases/feature/:id/generate` | required | Run the full AI pipeline |
 | POST | `/api/test-cases/feature/:id/run-step/:step` | required | Run a single pipeline step (1–5) |
 | POST | `/api/test-cases/feature/:id/run-step-4-section/:section` | required | Generate one Step 4 section (`workflow-backend` / `frontend` / `testing-backend` / `testing-frontend`; UI may also call high-level `testing`) |
+| POST | `/api/test-cases/feature/:id/run-step-5-section/:section` | required | Generate one Step 5 section (`backend` / `frontend` / `testing`; API also accepts `api` alias for backend) |
 | GET | `/api/dev-tasks/feature/:id` | required | List developer tasks for a feature |
 | DELETE | `/api/dev-tasks/:id` | required | Delete a developer task |
 | POST | `/api/chat/sessions` | required | Create a chat session |

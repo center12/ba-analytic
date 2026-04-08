@@ -55,6 +55,10 @@
 - `frontend` — generates frontend plan; requires `workflow-backend`
 - `testing-backend` — generates backend testing plan; requires backend plan
 - `testing-frontend` — generates frontend testing plan; requires backend and frontend plans
+### POST `/test-cases/feature/:id/run-step-5-section/:section` — run one Step 5 section:
+- `backend` (or alias `api`) — generates backend prompts/tasks only
+- `frontend` — generates frontend prompts/tasks only
+- `testing` — generates testing prompts/tasks only
 ### GET `/test-cases/feature/:id/step/:step/prompt` — fetch manual prompt
 
 ---

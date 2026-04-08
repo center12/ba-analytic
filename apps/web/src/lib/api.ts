@@ -169,6 +169,21 @@ export const api = {
         { method: 'POST' },
       );
     },
+    runStep5Section: (
+      featureId: string,
+      section: 'backend' | 'api' | 'frontend' | 'testing',
+      provider?: string,
+      model?: string,
+    ) => {
+      const params = new URLSearchParams();
+      if (provider) params.set('provider', provider);
+      if (model) params.set('model', model);
+      const qs = params.toString();
+      return request<unknown>(
+        `/test-cases/feature/${featureId}/run-step-5-section/${section}${qs ? `?${qs}` : ''}`,
+        { method: 'POST' },
+      );
+    },
     resumeStep1: (featureId: string, provider?: string, model?: string) => {
       const params = new URLSearchParams();
       if (provider) params.set('provider', provider);

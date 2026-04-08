@@ -26,6 +26,7 @@
 | POST | `/api/test-cases/feature/:featureId/resume` | query:`provider?`,`model?` | resumed pipeline result | `400` if pipeline not failed |
 | POST | `/api/test-cases/feature/:featureId/run-step/:step` | query:`provider?`,`model?`, body:`override?` | step-specific result | `400 invalid step/prereq` |
 | POST | `/api/test-cases/feature/:featureId/run-step-4-section/:section` | `section` in `workflow-backend` \| `frontend` \| `testing-backend` \| `testing-frontend`; API also accepts high-level `testing` as a convenience wrapper, query provider/model | section result | `400 invalid section/prereq` |
+| POST | `/api/test-cases/feature/:featureId/run-step-5-section/:section` | `section` in `backend` \| `frontend` \| `testing`; API also accepts `api` alias for backend, query provider/model | section result | `400 invalid section/prereq` |
 | POST | `/api/test-cases/feature/:featureId/resume-step1` | query provider/model | resumed extraction result | `400` if step1 not failed |
 | PATCH | `/api/test-cases/feature/:featureId/step-results` | body edited step payload | persisted step output summary | `400` invalid body |
 
@@ -36,12 +37,13 @@
 3. Step 2 plans scenarios from extraction; Step 3 batches case generation and rewrites `TestCase` rows.
 4. Step 4 runs in order: 4A `workflow-backend`, 4B `frontend`, 4C backend testing, then 4C frontend testing.
 5. Step 4 persists JSON outputs on `Feature` as `devPlanWorkflow`, `devPlanBackend`, `devPlanFrontend`, and merged `devPlanTesting`.
-6. Step 5 generates API/Frontend/Testing prompts and rewrites `DeveloperTask` rows.
+6. Step 5 generates Backend/API, Frontend, and Testing prompts and rewrites `DeveloperTask` rows.
 
 ### Step-specific execution
 1. `runStepForFeature` dispatches to pipeline step handlers (1-5).
 2. Step 4 sectional endpoint dispatches to `runStep4a`, `runStep4b`, `runStep4cBackend`, `runStep4cFrontend`, or the convenience `runStep4c` wrapper for high-level `testing`.
-3. Each step validates prerequisites and sets pipeline status (`RUNNING`/`FAILED`/`COMPLETED`).
+3. Step 5 sectional endpoint dispatches to `runStep5Backend`, `runStep5Frontend`, and `runStep5Testing` (with `api` alias mapped to backend).
+4. Each step validates prerequisites and sets pipeline status (`RUNNING`/`FAILED`/`COMPLETED`).
 
 ### Manual edit persistence
 1. `saveStepResults` accepts user-edited payload for step 1-5.
