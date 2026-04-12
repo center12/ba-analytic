@@ -553,9 +553,10 @@ ${baDocumentContent}`;
     scenarios: TestScenario[],
     requirements: ExtractedRequirements,
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<GeneratedTestCase[]> {
     this.logger.log(`[Layer 3] Generating ${scenarios.length} test cases...`);
-    const prompt3 = appendPromptInstructions(buildGenerateTestCasesPrompt(scenarios, requirements), promptAppend);
+    const prompt3 = appendPromptInstructions(buildGenerateTestCasesPrompt(scenarios, requirements, userStories), promptAppend);
     this.logPromptSize('[Layer 3]', prompt3);
     const { object, usage, response } = await generateObject({
       model: openai(this.modelVersion),

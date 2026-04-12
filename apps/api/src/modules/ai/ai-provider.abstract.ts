@@ -712,17 +712,32 @@ Return ONLY valid JSON — a plain array matching this exact structure (no markd
 export function buildGenerateTestCasesPrompt(
   scenarios: TestScenario[],
   requirements: ExtractedRequirements,
+  userStories?: UserStory[],
 ): string {
+  const userStoriesSection = userStories && userStories.length > 0 ? `
+## User Stories (primary intent)
+${userStories.map(s =>
+  `${s.id} [${s.priority}]: As a ${s.actor}, I want ${s.action}, so that ${s.benefit}` +
+  (s.acceptanceCriteria.length ? `\n   AC: ${s.acceptanceCriteria.join('; ')}` : '') +
+  (s.relatedRuleIds.length ? `\n   Rules: ${s.relatedRuleIds.join(', ')}` : '')
+).join('\n')}
+` : '';
+
   return `You are a QA engineer. Write detailed, executable test cases for each of the following scenarios.
 
 LANGUAGE RULE: Detect the primary language of the input scenarios and domain context (English or Vietnamese). Write ALL output string values — title, description, preconditions, action, expectedResult — in that same language. Do not translate or mix languages.
 
+${userStoriesSection}
 Domain context:
 Entities: ${requirements.entities.join(', ')}
 Business Rules: ${requirements.businessRules.join('\n- ')}
 
 Scenarios to cover:
-${scenarios.map((s, i) => `${i + 1}. [${s.type.toUpperCase()}] ${s.title}\n   Covers: ${s.requirementRefs.join('; ')}`).join('\n')}
+${scenarios.map((s, i) =>
+  `${i + 1}. [${s.type.toUpperCase()}] ${s.title}` +
+  (s.userStoryId ? `\n   Primary story: ${s.userStoryId}` : '') +
+  `\n   Covers: ${s.requirementRefs.join('; ')}`
+).join('\n')}
 
 For each scenario write a concise test case:
 - title: copy exactly from the scenario title
@@ -730,6 +745,8 @@ For each scenario write a concise test case:
 - preconditions: one sentence describing the required system state
 - priority: HIGH (critical path/security), MEDIUM (important features), LOW (edge cases)
 - steps: at most 6 steps, each action and expectedResult under 20 words
+- When a scenario has userStoryId, use that user story's actor, action, benefit, acceptance criteria, and related rules as the primary testing intent
+- Use requirementRefs as supporting traceability context, not the primary planning unit
 
 ---
 
@@ -1508,6 +1525,7 @@ export abstract class AIProvider {
     scenarios: TestScenario[],
     requirements: ExtractedRequirements,
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<GeneratedTestCase[]>;
 
   /**

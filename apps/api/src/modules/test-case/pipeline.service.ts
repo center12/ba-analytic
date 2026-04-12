@@ -295,7 +295,13 @@ export class PipelineService {
       if (!req) throw new BadRequestException(`Feature ${featureId} has no requirements — run Step 1 first`);
 
       const provider = await this._resolveProvider(featureId, 3, providerName, model);
-      const { req: compReq } = compressForDownstream(req, { feature: '', actors: [], actions: [], rules: [] });
+      const savedStories = (feature as any).layer1Stories as string | null;
+      const userStories: UserStory[] | undefined = savedStories ? (JSON.parse(savedStories) as UserStories).stories : undefined;
+      const { req: compReq, stories: compStories } = compressForDownstream(
+        req,
+        { feature: '', actors: [], actions: [], rules: [] },
+        userStories,
+      );
       const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
 
       const totalBatches = Math.ceil(testScenarios.length / SCENARIO_BATCH);
@@ -305,23 +311,24 @@ export class PipelineService {
         const batch = testScenarios.slice(i, i + SCENARIO_BATCH);
         this.logger.log(`[Pipeline] Step 3 — batch ${Math.floor(i / SCENARIO_BATCH) + 1}/${totalBatches}`);
         const cases = await withRetry(() =>
-          provider.generateTestCasesFromScenarios(batch, compReq, normalizedPromptAppend),
+          provider.generateTestCasesFromScenarios(batch, compReq, normalizedPromptAppend, compStories),
         );
         allGenerated.push(...cases);
       }
 
-      // Build a scenario → userStoryId lookup for requirementRefs enrichment
-      const scenarioStoryMap = new Map<string, string>();
+      // Build a scenario → traceability lookup so persisted test cases retain all refs.
+      const scenarioTraceMap = new Map<string, string[]>();
       for (const s of testScenarios) {
-        if (s.userStoryId) scenarioStoryMap.set(s.title, s.userStoryId);
+        const refs = [...s.requirementRefs];
+        if (s.userStoryId && !refs.includes(s.userStoryId)) refs.push(s.userStoryId);
+        scenarioTraceMap.set(s.title, refs);
       }
 
       // Delete old test cases before creating new ones
       await this.prisma.testCase.deleteMany({ where: { featureId } });
       const created = await this.prisma.$transaction(
         allGenerated.map((tc) => {
-          const storyId = scenarioStoryMap.get(tc.title);
-          const requirementRefs: string[] = storyId ? [storyId] : [];
+          const requirementRefs = scenarioTraceMap.get(tc.title) ?? [];
           return this.prisma.testCase.create({
             data: ({
               featureId, title: tc.title, description: tc.description,
@@ -791,7 +798,14 @@ export class PipelineService {
       const scenarios = feature.testScenarios          as TestScenario[]       | null;
       if (!req)            throw new BadRequestException(`Run Step 1 first — no extraction results found`);
       if (!scenarios?.length) throw new BadRequestException(`Run Step 2 first — no scenarios found`);
-      return { prompt: buildGenerateTestCasesPrompt(scenarios, req) };
+      const savedStories = (feature as any).layer1Stories as string | null;
+      const userStories: UserStory[] | undefined = savedStories ? (JSON.parse(savedStories) as UserStories).stories : undefined;
+      const { req: compReq, stories: compStories } = compressForDownstream(
+        req,
+        { feature: '', actors: [], actions: [], rules: [] },
+        userStories,
+      );
+      return { prompt: buildGenerateTestCasesPrompt(scenarios, compReq, compStories) };
     }
 
     if (step === 4) {
@@ -1084,6 +1098,13 @@ export class PipelineService {
       allGenerated.push(...cases);
     }
 
+    const scenarioTraceMap = new Map<string, string[]>();
+    for (const scenario of testScenarios) {
+      const refs = [...scenario.requirementRefs];
+      if (scenario.userStoryId && !refs.includes(scenario.userStoryId)) refs.push(scenario.userStoryId);
+      scenarioTraceMap.set(scenario.title, refs);
+    }
+
     const created = await this.prisma.$transaction(
       allGenerated.map((tc) =>
         this.prisma.testCase.create({
@@ -1095,6 +1116,7 @@ export class PipelineService {
             priority:      tc.priority,
             status:        'DRAFT',
             steps:         JSON.parse(JSON.stringify(tc.steps)),
+            requirementRefs: scenarioTraceMap.get(tc.title),
             aiProvider:    provider3.providerName,
             modelVersion:  provider3.modelVersion,
           },
