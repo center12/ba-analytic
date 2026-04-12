@@ -9,11 +9,15 @@ import {
   TestScenario,
   GeneratedTestCase,
   DevPrompt,
+  Mapping,
+  SSRData,
+  UserStories,
+  ValidationResult,
 } from '@/lib/api';
 import { useAppStore } from '@/store';
 import { toast } from '@/hooks/use-toast';
 import { MANUAL_TEMPLATES } from './constants/pipeline-wizard.constants';
-import { arrToText, deriveStatus, textToArr } from './helpers/pipeline-wizard.helpers';
+import { arrToText, deriveStatus, getLayer1Data, textToArr } from './helpers/pipeline-wizard.helpers';
 import { StepHeader } from './components/pipeline-wizard/StepHeader';
 import { PipelineStep1 } from './components/pipeline-wizard/PipelineStep1';
 import { PipelineStep2 } from './components/pipeline-wizard/PipelineStep2';
@@ -98,7 +102,13 @@ export function PipelineWizard({ featureId }: Props) {
     try {
       const parsed = JSON.parse(manualJson);
       if (step === 1) {
-        manualSaveMutation.mutate({ step: 1, extractedRequirements: parsed.extractedRequirements as ExtractedRequirements, extractedBehaviors: parsed.extractedBehaviors as ExtractedBehaviors });
+        manualSaveMutation.mutate({
+          step: 1,
+          ssrData: parsed.ssr as SSRData,
+          userStories: parsed.stories as UserStories,
+          mapping: parsed.mapping as Mapping,
+          validationResult: parsed.validation as ValidationResult,
+        });
       } else if (step === 2) {
         manualSaveMutation.mutate({ step: 2, testScenarios: parsed as TestScenario[] });
       } else if (step === 3) {
@@ -117,7 +127,18 @@ export function PipelineWizard({ featureId }: Props) {
     const req = feature.extractedRequirements;
     const beh = feature.extractedBehaviors;
     const scn = feature.testScenarios ?? [];
-    if (step === 1 && req && beh) {
+    const { ssr, stories } = getLayer1Data(feature);
+    if (step === 1 && ssr && stories) {
+      setDraft({
+        featureName: ssr.featureName,
+        systemRules: arrToText(ssr.systemRules),
+        businessRules: arrToText(ssr.businessRules),
+        constraints: arrToText(ssr.constraints),
+        globalPolicies: arrToText(ssr.globalPolicies),
+        entities: arrToText(ssr.entities),
+        storiesJson: JSON.stringify(stories.stories, null, 2),
+      });
+    } else if (step === 1 && req && beh) {
       setDraft({
         features:           arrToText(req.features),
         businessRules:      arrToText(req.businessRules),
@@ -201,6 +222,33 @@ export function PipelineWizard({ featureId }: Props) {
   });
 
   function handleSave(step: number, f: Feature) {
+    const { ssr, stories, mapping, validation } = getLayer1Data(f);
+    if (step === 1 && ssr && stories) {
+      try {
+        const parsedStories = JSON.parse(draft.storiesJson ?? JSON.stringify(stories.stories)) as UserStories['stories'];
+        saveMutation.mutate({
+          step: 1,
+          ssrData: {
+            featureName: draft.featureName ?? ssr.featureName,
+            systemRules: textToArr(draft.systemRules ?? arrToText(ssr.systemRules)),
+            businessRules: textToArr(draft.businessRules ?? arrToText(ssr.businessRules)),
+            constraints: textToArr(draft.constraints ?? arrToText(ssr.constraints)),
+            globalPolicies: textToArr(draft.globalPolicies ?? arrToText(ssr.globalPolicies)),
+            entities: textToArr(draft.entities ?? arrToText(ssr.entities)),
+          },
+          userStories: {
+            featureName: draft.featureName ?? stories.featureName,
+            stories: parsedStories,
+          },
+          mapping: mapping ?? { links: [], uncoveredRules: [], storiesWithNoRules: [] },
+          validationResult: validation ?? { isValid: true, score: 0, issues: [], summary: '' },
+        });
+      } catch {
+        toast({ variant: 'destructive', title: 'Invalid JSON', description: 'Fix the user stories JSON and try again.' });
+      }
+      return;
+    }
+
     if (step === 1 && f.extractedRequirements && f.extractedBehaviors) {
       saveMutation.mutate({
         step: 1,
@@ -217,6 +265,7 @@ export function PipelineWizard({ featureId }: Props) {
           rules:   textToArr(draft.behaviorRules ?? arrToText(f.extractedBehaviors.rules)),
         } as ExtractedBehaviors,
       });
+      return;
     }
     if (step === 2) {
       try {

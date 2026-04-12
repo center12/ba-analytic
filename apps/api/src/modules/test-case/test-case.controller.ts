@@ -94,6 +94,20 @@ export class TestCaseController {
   }
 
   /**
+   * POST /api/test-cases/feature/:featureId/run-step-1-section/:sublayer?provider=gemini
+   * Re-runs a single sublayer of Step 1 (ssr-stories | mapping | validation).
+   */
+  @Post('feature/:featureId/run-step-1-section/:sublayer')
+  runStep1Section(
+    @Param('featureId') featureId: string,
+    @Param('sublayer') sublayer: 'ssr-stories' | 'mapping' | 'validation',
+    @Query('provider') provider?: string,
+    @Query('model') model?: string,
+  ) {
+    return this.service.runStep1SectionForFeature(featureId, sublayer, provider, model);
+  }
+
+  /**
    * POST /api/test-cases/feature/:featureId/run-step-4-section/:section?provider=gemini
    * Generates a single section of Step 4 (workflow-backend | frontend | testing | testing-backend | testing-frontend).
    */

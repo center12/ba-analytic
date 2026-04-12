@@ -59,6 +59,20 @@ export class TestCaseService {
     }
   }
 
+  async runStep1SectionForFeature(
+    featureId: string,
+    sublayer: 'ssr-stories' | 'mapping' | 'validation',
+    providerName?: string,
+    model?: string,
+  ) {
+    switch (sublayer) {
+      case 'ssr-stories': return this.pipeline.runStep1(featureId, providerName, model);
+      case 'mapping':     return this.pipeline.runStep1Mapping(featureId, providerName, model);
+      case 'validation':  return this.pipeline.runStep1Validation(featureId, providerName, model);
+      default: throw new Error(`Invalid step 1 sublayer: ${sublayer}`);
+    }
+  }
+
   async runStep4SectionForFeature(
     featureId: string,
     section: 'workflow-backend' | 'frontend' | 'testing' | 'testing-backend' | 'testing-frontend',

@@ -11,6 +11,7 @@ export interface GeneratedTestCase {
   preconditions: string;
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
   steps: TestCaseStep[];
+  userStoryId?: string;  // US-xx ID inherited from the scenario
 }
 
 export interface ChatHistoryItem {
@@ -42,10 +43,84 @@ export interface CombinedExtraction {
   behaviors: ExtractedBehaviors;
 }
 
+// ── New Layer 1 (4-sublayer) types ────────────────────────────────────────────
+
+/** Layer 1A — System & Business Rules Extraction */
+export interface SSRData {
+  featureName: string;
+  systemRules: string[];      // SYS-xx — cross-cutting system policies
+  businessRules: string[];    // BR-xx  — domain business rules
+  constraints: string[];      // VR-xx / AC-xx — data/input constraints
+  globalPolicies: string[];   // auth, audit, rate-limit, multi-tenancy policies
+  entities: string[];         // key domain objects
+}
+
+/** A single user story produced by Layer 1B */
+export interface UserStory {
+  id: string;                   // US-01, US-02, ...
+  actor: string;
+  action: string;
+  benefit: string;
+  acceptanceCriteria: string[]; // AC-xx conditions specific to this story
+  relatedRuleIds: string[];     // BR-xx / VR-xx / SYS-xx that govern this story
+  priority: 'MUST' | 'SHOULD' | 'COULD';
+}
+
+/** Layer 1B — User Story Extraction */
+export interface UserStories {
+  featureName: string;
+  stories: UserStory[];
+}
+
+/** One rule-to-stories traceability link produced by Layer 1C */
+export interface RuleStoryLink {
+  ruleId: string;              // BR-xx, VR-xx, SYS-xx, AC-xx
+  ruleText: string;
+  storyIds: string[];          // US-xx IDs this rule applies to
+  coverage: 'full' | 'partial' | 'none';
+}
+
+/** Layer 1C — Traceability Mapping (rules ↔ stories) */
+export interface Mapping {
+  links: RuleStoryLink[];
+  uncoveredRules: string[];      // rule IDs with coverage === 'none'
+  storiesWithNoRules: string[];  // story IDs that have no mapped rules
+}
+
+/** A single quality issue detected by Layer 1D */
+export interface ValidationIssue {
+  type: 'missing_coverage' | 'ambiguous_story' | 'conflicting_rules' | 'incomplete_criteria' | 'orphan_story';
+  severity: 'error' | 'warning' | 'info';
+  affectedIds: string[];
+  message: string;
+  suggestion?: string;
+}
+
+/** Layer 1D — Validation Result (quality gate) */
+export interface ValidationResult {
+  isValid: boolean;
+  score: number;       // 0–100 quality score
+  issues: ValidationIssue[];
+  summary: string;
+}
+
+/** Combined 1A+1B output — used during chunking/merging */
+export interface Layer1ABPartial {
+  ssr: SSRData;
+  stories: UserStories;
+}
+
+/** Full Layer 1 extraction — all 4 sublayers */
+export interface Layer1Extraction extends Layer1ABPartial {
+  mapping: Mapping;
+  validation: ValidationResult;
+}
+
 /** A single focused developer sub-task produced by Layer 4 */
 export interface DevTaskItem {
-  title: string;   // e.g. "API — Authentication endpoints"
-  prompt: string;  // self-contained implementation prompt for this sub-task
+  title: string;        // e.g. "API — Authentication endpoints"
+  prompt: string;       // self-contained implementation prompt for this sub-task
+  userStoryIds?: string[];  // US-xx IDs this task implements
 }
 
 /** Layer 4 — Dev Prompts (4A API · 4B Frontend · 4C Testing), each broken into 1..N sub-tasks */
@@ -119,7 +194,8 @@ export interface CacheEntry {
 
 export interface BackendTask {
   title: string;
-  description: string;  // Implementation detail, ≤ 1 day scope
+  description: string;     // Implementation detail, ≤ 1 day scope
+  userStoryIds?: string[]; // US-xx IDs this task implements
 }
 
 export interface BackendPlan {
@@ -140,9 +216,10 @@ export interface BackendPlan {
 }
 
 export interface FrontendTask {
-  id: string;          // "FE-01", "FE-02", ...
+  id: string;              // "FE-01", "FE-02", ...
   title: string;
   description: string;
+  userStoryIds?: string[]; // US-xx IDs this task implements
 }
 
 export interface StateManagement {
@@ -174,9 +251,10 @@ export interface FrontendPlan {
 }
 
 export interface TestingTask {
-  id: string;          // "QA-BE-01" or "QA-FE-01"
+  id: string;              // "QA-BE-01" or "QA-FE-01"
   title: string;
   description: string;
+  userStoryIds?: string[]; // US-xx IDs this task covers
 }
 
 export interface ApiTestScenario {
@@ -244,6 +322,7 @@ export interface TestScenario {
   title: string;
   type: ScenarioType;
   requirementRefs: string[];
+  userStoryId?: string;  // US-xx ID of the primary user story this scenario covers
 }
 
 export function appendPromptInstructions(basePrompt: string, promptAppend?: string): string {
@@ -342,24 +421,263 @@ Return the same JSON structure with duplicates removed. Preserve all IDs verbati
 }
 
 /**
+ * Builds the prompt for the new Layer 1 combined SSR + User Stories extraction (1A+1B).
+ * Replaces buildExtractAllPrompt for new pipeline runs.
+ */
+export function buildExtractSSRAndStoriesPrompt(
+  baDocumentContent: string,
+  chunkInfo?: { index: number; total: number },
+): string {
+  const chunkHeader = chunkInfo && chunkInfo.total > 1
+    ? `[Chunk ${chunkInfo.index + 1} of ${chunkInfo.total} — partial section of a larger document. Extract every item present; items from other chunks will be merged later.]\n\n`
+    : '';
+
+  return `You are a senior business analyst. Read the following BA document and extract TWO things in a single pass.
+
+LANGUAGE RULE: Detect the primary language of the document (English or Vietnamese). Write ALL extracted values in that same language. Do not translate or mix languages.
+
+ID PRESERVATION RULE: Keep all prefixed IDs (FR-xx, BR-xx, AC-xx, VR-xx, SYS-xx, US-xx) verbatim.
+
+Document format notes:
+- Structured Markdown with ## section headings.
+- List items may carry ID prefixes — preserve them.
+- Acceptance Criteria appear as Markdown tables (ID | Given | When | Then). Extract each row as: "AC-01: Given [...], When [...], Then [...]".
+- Data Entities appear as Markdown tables under ### sub-headings.
+- User Stories may appear as "As a [actor], I want [action], so that [benefit]" bullet items.
+
+1. SYSTEM & BUSINESS RULES (SSR):
+   - featureName: primary feature name from the # title
+   - systemRules: system-level constraints and global policies that apply across the feature (SYS-xx). Examples: auth requirements, audit logging, rate limiting, multi-tenancy isolation.
+   - businessRules: domain rules governing business logic (BR-xx). Preserve IDs verbatim.
+   - constraints: data validations, format rules, size limits, conditional requirements (VR-xx, AC-xx constraint items). Preserve IDs verbatim.
+   - globalPolicies: cross-cutting concerns not already in systemRules (e.g. GDPR retention, currency handling, timezone rules).
+   - entities: key domain objects / models mentioned.
+
+2. USER STORIES:
+   - For each distinct feature unit, produce one user story.
+   - id: sequential US-01, US-02, ... (preserve existing US-xx IDs if present in doc).
+   - actor: the role or persona.
+   - action: what the actor wants to do (verb phrase, under 15 words).
+   - benefit: the "so that" rationale (under 15 words).
+   - acceptanceCriteria: AC-xx IDs and/or criteria text that apply specifically to this story.
+   - relatedRuleIds: BR-xx, VR-xx, SYS-xx IDs that govern this story (pre-fill from above).
+   - priority: MUST (core functional), SHOULD (important but not blocking), COULD (nice-to-have).
+
+Be thorough — missing a story or rule means missing test coverage.
+
+BA Document:
+${chunkHeader}${baDocumentContent}
+
+---
+
+Return ONLY valid JSON matching this exact structure (no markdown, no explanation):
+{
+  "ssr": {
+    "featureName": "string",
+    "systemRules": ["string"],
+    "businessRules": ["string"],
+    "constraints": ["string"],
+    "globalPolicies": ["string"],
+    "entities": ["string"]
+  },
+  "stories": {
+    "featureName": "string",
+    "stories": [
+      {
+        "id": "US-01",
+        "actor": "string",
+        "action": "string",
+        "benefit": "string",
+        "acceptanceCriteria": ["string"],
+        "relatedRuleIds": ["string"],
+        "priority": "MUST | SHOULD | COULD"
+      }
+    ]
+  }
+}`;
+}
+
+/**
+ * Builds the Layer 1 synthesis prompt for deduplicating merged 1A+1B chunks.
+ */
+export function buildLayer1SynthesisPrompt(merged: Layer1ABPartial): string {
+  return `You are a business analyst. The data below was extracted from multiple chunks of the same BA document and may contain near-duplicate or split entries.
+
+LANGUAGE RULE: Preserve the language of each string value as-is. Do not translate.
+
+Consolidation rules:
+- Items carrying ID prefixes (BR-xx, VR-xx, SYS-xx, US-xx, AC-xx) are DISTINCT — preserve each ID and text unchanged. Never merge items with different IDs.
+- Items without IDs: merge only if they describe exactly the same concept; otherwise keep both.
+- For user stories: deduplicate by id field. If two stories share the same id, keep the more detailed one.
+- Remove exact string duplicates.
+- Keep concise; do not reword.
+
+${JSON.stringify(merged, null, 0)}
+
+Return the same JSON structure (ssr + stories) with duplicates removed. Preserve all IDs verbatim.`;
+}
+
+/**
+ * Builds the Layer 1C mapping prompt — links rules to user stories.
+ */
+export function buildMappingPrompt(ssr: SSRData, stories: UserStories): string {
+  const allRules = [
+    ...ssr.systemRules.map(r => ({ id: extractId(r, 'SYS'), text: r })),
+    ...ssr.businessRules.map(r => ({ id: extractId(r, 'BR'), text: r })),
+    ...ssr.constraints.map(r => ({ id: extractId(r, 'VR'), text: r })),
+    ...ssr.globalPolicies.map((r, i) => ({ id: `GP-${String(i + 1).padStart(2, '0')}`, text: r })),
+  ];
+
+  const storyList = stories.stories.map(s =>
+    `${s.id}: As a ${s.actor}, I want ${s.action} (priority: ${s.priority})`
+  ).join('\n');
+
+  const ruleList = allRules.map(r => `${r.id}: ${r.text}`).join('\n');
+
+  return `You are a business analyst creating a requirements traceability matrix.
+
+LANGUAGE RULE: Preserve input language. Do not translate.
+
+Given the rules and user stories below, map which rules apply to which stories.
+
+## Rules
+${ruleList}
+
+## User Stories
+${storyList}
+
+For each rule, determine:
+- storyIds: which US-xx IDs this rule applies to
+- coverage: 'full' (story explicitly addresses the rule), 'partial' (story is related but doesn't fully cover it), 'none' (no story covers this rule)
+
+Also identify:
+- uncoveredRules: rule IDs where coverage === 'none'
+- storiesWithNoRules: US-xx IDs that no rule maps to
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "links": [
+    {
+      "ruleId": "string",
+      "ruleText": "string",
+      "storyIds": ["US-01"],
+      "coverage": "full | partial | none"
+    }
+  ],
+  "uncoveredRules": ["string"],
+  "storiesWithNoRules": ["string"]
+}`;
+}
+
+/**
+ * Builds the Layer 1D validation prompt — quality gate for the extraction.
+ */
+export function buildValidationPrompt(ssr: SSRData, stories: UserStories, mapping: Mapping): string {
+  const storyCount = stories.stories.length;
+  const ruleCount = ssr.businessRules.length + ssr.systemRules.length + ssr.constraints.length;
+  const uncoveredCount = mapping.uncoveredRules.length;
+  const orphanCount = mapping.storiesWithNoRules.length;
+  const storiesWithNoAC = stories.stories.filter(s => s.acceptanceCriteria.length === 0).map(s => s.id);
+  const ambiguousStories = stories.stories
+    .filter(s => !s.actor || !s.action || !s.benefit || s.actor.trim() === '' || s.action.trim() === '')
+    .map(s => s.id);
+
+  return `You are a QA architect reviewing extracted requirements for quality.
+
+LANGUAGE RULE: Write all issue messages and summary in the same language as the input data.
+
+Evaluate the Layer 1 extraction for quality issues:
+
+## Summary Statistics
+- Total user stories: ${storyCount}
+- Total rules: ${ruleCount}
+- Uncovered rules (no story maps to them): ${uncoveredCount} — IDs: ${mapping.uncoveredRules.join(', ') || 'none'}
+- Orphan stories (no rules map to them): ${orphanCount} — IDs: ${mapping.storiesWithNoRules.join(', ') || 'none'}
+- Stories missing acceptance criteria: ${storiesWithNoAC.length} — IDs: ${storiesWithNoAC.join(', ') || 'none'}
+- Potentially ambiguous stories: ${ambiguousStories.length} — IDs: ${ambiguousStories.join(', ') || 'none'}
+
+## User Stories
+${stories.stories.map(s => `${s.id} [${s.priority}]: As a ${s.actor}, I want ${s.action}, so that ${s.benefit} | AC: ${s.acceptanceCriteria.length} | Rules: ${s.relatedRuleIds.join(', ') || 'none'}`).join('\n')}
+
+## Mapping Coverage
+${mapping.links.filter(l => l.coverage !== 'full').map(l => `${l.ruleId} → ${l.coverage}: stories [${l.storyIds.join(', ') || 'none'}]`).join('\n') || 'All rules fully covered'}
+
+---
+
+Issue types to check:
+- missing_coverage: rules with no story covering them
+- ambiguous_story: story with missing/vague actor, action, or benefit
+- conflicting_rules: contradictory constraints or rules
+- incomplete_criteria: story has no acceptance criteria
+- orphan_story: story with no mapped rules
+
+Severity:
+- error: blocks test generation (missing_coverage for critical rules, ambiguous_story)
+- warning: degrades quality but doesn't block
+- info: improvement suggestion
+
+Score formula: start at 100, subtract 10 per error issue, 3 per warning issue, 1 per info issue. Floor at 0.
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "isValid": true,
+  "score": 85,
+  "issues": [
+    {
+      "type": "missing_coverage | ambiguous_story | conflicting_rules | incomplete_criteria | orphan_story",
+      "severity": "error | warning | info",
+      "affectedIds": ["string"],
+      "message": "string",
+      "suggestion": "string"
+    }
+  ],
+  "summary": "string"
+}`;
+}
+
+/** Extract rule ID from a string like "BR-01: some rule" → "BR-01" */
+function extractId(text: string, prefix: string): string {
+  const match = text.match(new RegExp(`(${prefix}-\\d+)`, 'i'));
+  return match ? match[1] : `${prefix}-??`;
+}
+
+/**
  * Builds the prompt for Layer 2 scenario planning.
  * Shared across all provider implementations.
  */
 export function buildPlanScenariosPrompt(
   requirements: ExtractedRequirements,
   behaviors: ExtractedBehaviors,
+  userStories?: UserStory[],
 ): string {
-  return `You are a QA strategist. Using both the domain requirements and the normalized behaviors below, identify ALL test scenarios that need to be covered.
+  const userStoriesSection = userStories && userStories.length > 0 ? `
+## User Stories (Layer 1B — primary input)
+${userStories.map(s =>
+  `${s.id} [${s.priority}]: As a ${s.actor}, I want ${s.action}, so that ${s.benefit}` +
+  (s.acceptanceCriteria.length ? `\n   AC: ${s.acceptanceCriteria.join('; ')}` : '') +
+  (s.relatedRuleIds.length ? `\n   Rules: ${s.relatedRuleIds.join(', ')}` : '')
+).join('\n')}
+` : '';
+
+  const userStoryInstruction = userStories && userStories.length > 0
+    ? `- userStoryId: the US-xx ID of the user story this scenario primarily verifies (must match one of the US-xx IDs above)`
+    : '';
+
+  const schemaUserStoryField = userStories && userStories.length > 0
+    ? `,\n    "userStoryId": "US-xx"`
+    : '';
+
+  return `You are a QA strategist. Using the user stories and domain context below, identify ALL test scenarios that need to be covered.
 
 LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values — titles and requirementRefs phrases — in that same language. Do not translate or mix languages.
-
-## Domain Requirements (Layer 1A)
+${userStoriesSection}
+## Domain Requirements (Layer 1A — supporting context)
 Features: ${requirements.features.join('\n- ')}
 Business Rules: ${requirements.businessRules.join('\n- ')}
 Acceptance Criteria: ${requirements.acceptanceCriteria.join('\n- ')}
 Entities: ${requirements.entities.join(', ')}
 
-## Behaviors (Layer 1B)
+## Behaviors
 Feature: ${behaviors.feature}
 Actors: ${behaviors.actors.join(', ')}
 Actions:
@@ -370,9 +688,10 @@ Rules:
 For each scenario specify:
 - title: short descriptive name
 - type: one of happy_path | edge_case | error | boundary | security
-- requirementRefs: which requirements or actions this scenario covers — use the item's ID when one is present (e.g. "FR-01", "BR-03", "AC-02"); use a short phrase only when there is no ID
+- requirementRefs: which requirements or actions this scenario covers — use the item's ID when one is present (e.g. "FR-01", "BR-03", "AC-02", "US-01"); use a short phrase only when there is no ID
+${userStoryInstruction}
 
-Ensure complete coverage across both layers. Return at most 15 scenarios. Prioritise happy_path and error scenarios. Be concise — one line per title.
+${userStories && userStories.length > 0 ? 'Generate at least one scenario per user story. ' : ''}Ensure complete coverage. Return at most 15 scenarios. Prioritise happy_path and error scenarios. Be concise — one line per title.
 
 ---
 
@@ -381,7 +700,7 @@ Return ONLY valid JSON — a plain array matching this exact structure (no markd
   {
     "title": "string",
     "type": "happy_path | edge_case | error | boundary | security",
-    "requirementRefs": ["string"]
+    "requirementRefs": ["string"]${schemaUserStoryField}
   }
 ]`;
 }
@@ -438,6 +757,7 @@ export function buildDevPromptInput(
   scenarios: TestScenario[],
   devPlan?: DevPlan,
   targetSection?: DevPromptSection,
+  userStories?: UserStory[],
 ): string {
   const scenarioCount = scenarios.length;
 
@@ -490,13 +810,17 @@ ${devPlan.testing.frontend.tasks.map(t => `${t.id}. **${t.title}** — ${t.descr
     ? `Return all keys (\`api\`, \`frontend\`, \`testing\`). Populate only \`${targetSection}\`; all other keys must be empty arrays.`
     : 'Return all keys with generated arrays for api, frontend, and testing.';
 
+  const userStoriesSection = userStories && userStories.length > 0 ? `
+## User Stories (implement all of these)
+${userStories.map(s => `${s.id} [${s.priority}]: As a ${s.actor}, I want ${s.action}, so that ${s.benefit}`).join('\n')}
+` : '';
+
   return `You are a senior software architect. Based on the feature analysis below, generate developer implementation prompts split into sub-tasks — one set for API/backend (4A), one for frontend/UI (4B), and one for test automation (4C).
 
 LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values — titles and prompts — in that same language. Do not translate or mix languages.
 
-
 ## Feature: ${behaviors.feature}
-
+${userStoriesSection}
 ## Actors
 ${behaviors.actors.map((a) => `- ${a}`).join('\n')}
 
@@ -529,7 +853,7 @@ ${sectionScope}
 - Each sub-task prompt must be **fully self-contained** (embed all context needed to implement that slice).
 - Keep each sub-task prompt under **400 words**. Use placeholders for boilerplate — do not write full implementations.
 - Always return arrays — for simple features (1 sub-task), still return an array with one element.
-
+${userStories && userStories.length > 0 ? '- userStoryIds: list the US-xx IDs that this sub-task implements.\n' : ''}
 ## Prompt Quality Rules (apply to every sub-task prompt)
 
 **ALWAYS include** (complete, working code):
@@ -552,9 +876,9 @@ Each prompt must start with "You are an expert [role]." and embed all relevant c
 Return ONLY valid JSON matching this exact structure (no markdown, no explanation):
 ${outputInstruction}
 {
-  "api":      [{ "title": "API — [theme]",      "prompt": "string" }],
-  "frontend": [{ "title": "Frontend — [theme]", "prompt": "string" }],
-  "testing":  [{ "title": "Testing — [theme]",  "prompt": "string" }]
+  "api":      [{ "title": "API — [theme]",      "prompt": "string"${userStories && userStories.length > 0 ? ', "userStoryIds": ["US-01"]' : ''} }],
+  "frontend": [{ "title": "Frontend — [theme]", "prompt": "string"${userStories && userStories.length > 0 ? ', "userStoryIds": ["US-01"]' : ''} }],
+  "testing":  [{ "title": "Testing — [theme]",  "prompt": "string"${userStories && userStories.length > 0 ? ', "userStoryIds": ["US-01"]' : ''} }]
 }`;
 }
 
@@ -566,13 +890,19 @@ export function buildDevPlanWorkflowBackendPrompt(
   requirements: ExtractedRequirements,
   behaviors: ExtractedBehaviors,
   scenarios: TestScenario[],
+  userStories?: UserStory[],
 ): string {
+  const userStoriesSection = userStories && userStories.length > 0 ? `
+## User Stories
+${userStories.map(s => `${s.id} [${s.priority}]: As a ${s.actor}, I want ${s.action}, so that ${s.benefit}`).join('\n')}
+` : '';
+
   return `You are a senior software architect. Based on the feature analysis below, define the user workflow and produce a comprehensive, highly technical backend plan.
 
 LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values in that same language. Do not translate or mix languages.
 
 ## Feature: ${behaviors.feature}
-
+${userStoriesSection}
 ## Actors
 ${behaviors.actors.map(a => `- ${a}`).join('\n')}
 
@@ -589,7 +919,7 @@ ${requirements.entities.join(', ')}
 ${requirements.acceptanceCriteria.map(c => `- ${c}`).join('\n')}
 
 ## Test Scenarios
-${scenarios.map((s, i) => `${i + 1}. [${s.type.toUpperCase()}] ${s.title}`).join('\n')}
+${scenarios.map((s, i) => `${i + 1}. [${s.type.toUpperCase()}] ${s.title}${s.userStoryId ? ` (US: ${s.userStoryId})` : ''}`).join('\n')}
 
 ---
 
@@ -716,7 +1046,7 @@ Return ONLY valid JSON (no markdown, no explanation):
     "validationRules": ["string"],
     "security": ["string"],
     "backendTasks": [
-      { "title": "string", "description": "string" }
+      { "title": "string", "description": "string", "userStoryIds": ["US-01"] }
     ],
     "folderStructure": ["string"]
   }
@@ -732,6 +1062,7 @@ export function buildDevPlanFrontendPrompt(
   behaviors: ExtractedBehaviors,
   workflowSummary: string,
   backendPlan?: BackendPlan | null,
+  userStories?: UserStory[],
 ): string {
   const backendContractSection = backendPlan ? `
 ## Backend Contract
@@ -750,12 +1081,17 @@ ${backendPlan.validationRules.map(r => `- ${r}`).join('\n')}` : ''}${backendPlan
 ### Security
 ${backendPlan.security.map(s => `- ${s}`).join('\n')}` : ''}` : '';
 
+  const userStoriesSection4B = userStories && userStories.length > 0 ? `
+## User Stories
+${userStories.map(s => `${s.id} [${s.priority}]: As a ${s.actor}, I want ${s.action}, so that ${s.benefit}`).join('\n')}
+` : '';
+
   return `You are a senior frontend architect. Based on the feature analysis, workflow, and backend contract below, design the complete frontend architecture.
 
 LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values in that same language. Do not translate or mix languages.
 
 ## Feature: ${behaviors.feature}
-
+${userStoriesSection4B}
 ## Actors
 ${behaviors.actors.map(a => `- ${a}`).join('\n')}
 
@@ -836,7 +1172,7 @@ Return ONLY valid JSON (no markdown, no explanation):
   "uxStates": ["ComponentName[loading|error|empty|success] — description"],
   "routing": ["/path → PageComponent — guard"],
   "errorHandling": ["scenario → UI behavior"],
-  "frontendTasks": [{ "id": "FE-01", "title": "...", "description": "..." }]
+  "frontendTasks": [{ "id": "FE-01", "title": "...", "description": "...", "userStoryIds": ["US-01"] }]
 }`;
 }
 
@@ -847,6 +1183,7 @@ export function buildDevPlanBackendTestingPrompt(
   requirements: ExtractedRequirements,
   behaviors: ExtractedBehaviors,
   backendPlan: BackendPlan,
+  userStories?: UserStory[],
 ): string {
   const routeList = backendPlan.apiRoutes.map(r =>
     `${r.method} ${r.path} — ${r.description}` +
@@ -862,12 +1199,17 @@ export function buildDevPlanBackendTestingPrompt(
     (e.softDelete ? ' [soft-delete]' : '')
   ).join('\n');
 
+  const userStoriesSection4C = userStories && userStories.length > 0 ? `
+## User Stories
+${userStories.map(s => `${s.id} [${s.priority}]: As a ${s.actor}, I want ${s.action}, so that ${s.benefit}`).join('\n')}
+` : '';
+
   return `You are a senior QA engineer. Using the BA document analysis and backend design below, create a comprehensive backend testing plan.
 
 LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values in that same language. Do not translate or mix languages.
 
 ## Feature: ${behaviors.feature}
-
+${userStoriesSection4C}
 ## Business Rules
 ${requirements.businessRules.map(r => `- ${r}`).join('\n')}
 
@@ -956,7 +1298,7 @@ Return ONLY valid JSON (no markdown, no explanation):
   "performanceTesting": ["string"],
   "securityTesting": ["string"],
   "errorHandlingTesting": ["string"],
-  "tasks": [{ "id": "QA-BE-01", "title": "string", "description": "string" }]
+  "tasks": [{ "id": "QA-BE-01", "title": "string", "description": "string", "userStoryIds": ["US-01"] }]
 }`;
 }
 
@@ -968,6 +1310,7 @@ export function buildDevPlanFrontendTestingPrompt(
   behaviors: ExtractedBehaviors,
   backendPlan: BackendPlan,
   frontendPlan: FrontendPlan,
+  userStories?: UserStory[],
 ): string {
   const routeList = backendPlan.apiRoutes.map(r =>
     `${r.method} ${r.path} — ${r.description}` +
@@ -979,13 +1322,17 @@ export function buildDevPlanFrontendTestingPrompt(
   const routingList = frontendPlan.routing?.join('\n') ?? '';
   const uxStatesList = frontendPlan.uxStates?.join('\n') ?? '';
   const validationList = frontendPlan.validation?.join('\n') ?? '';
+  const userStoriesSection4CF = userStories && userStories.length > 0 ? `
+## User Stories
+${userStories.map(s => `${s.id} [${s.priority}]: As a ${s.actor}, I want ${s.action}, so that ${s.benefit}`).join('\n')}
+` : '';
 
   return `You are a senior frontend QA engineer. Using the BA document analysis, backend API contract, and frontend plan below, create a comprehensive frontend testing plan.
 
 LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values in that same language. Do not translate or mix languages.
 
 ## Feature: ${behaviors.feature}
-
+${userStoriesSection4CF}
 ## Acceptance Criteria
 ${requirements.acceptanceCriteria.map(c => `- ${c}`).join('\n')}
 
@@ -1073,7 +1420,7 @@ Return ONLY valid JSON (no markdown, no explanation):
   "routingNavigationTesting": ["string"],
   "crossBrowserTesting": ["string"],
   "edgeCases": ["string"],
-  "tasks": [{ "id": "QA-FE-01", "title": "string", "description": "string" }]
+  "tasks": [{ "id": "QA-FE-01", "title": "string", "description": "string", "userStoryIds": ["US-01"] }]
 }`;
 }
 
@@ -1097,9 +1444,34 @@ export abstract class AIProvider {
     return clone;
   }
 
+  // ── New Layer 1 (4-sublayer) methods ────────────────────────────────────────
+
+  /**
+   * Layer 1A+1B (combined) — Extract SSR (global rules) + User Stories in one pass.
+   * Used for chunked pipeline processing.
+   */
+  abstract extractSSRAndStories(baDocumentContent: string, promptAppend?: string): Promise<Layer1ABPartial>;
+
+  /**
+   * Layer 1 synthesis — Consolidates near-duplicate 1A+1B items from multi-chunk merges.
+   */
+  abstract synthesiseLayer1AB(merged: Layer1ABPartial): Promise<Layer1ABPartial>;
+
+  /**
+   * Layer 1C — Map rules to user stories, producing a traceability matrix.
+   */
+  abstract extractMapping(ssr: SSRData, stories: UserStories): Promise<Mapping>;
+
+  /**
+   * Layer 1D — Validate extraction quality and produce a scored report.
+   */
+  abstract extractValidation(ssr: SSRData, stories: UserStories, mapping: Mapping): Promise<ValidationResult>;
+
+  // ── Legacy Layer 1 methods (kept for backward compatibility) ─────────────────
+
   /**
    * Layer 1 (combined) — Extract both domain requirements and behaviors in a single API call.
-   * Preferred over the separate methods to avoid sending the BA document twice.
+   * @deprecated Use extractSSRAndStories instead for new pipeline runs.
    */
   abstract extractAll(baDocumentContent: string, promptAppend?: string): Promise<CombinedExtraction>;
 
@@ -1126,6 +1498,7 @@ export abstract class AIProvider {
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<TestScenario[]>;
 
   /**
@@ -1145,6 +1518,7 @@ export abstract class AIProvider {
     behaviors: ExtractedBehaviors,
     scenarios: TestScenario[],
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<{ workflow: WorkflowStep[]; backend: BackendPlan }>;
 
   /**
@@ -1157,6 +1531,7 @@ export abstract class AIProvider {
     workflowSummary: string,
     backendPlan?: BackendPlan | null,
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<FrontendPlan>;
 
   /**
@@ -1167,6 +1542,7 @@ export abstract class AIProvider {
     behaviors: ExtractedBehaviors,
     backendPlan: BackendPlan,
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<BackendTestingPlan>;
 
   /**
@@ -1178,6 +1554,7 @@ export abstract class AIProvider {
     backendPlan: BackendPlan,
     frontendPlan: FrontendPlan,
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<FrontendTestingPlan>;
 
   /**
@@ -1192,6 +1569,7 @@ export abstract class AIProvider {
     devPlan?: DevPlan,
     targetSection?: DevPromptSection,
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<DevPrompt>;
 
   /**

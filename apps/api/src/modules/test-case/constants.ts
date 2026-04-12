@@ -17,4 +17,10 @@ export const AI_CONFIG = {
   // --- Output Management ---
   SCENARIO_BATCH: 15, // Gemini 3 is fast; generate more cases per call
   TEMPERATURE: 0.2, // Keep low for BA analysis (high consistency)
+
+  // --- Layer 1 (4-sublayer) Limits ---
+  MAX_STORIES: 25,
+  MAX_SSR_RULES: 40,
+  MAX_CONSTRAINTS: 20,
+  MAX_GLOBAL_POLICIES: 10,
 } as const;

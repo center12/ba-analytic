@@ -63,6 +63,11 @@ One or two sentences describing the feature and its business purpose.
 - VR-02: [Field Y] must be between [min] and [max]
 - VR-03: [Field Z] must match pattern [pattern]
 
+## System Rules
+
+- SYS-01: [Cross-cutting rule, e.g. "All API endpoints require authentication"]
+- SYS-02: [e.g. "All data mutations must be audit-logged"]
+
 ## Out of Scope
 
 - [What this feature does NOT cover]
@@ -79,19 +84,20 @@ Use exactly these sections (include only those with relevant content):
 # [Feature Name]
 ## Overview
 ## Actors          ← Markdown table: Actor | Role
-## User Stories    ← Bullet list with IDs: US-01, US-02, ...
+## User Stories    ← "As a [Actor], I want [Action], so that [Benefit]" format with IDs; link AC IDs where applicable
 ## Functional Requirements  ← Bullet list with IDs: FR-01, FR-02, ...
 ## Business Rules  ← Bullet list with IDs: BR-01, BR-02, ...
 ## Acceptance Criteria  ← Markdown table: ID | Given | When | Then
 ## Data Entities   ← One sub-section (###) per entity, each with a Markdown table: Field | Type | Description | Constraints
 ## User Flows / Actions  ← Numbered steps, reference rule IDs where applicable
 ## Validation Rules  ← Bullet list with IDs: VR-01, VR-02, ...
+## System Rules  ← Bullet list with IDs: SYS-01, SYS-02, ... (global/cross-cutting rules: auth, audit, rate-limit, multi-tenancy)
 ## Out of Scope
 ## Assumptions & Dependencies
 
 Rules:
 - Preserve the original document language (English or Vietnamese) — do not translate any content.
-- Assign sequential IDs to every requirement, rule, and criterion (FR-01, BR-01, AC-01, VR-01, US-01).
+- Assign sequential IDs to every requirement, rule, and criterion (FR-01, BR-01, AC-01, VR-01, US-01, SYS-01).
 - Preserve all requirements, rules, and criteria — do not omit or summarize.
 - Acceptance Criteria MUST use the Given/When/Then table format.
 - Data Entities MUST use Markdown tables with Field, Type, Description, and Constraints columns.

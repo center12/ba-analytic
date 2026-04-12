@@ -165,6 +165,21 @@ export const api = {
         { method: 'POST', body },
       );
     },
+    runStep1Section: (
+      featureId: string,
+      sublayer: 'ssr-stories' | 'mapping' | 'validation',
+      provider?: string,
+      model?: string,
+    ) => {
+      const params = new URLSearchParams();
+      if (provider) params.set('provider', provider);
+      if (model) params.set('model', model);
+      const qs = params.toString();
+      return request<unknown>(
+        `/test-cases/feature/${featureId}/run-step-1-section/${sublayer}${qs ? `?${qs}` : ''}`,
+        { method: 'POST' },
+      );
+    },
     runStep4Section: (
       featureId: string,
       section: 'workflow-backend' | 'frontend' | 'testing' | 'testing-backend' | 'testing-frontend',
@@ -211,6 +226,10 @@ export const api = {
       step: 1 | 2 | 3 | 4 | 5;
       extractedRequirements?: ExtractedRequirements;
       extractedBehaviors?: ExtractedBehaviors;
+      ssrData?: SSRData;
+      userStories?: UserStories;
+      mapping?: Mapping;
+      validationResult?: ValidationResult;
       testScenarios?: TestScenario[];
       generatedTestCases?: GeneratedTestCase[];
       devPlan?: DevPlan;
@@ -293,10 +312,67 @@ export interface ExtractedRequirements {
   entities: string[];
 }
 
+// ── Layer 1 (4-sublayer) types ────────────────────────────────────────────────
+
+export interface SSRData {
+  featureName: string;
+  systemRules: string[];
+  businessRules: string[];
+  constraints: string[];
+  globalPolicies: string[];
+  entities: string[];
+}
+
+export interface UserStory {
+  id: string;
+  actor: string;
+  action: string;
+  benefit: string;
+  acceptanceCriteria: string[];
+  relatedRuleIds: string[];
+  priority: 'MUST' | 'SHOULD' | 'COULD';
+}
+
+export interface UserStories {
+  featureName: string;
+  stories: UserStory[];
+}
+
+export interface RuleStoryLink {
+  ruleId: string;
+  ruleText: string;
+  storyIds: string[];
+  coverage: 'full' | 'partial' | 'none';
+}
+
+export interface Mapping {
+  links: RuleStoryLink[];
+  uncoveredRules: string[];
+  storiesWithNoRules: string[];
+}
+
+export type ValidationIssueType = 'missing_coverage' | 'ambiguous_story' | 'conflicting_rules' | 'incomplete_criteria' | 'orphan_story';
+
+export interface ValidationIssue {
+  type: ValidationIssueType;
+  severity: 'error' | 'warning' | 'info';
+  affectedIds: string[];
+  message: string;
+  suggestion?: string;
+}
+
+export interface ValidationResult {
+  isValid: boolean;
+  score: number;
+  issues: ValidationIssue[];
+  summary: string;
+}
+
 export interface TestScenario {
   title: string;
   type: ScenarioType;
   requirementRefs: string[];
+  userStoryId?: string;
 }
 
 export interface Feature {
@@ -310,6 +386,11 @@ export interface Feature {
   screenshots?: Screenshot[];
   extractedRequirements?: ExtractedRequirements;
   extractedBehaviors?: ExtractedBehaviors;
+  /** New Layer 1 sublayer fields — JSON strings, parse with JSON.parse() in components */
+  layer1SSR?: string | null;
+  layer1Stories?: string | null;
+  layer1Mapping?: string | null;
+  layer1Validation?: string | null;
   testScenarios?: TestScenario[];
   devPlanWorkflow?: string;
   devPlanBackend?: string;
@@ -352,11 +433,13 @@ export interface GeneratedTestCase {
   preconditions: string;
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
   steps: TestCaseStep[];
+  userStoryId?: string;
 }
 
 export interface DevTaskItem {
   title: string;
   prompt: string;
+  userStoryIds?: string[];
 }
 
 export interface DevPrompt {
@@ -428,6 +511,7 @@ export interface CacheEntry {
 export interface BackendTask {
   title: string;
   description: string;
+  userStoryIds?: string[];
 }
 
 export interface BackendPlan {
@@ -448,6 +532,7 @@ export interface FrontendTask {
   id: string;
   title: string;
   description: string;
+  userStoryIds?: string[];
 }
 
 export interface StateManagement {
@@ -482,6 +567,7 @@ export interface TestingTask {
   id: string;
   title: string;
   description: string;
+  userStoryIds?: string[];
 }
 
 export interface ApiTestScenario {
@@ -552,6 +638,7 @@ export interface TestCase {
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
   status: 'DRAFT' | 'APPROVED' | 'DEPRECATED';
   steps: TestCaseStep[];
+  requirementRefs?: string[];
   aiProvider: string;
   modelVersion: string;
   createdAt: string;
@@ -574,6 +661,7 @@ export interface DeveloperTask {
   category: DevTaskCategory;
   title: string;
   prompt: string;
+  userStoryIds?: string[];
   createdAt: string;
 }
 

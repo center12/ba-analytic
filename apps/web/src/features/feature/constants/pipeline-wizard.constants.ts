@@ -11,17 +11,40 @@ export const BADGE: Record<ScenarioType, { label: string; cls: string }> = {
 export const MANUAL_TEMPLATES: Record<number, string> = {
   1: JSON.stringify(
     {
-      extractedRequirements: {
-        features: ['Feature description 1', 'Feature description 2'],
-        businessRules: ['Rule 1', 'Rule 2'],
-        acceptanceCriteria: ['Criterion 1', 'Criterion 2'],
+      ssr: {
+        featureName: 'Feature Name',
+        systemRules: ['SYS-01: All API endpoints require authentication'],
+        businessRules: ['BR-01: Rule description'],
+        constraints: ['VR-01: Constraint description'],
+        globalPolicies: ['GP-01: Audit log policy'],
         entities: ['Entity1', 'Entity2'],
       },
-      extractedBehaviors: {
-        feature: 'Feature name',
-        actors: ['User', 'Admin'],
-        actions: ['User submits form', 'System validates input'],
-        rules: ['Field X is required', 'Value must be positive'],
+      stories: {
+        featureName: 'Feature Name',
+        stories: [
+          {
+            id: 'US-01',
+            actor: 'User',
+            action: 'submit the form',
+            benefit: 'the data is saved correctly',
+            acceptanceCriteria: ['AC-01: Form submits successfully with valid data', 'AC-02: Error shown for invalid data'],
+            relatedRuleIds: ['BR-01'],
+            priority: 'MUST',
+          },
+        ],
+      },
+      mapping: {
+        links: [
+          { ruleId: 'BR-01', ruleText: 'Rule description', storyIds: ['US-01'], coverage: 'full' },
+        ],
+        uncoveredRules: [],
+        storiesWithNoRules: [],
+      },
+      validation: {
+        isValid: true,
+        score: 85,
+        issues: [],
+        summary: 'Layer 1 extraction is complete and consistent.',
       },
     },
     null,

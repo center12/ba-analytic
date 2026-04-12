@@ -14,9 +14,13 @@ import {
   buildDevPlanWorkflowBackendPrompt,
   buildDevPromptInput,
   buildExtractAllPrompt,
+  buildExtractSSRAndStoriesPrompt,
   buildGenerateTestCasesPrompt,
+  buildLayer1SynthesisPrompt,
+  buildMappingPrompt,
   buildPlanScenariosPrompt,
   buildSynthesisPrompt,
+  buildValidationPrompt,
   ChatHistoryItem,
   CombinedExtraction,
   DevPlan,
@@ -27,7 +31,13 @@ import {
   FrontendPlan,
   FrontendTestingPlan,
   GeneratedTestCase,
+  Layer1ABPartial,
+  Mapping,
+  SSRData,
   TestScenario,
+  UserStories,
+  UserStory,
+  ValidationResult,
   WorkflowStep,
 } from '../ai-provider.abstract';
 
@@ -53,6 +63,7 @@ const ScenariosSchema = z.object({
       title: z.string(),
       type: z.enum(['happy_path', 'edge_case', 'error', 'boundary', 'security']),
       requirementRefs: z.array(z.string()),
+      userStoryId: z.string().optional(),
     }),
   ),
 });
@@ -74,7 +85,11 @@ const TestCasesSchema = z.object({
   ),
 });
 
-const DevTaskItemSchema = z.object({ title: z.string(), prompt: z.string() });
+const DevTaskItemSchema = z.object({
+  title: z.string(),
+  prompt: z.string(),
+  userStoryIds: z.array(z.string()).optional(),
+});
 const DevPromptSchema = z.object({
   api:      z.array(DevTaskItemSchema),
   frontend: z.array(DevTaskItemSchema),
@@ -128,6 +143,7 @@ const CacheEntrySchema = z.object({
 const BackendTaskSchema = z.object({
   title: z.string(),
   description: z.string(),
+  userStoryIds: z.array(z.string()).optional(),
 });
 const WorkflowBackendSchema = z.object({
   workflow: z.array(z.object({
@@ -157,6 +173,7 @@ const FrontendTaskSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string(),
+  userStoryIds: z.array(z.string()).optional(),
 });
 const StateManagementSchema = z.object({
   local: z.array(z.string()).default([]),
@@ -187,6 +204,7 @@ const TestingTaskSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string(),
+  userStoryIds: z.array(z.string()).optional(),
 });
 
 const ApiTestScenarioSchema = z.object({
@@ -232,6 +250,65 @@ const FrontendTestingPlanSchema = z.object({
   crossBrowserTesting: z.array(z.string()).default([]),
   edgeCases: z.array(z.string()).default([]),
   tasks: z.array(TestingTaskSchema).default([]),
+});
+
+// ── New Layer 1 Zod schemas ───────────────────────────────────────────────────
+
+const SSRDataSchema = z.object({
+  featureName: z.string(),
+  systemRules: z.array(z.string()).default([]),
+  businessRules: z.array(z.string()).default([]),
+  constraints: z.array(z.string()).default([]),
+  globalPolicies: z.array(z.string()).default([]),
+  entities: z.array(z.string()).default([]),
+});
+
+const UserStorySchema = z.object({
+  id: z.string(),
+  actor: z.string(),
+  action: z.string(),
+  benefit: z.string(),
+  acceptanceCriteria: z.array(z.string()).default([]),
+  relatedRuleIds: z.array(z.string()).default([]),
+  priority: z.enum(['MUST', 'SHOULD', 'COULD']).default('SHOULD'),
+});
+
+const UserStoriesSchema = z.object({
+  featureName: z.string(),
+  stories: z.array(UserStorySchema).default([]),
+});
+
+const Layer1ABSchema = z.object({
+  ssr: SSRDataSchema,
+  stories: UserStoriesSchema,
+});
+
+const RuleStoryLinkSchema = z.object({
+  ruleId: z.string(),
+  ruleText: z.string(),
+  storyIds: z.array(z.string()).default([]),
+  coverage: z.enum(['full', 'partial', 'none']),
+});
+
+const MappingSchema = z.object({
+  links: z.array(RuleStoryLinkSchema).default([]),
+  uncoveredRules: z.array(z.string()).default([]),
+  storiesWithNoRules: z.array(z.string()).default([]),
+});
+
+const ValidationIssueSchema = z.object({
+  type: z.enum(['missing_coverage', 'ambiguous_story', 'conflicting_rules', 'incomplete_criteria', 'orphan_story']),
+  severity: z.enum(['error', 'warning', 'info']),
+  affectedIds: z.array(z.string()).default([]),
+  message: z.string(),
+  suggestion: z.string().optional(),
+});
+
+const ValidationResultSchema = z.object({
+  isValid: z.boolean(),
+  score: z.number().min(0).max(100),
+  issues: z.array(ValidationIssueSchema).default([]),
+  summary: z.string(),
 });
 
 @Injectable()
@@ -318,6 +395,60 @@ export class ClaudeProvider extends AIProvider {
     this.logger.log(`[Layer 1 synthesis] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
     this.logRateLimit('[Layer 1 synthesis]', response.headers);
     return object as CombinedExtraction;
+  }
+
+  // ── New Layer 1 (4-sublayer) methods ─────────────────────────────────────────
+
+  async extractSSRAndStories(baDocumentContent: string, promptAppend?: string): Promise<Layer1ABPartial> {
+    this.logger.log('[Layer 1AB] Extracting SSR + User Stories...');
+    const prompt = appendPromptInstructions(buildExtractSSRAndStoriesPrompt(baDocumentContent), promptAppend);
+    this.logPromptSize('[Layer 1AB]', prompt);
+    const { object, usage } = await generateObject({
+      model: anthropic(this.modelVersion),
+      schema: Layer1ABSchema,
+      prompt,
+    });
+    this.logger.log(`[Layer 1AB] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    return object as Layer1ABPartial;
+  }
+
+  async synthesiseLayer1AB(merged: Layer1ABPartial): Promise<Layer1ABPartial> {
+    this.logger.log('[Layer 1AB synthesis] Consolidating merged extraction...');
+    const prompt = buildLayer1SynthesisPrompt(merged);
+    this.logPromptSize('[Layer 1AB synthesis]', prompt);
+    const { object, usage } = await generateObject({
+      model: anthropic(this.modelVersion),
+      schema: Layer1ABSchema,
+      prompt,
+    });
+    this.logger.log(`[Layer 1AB synthesis] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    return object as Layer1ABPartial;
+  }
+
+  async extractMapping(ssr: SSRData, stories: UserStories): Promise<Mapping> {
+    this.logger.log('[Layer 1C] Generating traceability mapping...');
+    const prompt = buildMappingPrompt(ssr, stories);
+    this.logPromptSize('[Layer 1C]', prompt);
+    const { object, usage } = await generateObject({
+      model: anthropic(this.modelVersion),
+      schema: MappingSchema,
+      prompt,
+    });
+    this.logger.log(`[Layer 1C] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    return object as Mapping;
+  }
+
+  async extractValidation(ssr: SSRData, stories: UserStories, mapping: Mapping): Promise<ValidationResult> {
+    this.logger.log('[Layer 1D] Validating extraction quality...');
+    const prompt = buildValidationPrompt(ssr, stories, mapping);
+    this.logPromptSize('[Layer 1D]', prompt);
+    const { object, usage } = await generateObject({
+      model: anthropic(this.modelVersion),
+      schema: ValidationResultSchema,
+      prompt,
+    });
+    this.logger.log(`[Layer 1D] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    return object as ValidationResult;
   }
 
   // ── Layer 1A: Requirements Extractor (cached — document is large & reusable) ──
@@ -421,9 +552,10 @@ ${baDocumentContent}`;
     requirements: ExtractedRequirements,
     behaviors: ExtractedBehaviors,
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<TestScenario[]> {
     this.logger.log('[Layer 2] Planning test scenarios...');
-    const text2 = appendPromptInstructions(buildPlanScenariosPrompt(requirements, behaviors), promptAppend);
+    const text2 = appendPromptInstructions(buildPlanScenariosPrompt(requirements, behaviors, userStories), promptAppend);
     this.logPromptSize('[Layer 2]', text2);
     const { object, usage, response } = await generateObject({
       model: anthropic(this.modelVersion),
@@ -488,10 +620,11 @@ ${baDocumentContent}`;
     behaviors: ExtractedBehaviors,
     scenarios: TestScenario[],
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<{ workflow: WorkflowStep[]; backend: BackendPlan }> {
     this.logger.log('[Step 4A] Generating workflow + backend plan...');
     const text4a = appendPromptInstructions(
-      buildDevPlanWorkflowBackendPrompt(requirements, behaviors, scenarios),
+      buildDevPlanWorkflowBackendPrompt(requirements, behaviors, scenarios, userStories),
       promptAppend,
     );
     this.logPromptSize('[Step 4A]', text4a);
@@ -526,10 +659,11 @@ ${baDocumentContent}`;
     workflowSummary: string,
     backendPlan?: BackendPlan | null,
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<FrontendPlan> {
     this.logger.log('[Step 4B] Generating frontend plan...');
     const text4b = appendPromptInstructions(
-      buildDevPlanFrontendPrompt(requirements, behaviors, workflowSummary, backendPlan),
+      buildDevPlanFrontendPrompt(requirements, behaviors, workflowSummary, backendPlan, userStories),
       promptAppend,
     );
     this.logPromptSize('[Step 4B]', text4b);
@@ -563,10 +697,11 @@ ${baDocumentContent}`;
     behaviors: ExtractedBehaviors,
     backendPlan: BackendPlan,
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<BackendTestingPlan> {
     this.logger.log('[Step 4C-BE] Generating backend testing plan...');
     const text = appendPromptInstructions(
-      buildDevPlanBackendTestingPrompt(requirements, behaviors, backendPlan),
+      buildDevPlanBackendTestingPrompt(requirements, behaviors, backendPlan, userStories),
       promptAppend,
     );
     this.logPromptSize('[Step 4C-BE]', text);
@@ -591,10 +726,11 @@ ${baDocumentContent}`;
     backendPlan: BackendPlan,
     frontendPlan: FrontendPlan,
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<FrontendTestingPlan> {
     this.logger.log('[Step 4C-FE] Generating frontend testing plan...');
     const text = appendPromptInstructions(
-      buildDevPlanFrontendTestingPrompt(requirements, behaviors, backendPlan, frontendPlan),
+      buildDevPlanFrontendTestingPrompt(requirements, behaviors, backendPlan, frontendPlan, userStories),
       promptAppend,
     );
     this.logPromptSize('[Step 4C-FE]', text);
@@ -622,10 +758,11 @@ ${baDocumentContent}`;
     devPlan?: DevPlan,
     targetSection?: DevPromptSection,
     promptAppend?: string,
+    userStories?: UserStory[],
   ): Promise<DevPrompt> {
     this.logger.log('[Step 5] Generating dev prompts (API / Frontend / Testing)...');
     const text4 = appendPromptInstructions(
-      buildDevPromptInput(requirements, behaviors, scenarios, devPlan, targetSection),
+      buildDevPromptInput(requirements, behaviors, scenarios, devPlan, targetSection, userStories),
       promptAppend,
     );
     this.logPromptSize('[Layer 4]', text4);

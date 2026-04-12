@@ -40,6 +40,10 @@ model Feature {
   updatedAt             DateTime       @updatedAt
   extractedRequirements Json?
   extractedBehaviors    Json?
+  layer1SSR             String?        @db.Text  // JSON: SSRData
+  layer1Stories         String?        @db.Text  // JSON: UserStories
+  layer1Mapping         String?        @db.Text  // JSON: Mapping
+  layer1Validation      String?        @db.Text  // JSON: ValidationResult
   testScenarios         Json?
   devPlanWorkflow       String?        @db.Text  // JSON: WorkflowStep[]
   devPlanBackend        String?        @db.Text  // JSON: BackendPlan
@@ -88,12 +92,13 @@ model TestCase {
   preconditions String?
   priority     TestCasePriority @default(MEDIUM)
   status       TestCaseStatus   @default(DRAFT)
-  steps        Json
-  aiProvider   String
-  modelVersion String
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  feature      Feature          @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  steps           Json
+  requirementRefs Json?           // Array of US-xx / FR-xx / BR-xx IDs from the scenario
+  aiProvider      String
+  modelVersion    String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  feature         Feature          @relation(fields: [featureId], references: [id], onDelete: Cascade)
 }
 
 model ChatSession {
@@ -155,9 +160,10 @@ model User {
 model DeveloperTask {
   id        String          @id @default(cuid())
   featureId String
-  category  DevTaskCategory
-  title     String
-  prompt    String          @db.Text
-  createdAt DateTime        @default(now())
-  feature   Feature         @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  category      DevTaskCategory
+  title         String
+  prompt        String          @db.Text
+  userStoryIds  Json?           // Array of US-xx IDs this task implements
+  createdAt     DateTime        @default(now())
+  feature       Feature         @relation(fields: [featureId], references: [id], onDelete: Cascade)
 }

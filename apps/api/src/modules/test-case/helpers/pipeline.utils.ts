@@ -4,6 +4,10 @@ import {
   CombinedExtraction,
   ExtractedBehaviors,
   ExtractedRequirements,
+  Layer1ABPartial,
+  SSRData,
+  UserStories,
+  UserStory,
 } from '../../ai/ai-provider.abstract';
 import { AI_CONFIG } from '../constants';
 
@@ -17,6 +21,10 @@ const {
   MAX_ACTORS,
   MAX_ACTIONS,
   MAX_BEH_RULES,
+  MAX_STORIES,
+  MAX_SSR_RULES,
+  MAX_CONSTRAINTS,
+  MAX_GLOBAL_POLICIES,
 } = AI_CONFIG;
 
 const retryLogger = new Logger('withRetry');
@@ -177,7 +185,8 @@ export function mergeExtractions(extractions: CombinedExtraction[]): CombinedExt
 export function compressForDownstream(
   req: ExtractedRequirements,
   beh: ExtractedBehaviors,
-): { req: ExtractedRequirements; beh: ExtractedBehaviors } {
+  userStories?: UserStory[],
+): { req: ExtractedRequirements; beh: ExtractedBehaviors; stories?: UserStory[] } {
   return {
     req: {
       features: req.features.slice(0, MAX_FEATURES),
@@ -191,7 +200,76 @@ export function compressForDownstream(
       actions: beh.actions.slice(0, MAX_ACTIONS),
       rules: beh.rules.slice(0, MAX_BEH_RULES),
     },
+    stories: userStories ? compressUserStories(userStories, MAX_STORIES) : undefined,
   };
+}
+
+/**
+ * Merge multiple Layer1ABPartial chunks into one, deduplicating by ID where possible.
+ */
+export function mergeLayer1AB(parts: Layer1ABPartial[]): Layer1ABPartial {
+  if (parts.length === 0) {
+    throw new Error('mergeLayer1AB: no parts to merge');
+  }
+  const dedup = (arr: string[]) => [...new Set(arr)];
+  const first = parts[0];
+
+  const ssr: SSRData = {
+    featureName: first.ssr.featureName,
+    systemRules: dedup(parts.flatMap((p) => p.ssr.systemRules)).slice(0, MAX_SSR_RULES),
+    businessRules: dedup(parts.flatMap((p) => p.ssr.businessRules)).slice(0, MAX_RULES),
+    constraints: dedup(parts.flatMap((p) => p.ssr.constraints)).slice(0, MAX_CONSTRAINTS),
+    globalPolicies: dedup(parts.flatMap((p) => p.ssr.globalPolicies)).slice(0, MAX_GLOBAL_POLICIES),
+    entities: dedup(parts.flatMap((p) => p.ssr.entities)).slice(0, MAX_ENTITIES),
+  };
+
+  // Deduplicate stories by ID; later chunks override earlier ones for same ID
+  const storyMap = new Map<string, UserStory>();
+  for (const part of parts) {
+    for (const story of part.stories.stories) {
+      storyMap.set(story.id, story);
+    }
+  }
+  const stories: UserStories = {
+    featureName: first.stories.featureName,
+    stories: [...storyMap.values()].slice(0, MAX_STORIES),
+  };
+
+  return { ssr, stories };
+}
+
+/**
+ * Derive legacy ExtractedRequirements + ExtractedBehaviors from new Layer 1 output.
+ * Used to pass backward-compat shapes to Steps 2–5.
+ */
+export function layer1ToLegacy(
+  ssr: SSRData,
+  storiesData: UserStories,
+): { requirements: ExtractedRequirements; behaviors: ExtractedBehaviors } {
+  const requirements: ExtractedRequirements = {
+    features: storiesData.stories.map(
+      (s) => `${s.id}: As a ${s.actor}, I want ${s.action}`,
+    ),
+    businessRules: [...ssr.businessRules, ...ssr.constraints],
+    acceptanceCriteria: storiesData.stories.flatMap((s) => s.acceptanceCriteria),
+    entities: ssr.entities,
+  };
+
+  const behaviors: ExtractedBehaviors = {
+    feature: ssr.featureName,
+    actors: [...new Set(storiesData.stories.map((s) => s.actor))],
+    actions: storiesData.stories.map((s) => s.action),
+    rules: [...ssr.systemRules, ...ssr.businessRules, ...ssr.globalPolicies],
+  };
+
+  return { requirements, behaviors };
+}
+
+/**
+ * Slice user stories to a safe maximum for downstream consumption.
+ */
+export function compressUserStories(stories: UserStory[], max: number): UserStory[] {
+  return stories.slice(0, max);
 }
 
 export async function withRetry<T>(

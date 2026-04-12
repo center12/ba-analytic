@@ -10,6 +10,7 @@ import {
   buildDevPlanWorkflowBackendPrompt,
   buildDevPromptInput,
   buildExtractAllPrompt,
+  buildExtractSSRAndStoriesPrompt,
   buildGenerateTestCasesPrompt,
   buildPlanScenariosPrompt,
   CombinedExtraction,
@@ -21,15 +22,24 @@ import {
   FrontendPlan,
   FrontendTestingPlan,
   GeneratedTestCase,
+  Layer1ABPartial,
+  Mapping,
+  SSRData,
   TestScenario,
+  UserStories,
+  UserStory,
+  ValidationResult,
   WorkflowStep,
 } from '../ai/ai-provider.abstract';
 import { AI_CONFIG } from '@/modules/test-case/constants';
 import {
   chunkMarkdown,
   compressForDownstream,
+  compressUserStories,
   estimateTokens,
+  layer1ToLegacy,
   mergeExtractions,
+  mergeLayer1AB,
   readDocumentContent,
   withRetry,
 } from './helpers/pipeline.utils';
@@ -67,7 +77,7 @@ export class PipelineService {
 
   // ── Individual step runners ────────────────────────────────────────────────
 
-  /** Step 1: Run Layer 1 extraction and save results to Feature */
+  /** Step 1: Run Layer 1 extraction (4-sublayer) and save results to Feature */
   async runStep1(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
     await this.prisma.feature.update({
       where: { id: featureId },
@@ -78,19 +88,24 @@ export class PipelineService {
     try {
       const provider = await this._resolveProvider(featureId, 1, providerName, model);
       const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
-      const extraction = await this._layer1Extraction(featureId, provider, 0, null, normalizedPromptAppend);
+      const layer1 = await this._layer1ExtractionNew(featureId, provider, 0, null, normalizedPromptAppend);
+      const { requirements, behaviors } = layer1ToLegacy(layer1.ssr, layer1.stories);
       await this.prisma.feature.update({
         where: { id: featureId },
-        data: {
-          extractedRequirements: JSON.parse(JSON.stringify(extraction.requirements)),
-          extractedBehaviors:    JSON.parse(JSON.stringify(extraction.behaviors)),
+        data: ({
+          layer1SSR:        JSON.stringify(layer1.ssr),
+          layer1Stories:    JSON.stringify(layer1.stories),
+          layer1Mapping:    JSON.stringify(layer1.mapping),
+          layer1Validation: JSON.stringify(layer1.validation),
+          extractedRequirements: JSON.parse(JSON.stringify(requirements)),
+          extractedBehaviors:    JSON.parse(JSON.stringify(behaviors)),
           pipelineStatus: 'COMPLETED',
           pipelinePartial: Prisma.JsonNull,
-        },
+        } as any),
       });
-      return { requirements: extraction.requirements, behaviors: extraction.behaviors };
+      return { requirements, behaviors, layer1 };
     } catch (err) {
-      // pipelineStatus/pipelineFailedAt already set inside _layer1Extraction on chunk failure
+      // pipelineStatus/pipelineFailedAt already set inside _layer1ExtractionNew on chunk failure
       // If it's a non-chunk error, set failed here
       const feature = await this.prisma.feature.findUnique({ where: { id: featureId }, select: { pipelineStatus: true } });
       if (feature?.pipelineStatus !== 'FAILED') {
@@ -103,29 +118,70 @@ export class PipelineService {
     }
   }
 
-  /** Resume Step 1 from failed chunk */
+  /** Resume Step 1 from failed chunk or failed phase (mapping/validation) */
   async resumeStep1(featureId: string, providerName?: string, model?: string) {
     const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
     if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
     if (feature.pipelineStatus !== 'FAILED' || (feature as any).pipelineStep !== 1) {
       throw new BadRequestException(`Feature ${featureId} step 1 is not in FAILED state`);
     }
-    const resumeFromChunk = feature.pipelineFailedAt ?? 0;
-    const partial = feature.pipelinePartial as CombinedExtraction | null;
     await this.prisma.feature.update({ where: { id: featureId }, data: { pipelineStatus: 'RUNNING' } });
     try {
       const provider = await this._resolveProvider(featureId, 1, providerName, model);
-      const extraction = await this._layer1Extraction(featureId, provider, resumeFromChunk, partial);
+
+      // Check if we failed mid-phase (mapping or validation) vs mid-chunk (AB extraction)
+      const partialRaw = feature.pipelinePartial as Record<string, unknown> | null;
+      const failedPhase = partialRaw?.phase as string | undefined;
+
+      let layer1: { ssr: SSRData; stories: UserStories; mapping: Mapping; validation: ValidationResult };
+
+      if (failedPhase === 'mapping' || failedPhase === 'validation') {
+        // AB extraction already done — read saved SSR + stories and resume from 1C/1D
+        const savedSSR     = (feature as any).layer1SSR     as string | null;
+        const savedStories = (feature as any).layer1Stories as string | null;
+        if (!savedSSR || !savedStories) {
+          throw new BadRequestException(`Feature ${featureId} has no saved Layer 1AB data to resume from`);
+        }
+        const ssr: SSRData      = JSON.parse(savedSSR);
+        const stories: UserStories = JSON.parse(savedStories);
+
+        let mapping: Mapping;
+        let validation: ValidationResult;
+
+        if (failedPhase === 'mapping') {
+          this.logger.log('[Pipeline] Resume Step 1 — resuming from 1C (mapping)');
+          mapping    = await withRetry(() => provider.extractMapping(ssr, stories));
+          validation = await withRetry(() => provider.extractValidation(ssr, stories, mapping));
+        } else {
+          const savedMapping = (feature as any).layer1Mapping as string | null;
+          if (!savedMapping) throw new BadRequestException(`Feature ${featureId} has no saved mapping to resume from`);
+          mapping = JSON.parse(savedMapping);
+          this.logger.log('[Pipeline] Resume Step 1 — resuming from 1D (validation)');
+          validation = await withRetry(() => provider.extractValidation(ssr, stories, mapping));
+        }
+        layer1 = { ssr, stories, mapping, validation };
+      } else {
+        // Standard chunk resume
+        const resumeFromChunk = feature.pipelineFailedAt ?? 0;
+        const abPartial = partialRaw?.partial as Layer1ABPartial | null ?? null;
+        layer1 = await this._layer1ExtractionNew(featureId, provider, resumeFromChunk, abPartial);
+      }
+
+      const { requirements, behaviors } = layer1ToLegacy(layer1.ssr, layer1.stories);
       await this.prisma.feature.update({
         where: { id: featureId },
-        data: {
-          extractedRequirements: JSON.parse(JSON.stringify(extraction.requirements)),
-          extractedBehaviors:    JSON.parse(JSON.stringify(extraction.behaviors)),
+        data: ({
+          layer1SSR:        JSON.stringify(layer1.ssr),
+          layer1Stories:    JSON.stringify(layer1.stories),
+          layer1Mapping:    JSON.stringify(layer1.mapping),
+          layer1Validation: JSON.stringify(layer1.validation),
+          extractedRequirements: JSON.parse(JSON.stringify(requirements)),
+          extractedBehaviors:    JSON.parse(JSON.stringify(behaviors)),
           pipelineStatus: 'COMPLETED',
           pipelinePartial: Prisma.JsonNull,
-        },
+        } as any),
       });
-      return { requirements: extraction.requirements, behaviors: extraction.behaviors };
+      return { requirements, behaviors, layer1 };
     } catch (err) {
       const f = await this.prisma.feature.findUnique({ where: { id: featureId }, select: { pipelineStatus: true } });
       if (f?.pipelineStatus !== 'FAILED') {
@@ -136,6 +192,47 @@ export class PipelineService {
       }
       throw err;
     }
+  }
+
+  /** Re-run Step 1C (mapping) only — requires saved SSR + stories */
+  async runStep1Mapping(featureId: string, providerName?: string, model?: string) {
+    const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
+    if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
+    const savedSSR     = (feature as any).layer1SSR     as string | null;
+    const savedStories = (feature as any).layer1Stories as string | null;
+    if (!savedSSR || !savedStories) {
+      throw new BadRequestException(`Feature ${featureId} has no Layer 1AB data — run Step 1 first`);
+    }
+    const ssr: SSRData         = JSON.parse(savedSSR);
+    const stories: UserStories = JSON.parse(savedStories);
+    const provider = await this._resolveProvider(featureId, 1, providerName, model);
+    const mapping = await withRetry(() => provider.extractMapping(ssr, stories));
+    await this.prisma.feature.update({
+      where: { id: featureId },
+      data: ({ layer1Mapping: JSON.stringify(mapping) } as any),
+    });
+    return { mapping };
+  }
+
+  /** Re-run Step 1D (validation) only — requires saved SSR + stories + mapping */
+  async runStep1Validation(featureId: string, providerName?: string, model?: string) {
+    const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
+    if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
+    const savedSSR     = (feature as any).layer1SSR     as string | null;
+    const savedStories = (feature as any).layer1Stories as string | null;
+    const savedMapping = (feature as any).layer1Mapping as string | null;
+    if (!savedSSR || !savedStories) throw new BadRequestException(`Feature ${featureId} has no Layer 1AB data — run Step 1 first`);
+    if (!savedMapping)              throw new BadRequestException(`Feature ${featureId} has no mapping — run Step 1 Mapping first`);
+    const ssr: SSRData         = JSON.parse(savedSSR);
+    const stories: UserStories = JSON.parse(savedStories);
+    const mapping: Mapping     = JSON.parse(savedMapping);
+    const provider = await this._resolveProvider(featureId, 1, providerName, model);
+    const validation = await withRetry(() => provider.extractValidation(ssr, stories, mapping));
+    await this.prisma.feature.update({
+      where: { id: featureId },
+      data: ({ layer1Validation: JSON.stringify(validation) } as any),
+    });
+    return { validation };
   }
 
   /** Step 2: Run Layer 2 scenario planning using saved Layer 1 results (or override) */
@@ -159,11 +256,13 @@ export class PipelineService {
       if (!req || !beh) throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
 
       const provider = await this._resolveProvider(featureId, 2, providerName, model);
-      const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+      const savedStories = (feature as any).layer1Stories as string | null;
+      const userStories: UserStory[] | undefined = savedStories ? (JSON.parse(savedStories) as UserStories).stories : undefined;
+      const { req: compReq, beh: compBeh, stories: compStories } = compressForDownstream(req, beh, userStories);
 
       this.logger.log(`[Pipeline] Step 2 — planning scenarios`);
       const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
-      const testScenarios = await withRetry(() => provider.planTestScenarios(compReq, compBeh, normalizedPromptAppend));
+      const testScenarios = await withRetry(() => provider.planTestScenarios(compReq, compBeh, normalizedPromptAppend, compStories));
 
       await this.prisma.feature.update({
         where: { id: featureId },
@@ -211,19 +310,28 @@ export class PipelineService {
         allGenerated.push(...cases);
       }
 
+      // Build a scenario → userStoryId lookup for requirementRefs enrichment
+      const scenarioStoryMap = new Map<string, string>();
+      for (const s of testScenarios) {
+        if (s.userStoryId) scenarioStoryMap.set(s.title, s.userStoryId);
+      }
+
       // Delete old test cases before creating new ones
       await this.prisma.testCase.deleteMany({ where: { featureId } });
       const created = await this.prisma.$transaction(
-        allGenerated.map((tc) =>
-          this.prisma.testCase.create({
-            data: {
+        allGenerated.map((tc) => {
+          const storyId = scenarioStoryMap.get(tc.title);
+          const requirementRefs: string[] = storyId ? [storyId] : [];
+          return this.prisma.testCase.create({
+            data: ({
               featureId, title: tc.title, description: tc.description,
               preconditions: tc.preconditions, priority: tc.priority, status: 'DRAFT',
               steps: JSON.parse(JSON.stringify(tc.steps)),
+              requirementRefs: requirementRefs.length > 0 ? requirementRefs : undefined,
               aiProvider: provider.providerName, modelVersion: provider.modelVersion,
-            },
-          }),
-        ),
+            } as any),
+          });
+        }),
       );
 
       await this.prisma.feature.update({ where: { id: featureId }, data: { pipelineStatus: 'COMPLETED' } });
@@ -317,12 +425,14 @@ export class PipelineService {
     if (!testScenarios?.length) throw new BadRequestException(`Feature ${featureId} has no scenarios — run Step 2 first`);
 
     const provider = await this._resolveProvider(featureId, 4, providerName, model);
-    const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+    const savedStories4a = (feature as any).layer1Stories as string | null;
+    const userStories4a: UserStory[] | undefined = savedStories4a ? (JSON.parse(savedStories4a) as UserStories).stories : undefined;
+    const { req: compReq, beh: compBeh, stories: compStories4a } = compressForDownstream(req, beh, userStories4a);
     const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
 
     this.logger.log('[Pipeline] Step 4A (manual) — generating workflow + backend');
     const { workflow, backend } = await withRetry(() =>
-      provider.generateDevPlanWorkflowBackend(compReq, compBeh, testScenarios, normalizedPromptAppend)
+      provider.generateDevPlanWorkflowBackend(compReq, compBeh, testScenarios, normalizedPromptAppend, compStories4a)
     );
 
     await this.prisma.feature.update({
@@ -358,12 +468,14 @@ export class PipelineService {
     }
 
     const provider = await this._resolveProvider(featureId, 4, providerName, model);
-    const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+    const savedStories4b = (feature as any).layer1Stories as string | null;
+    const userStories4b: UserStory[] | undefined = savedStories4b ? (JSON.parse(savedStories4b) as UserStories).stories : undefined;
+    const { req: compReq, beh: compBeh, stories: compStories4b } = compressForDownstream(req, beh, userStories4b);
     const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
 
     this.logger.log('[Pipeline] Step 4B (manual) — generating frontend plan');
     const frontend = await withRetry(() =>
-      provider.generateDevPlanFrontend(compReq, compBeh, workflowSummary, backendPlan, normalizedPromptAppend)
+      provider.generateDevPlanFrontend(compReq, compBeh, workflowSummary, backendPlan, normalizedPromptAppend, compStories4b)
     );
 
     await this.prisma.feature.update({
@@ -390,12 +502,14 @@ export class PipelineService {
 
     const backend: BackendPlan = JSON.parse(rawBackend);
     const provider = await this._resolveProvider(featureId, 4, providerName, model);
-    const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+    const savedStories4cBe = (feature as any).layer1Stories as string | null;
+    const userStories4cBe: UserStory[] | undefined = savedStories4cBe ? (JSON.parse(savedStories4cBe) as UserStories).stories : undefined;
+    const { req: compReq, beh: compBeh, stories: compStories4cBe } = compressForDownstream(req, beh, userStories4cBe);
     const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
 
     this.logger.log('[Pipeline] Step 4C-BE (manual) — generating backend testing plan');
     const backendTesting: BackendTestingPlan = await withRetry(() =>
-      provider.generateDevPlanBackendTesting(compReq, compBeh, backend, normalizedPromptAppend)
+      provider.generateDevPlanBackendTesting(compReq, compBeh, backend, normalizedPromptAppend, compStories4cBe)
     );
 
     // Merge into existing devPlanTesting (preserve frontend if it exists)
@@ -431,12 +545,14 @@ export class PipelineService {
     const backend:  BackendPlan  = JSON.parse(rawBackend);
     const frontend: FrontendPlan = JSON.parse(rawFrontend);
     const provider = await this._resolveProvider(featureId, 4, providerName, model);
-    const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+    const savedStories4cFe = (feature as any).layer1Stories as string | null;
+    const userStories4cFe: UserStory[] | undefined = savedStories4cFe ? (JSON.parse(savedStories4cFe) as UserStories).stories : undefined;
+    const { req: compReq, beh: compBeh, stories: compStories4cFe } = compressForDownstream(req, beh, userStories4cFe);
     const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
 
     this.logger.log('[Pipeline] Step 4C-FE (manual) — generating frontend testing plan');
     const frontendTesting: FrontendTestingPlan = await withRetry(() =>
-      provider.generateDevPlanFrontendTesting(compReq, compBeh, backend, frontend, normalizedPromptAppend)
+      provider.generateDevPlanFrontendTesting(compReq, compBeh, backend, frontend, normalizedPromptAppend, compStories4cFe)
     );
 
     // Merge into existing devPlanTesting (preserve backend if it exists)
@@ -471,10 +587,10 @@ export class PipelineService {
     });
     try {
       const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
-      const { provider, compReq, compBeh, testScenarios, devPlan } = await this._loadStep5Context(featureId, providerName, model);
+      const { provider, compReq, compBeh, testScenarios, devPlan, compStories } = await this._loadStep5Context(featureId, providerName, model);
       this.logger.log('[Pipeline] Step 5 — generating dev prompts');
       const devPrompt = await withRetry(() =>
-        provider.generateDevPrompt(compReq, compBeh, testScenarios, devPlan, undefined, normalizedPromptAppend),
+        provider.generateDevPrompt(compReq, compBeh, testScenarios, devPlan, undefined, normalizedPromptAppend, compStories),
       );
       await this._applyStep5Full(featureId, devPrompt);
 
@@ -519,10 +635,10 @@ export class PipelineService {
 
     try {
       const normalizedPromptAppend = this._normalizePromptAppend(promptAppend);
-      const { provider, compReq, compBeh, testScenarios, devPlan } = await this._loadStep5Context(featureId, providerName, model);
+      const { provider, compReq, compBeh, testScenarios, devPlan, compStories } = await this._loadStep5Context(featureId, providerName, model);
       this.logger.log(`[Pipeline] Step 5 (${section}) — generating section prompts`);
       const devPrompt = await withRetry(() =>
-        provider.generateDevPrompt(compReq, compBeh, testScenarios, devPlan, section, normalizedPromptAppend),
+        provider.generateDevPrompt(compReq, compBeh, testScenarios, devPlan, section, normalizedPromptAppend, compStories),
       );
       const sectionTasks = devPrompt[section] ?? [];
 
@@ -546,6 +662,10 @@ export class PipelineService {
       step: 1 | 2 | 3 | 4 | 5;
       extractedRequirements?: ExtractedRequirements;
       extractedBehaviors?: ExtractedBehaviors;
+      ssrData?: SSRData;
+      userStories?: UserStories;
+      mapping?: Mapping;
+      validationResult?: ValidationResult;
       testScenarios?: TestScenario[];
       generatedTestCases?: GeneratedTestCase[];
       devPlan?: DevPlan;
@@ -618,9 +738,22 @@ export class PipelineService {
 
     // Steps 1 and 2
     const update: Record<string, unknown> = {};
-    if (data.extractedRequirements) update.extractedRequirements = JSON.parse(JSON.stringify(data.extractedRequirements));
-    if (data.extractedBehaviors)    update.extractedBehaviors    = JSON.parse(JSON.stringify(data.extractedBehaviors));
-    if (data.testScenarios)         update.testScenarios         = JSON.parse(JSON.stringify(data.testScenarios));
+
+    // Step 1: new Layer 1 fields — derive legacy from new payload if provided
+    if (data.step === 1 && data.ssrData && data.userStories) {
+      update.layer1SSR     = JSON.stringify(data.ssrData);
+      update.layer1Stories = JSON.stringify(data.userStories);
+      if (data.mapping)          update.layer1Mapping    = JSON.stringify(data.mapping);
+      if (data.validationResult) update.layer1Validation = JSON.stringify(data.validationResult);
+      const { requirements, behaviors } = layer1ToLegacy(data.ssrData, data.userStories);
+      update.extractedRequirements = JSON.parse(JSON.stringify(requirements));
+      update.extractedBehaviors    = JSON.parse(JSON.stringify(behaviors));
+    } else {
+      if (data.extractedRequirements) update.extractedRequirements = JSON.parse(JSON.stringify(data.extractedRequirements));
+      if (data.extractedBehaviors)    update.extractedBehaviors    = JSON.parse(JSON.stringify(data.extractedBehaviors));
+    }
+
+    if (data.testScenarios) update.testScenarios = JSON.parse(JSON.stringify(data.testScenarios));
     if (!Object.keys(update).length) return { step: data.step };
     update.pipelineStep   = data.step;
     update.pipelineStatus = 'COMPLETED';
@@ -643,7 +776,7 @@ export class PipelineService {
       let baContent = await readDocumentContent(baDocumentPath);
       if (screenshotPaths.length > 0) baContent += `\n\nDesign screenshots are available at: ${screenshotPaths.join(', ')}`;
       if (baContent.length > MAX_DOC_CHARS) baContent = baContent.slice(0, MAX_DOC_CHARS);
-      return { prompt: buildExtractAllPrompt(baContent) };
+      return { prompt: buildExtractSSRAndStoriesPrompt(baContent) };
     }
 
     if (step === 2) {
@@ -724,6 +857,117 @@ export class PipelineService {
 
     this.logger.log(`[Pipeline] Resuming from chunk ${resumeFromChunk}`);
     return this.runLayer1(featureId, providerName, model, resumeFromChunk, partial);
+  }
+
+  /** New 4-sublayer Layer 1 extraction — chunks 1A+1B, then single-call 1C+1D */
+  private async _layer1ExtractionNew(
+    featureId: string,
+    provider: AIProvider,
+    startChunk: number,
+    previousPartial: Layer1ABPartial | null,
+    promptAppend?: string,
+  ): Promise<{ ssr: SSRData; stories: UserStories; mapping: Mapping; validation: ValidationResult }> {
+    const feature = await this.prisma.feature.findUnique({
+      where: { id: featureId },
+      include: { baDocument: true, screenshots: true },
+    });
+    if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
+    if (!feature.baDocument) throw new BadRequestException(`Feature ${featureId} has no BA document uploaded`);
+
+    const baDocumentPath  = await this.storage.getSignedUrl(feature.baDocument.storageKey);
+    const screenshotPaths = await Promise.all(feature.screenshots.map((s) => this.storage.getSignedUrl(s.storageKey)));
+
+    let baContent = await readDocumentContent(baDocumentPath);
+    this.logger.log(`[Pipeline] Document read — ${baContent.length} chars (~${estimateTokens(baContent)} tokens)`);
+    if (screenshotPaths.length > 0) baContent += `\n\nDesign screenshots are available at: ${screenshotPaths.join(', ')}`;
+
+    if (baContent.length > MAX_DOC_CHARS) {
+      this.logger.warn(`[Pipeline] Document truncated from ${baContent.length} to ${MAX_DOC_CHARS} chars`);
+      baContent = baContent.slice(0, MAX_DOC_CHARS);
+    }
+
+    const chunks = chunkMarkdown(baContent);
+    this.logger.log(`[Pipeline] Layer 1 (new) — ${chunks.length} chunk(s), starting at chunk ${startChunk} (provider: ${provider.providerName})`);
+
+    // ── Phase 1A+1B: Extract SSR + User Stories per chunk ────────────────────
+
+    let abPartial: Layer1ABPartial;
+
+    if (chunks.length === 1 && startChunk === 0) {
+      abPartial = await withRetry(() => provider.extractSSRAndStories(chunks[0], promptAppend));
+    } else {
+      const completedParts: Layer1ABPartial[] = previousPartial ? [previousPartial] : [];
+      for (let i = startChunk; i < chunks.length; i++) {
+        this.logger.log(`[Pipeline] Layer 1AB — chunk ${i + 1}/${chunks.length}`);
+        if (i > startChunk) await new Promise(r => setTimeout(r, CHUNK_DELAY_MS));
+        try {
+          const chunkWithContext = `[Chunk ${i + 1} of ${chunks.length} — partial section of a larger document. Extract every item present; similar items from other chunks will be merged.]\n\n${chunks[i]}`;
+          const part = await withRetry(() => provider.extractSSRAndStories(chunkWithContext, promptAppend));
+          completedParts.push(part);
+          const runningMerge = mergeLayer1AB(completedParts);
+          await this.prisma.feature.update({
+            where: { id: featureId },
+            data: ({ pipelinePartial: { partial: JSON.parse(JSON.stringify(runningMerge)), phase: 'ab' } } as any),
+          });
+        } catch (err) {
+          await this.prisma.feature.update({
+            where: { id: featureId },
+            data: ({ pipelineStatus: 'FAILED', pipelineStep: 1, pipelineFailedAt: i } as any),
+          });
+          this.logger.error(`[Pipeline] Layer 1AB failed at chunk ${i} — use resume to continue`);
+          throw err;
+        }
+      }
+      const merged = mergeLayer1AB(completedParts);
+      this.logger.log('[Pipeline] Layer 1AB — synthesising merged extraction');
+      abPartial = await withRetry(() => provider.synthesiseLayer1AB(merged));
+    }
+
+    // Save AB partial to DB so if 1C/1D fails we can resume without re-chunking
+    await this.prisma.feature.update({
+      where: { id: featureId },
+      data: ({
+        layer1SSR:     JSON.stringify(abPartial.ssr),
+        layer1Stories: JSON.stringify(abPartial.stories),
+      } as any),
+    });
+
+    // ── Phase 1C: Traceability mapping ───────────────────────────────────────
+
+    let mapping: Mapping;
+    try {
+      this.logger.log('[Pipeline] Layer 1C — generating traceability mapping');
+      mapping = await withRetry(() => provider.extractMapping(abPartial.ssr, abPartial.stories));
+    } catch (err) {
+      await this.prisma.feature.update({
+        where: { id: featureId },
+        data: ({ pipelineStatus: 'FAILED', pipelineStep: 1, pipelinePartial: { phase: 'mapping' } } as any),
+      });
+      this.logger.error('[Pipeline] Layer 1C failed — use resume to retry from mapping phase');
+      throw err;
+    }
+
+    // ── Phase 1D: Validation ─────────────────────────────────────────────────
+
+    let validation: ValidationResult;
+    try {
+      this.logger.log('[Pipeline] Layer 1D — validating extraction quality');
+      validation = await withRetry(() => provider.extractValidation(abPartial.ssr, abPartial.stories, mapping));
+    } catch (err) {
+      await this.prisma.feature.update({
+        where: { id: featureId },
+        data: ({
+          pipelineStatus:  'FAILED',
+          pipelineStep:    1,
+          layer1Mapping:   JSON.stringify(mapping),
+          pipelinePartial: { phase: 'validation' },
+        } as any),
+      });
+      this.logger.error('[Pipeline] Layer 1D failed — use resume to retry from validation phase');
+      throw err;
+    }
+
+    return { ssr: abPartial.ssr, stories: abPartial.stories, mapping, validation };
   }
 
   /** Shared Layer 1 extraction logic — used by runStep1 and runLayer1 */
@@ -963,11 +1207,13 @@ export class PipelineService {
     if (!testScenarios?.length) throw new BadRequestException(`Feature ${featureId} has no scenarios — run Step 2 first`);
 
     const provider = await this._resolveProvider(featureId, 5, providerName, model);
-    const { req: compReq, beh: compBeh } = compressForDownstream(req, beh);
+    const savedStories = (feature as any).layer1Stories as string | null;
+    const userStories: UserStory[] | undefined = savedStories ? (JSON.parse(savedStories) as UserStories).stories : undefined;
+    const { req: compReq, beh: compBeh, stories: compStories } = compressForDownstream(req, beh, userStories);
     const devPlan = this._parseStep5DevPlan(feature as any);
     if (devPlan) this.logger.log('[Pipeline] Step 5 — devPlan loaded from DB, passing as context');
 
-    return { provider, compReq, compBeh, testScenarios, devPlan };
+    return { provider, compReq, compBeh, testScenarios, devPlan, compStories };
   }
 
   private async _applyStep5Full(featureId: string, devPrompt: DevPrompt) {
@@ -983,14 +1229,14 @@ export class PipelineService {
     });
 
     const taskRows = [
-      ...devPrompt.api.map(t => ({ featureId, category: 'API' as const, title: t.title, prompt: t.prompt })),
-      ...devPrompt.frontend.map(t => ({ featureId, category: 'FRONTEND' as const, title: t.title, prompt: t.prompt })),
-      ...devPrompt.testing.map(t => ({ featureId, category: 'TESTING' as const, title: t.title, prompt: t.prompt })),
+      ...devPrompt.api.map(t => ({ featureId, category: 'API' as const, title: t.title, prompt: t.prompt, userStoryIds: t.userStoryIds ?? undefined })),
+      ...devPrompt.frontend.map(t => ({ featureId, category: 'FRONTEND' as const, title: t.title, prompt: t.prompt, userStoryIds: t.userStoryIds ?? undefined })),
+      ...devPrompt.testing.map(t => ({ featureId, category: 'TESTING' as const, title: t.title, prompt: t.prompt, userStoryIds: t.userStoryIds ?? undefined })),
     ];
 
     await this.prisma.developerTask.deleteMany({ where: { featureId } });
     if (taskRows.length > 0) {
-      await this.prisma.developerTask.createMany({ data: taskRows });
+      await this.prisma.developerTask.createMany({ data: taskRows as any });
     }
   }
 
@@ -1018,7 +1264,8 @@ export class PipelineService {
           category: sectionMeta.category,
           title: t.title,
           prompt: t.prompt,
-        })),
+          userStoryIds: t.userStoryIds ?? undefined,
+        })) as any,
       });
     }
   }

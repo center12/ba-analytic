@@ -1,4 +1,13 @@
-import { Feature, TestCase, DevPlan, DevTaskItem } from '@/lib/api';
+import {
+  Feature,
+  TestCase,
+  DevPlan,
+  DevTaskItem,
+  SSRData,
+  UserStories,
+  Mapping,
+  ValidationResult,
+} from '@/lib/api';
 import { StepStatus } from '../types/pipeline-wizard.types';
 
 export function deriveStatus(
@@ -7,8 +16,9 @@ export function deriveStatus(
   testCaseCount: number,
   activeStep: number | null,
 ): StepStatus {
+  // Step 1: prefer new layer1SSR field, fall back to old extractedRequirements for legacy records
   const isDone =
-    stepNum === 1 ? !!feature.extractedRequirements :
+    stepNum === 1 ? !!(feature.layer1SSR || feature.extractedRequirements) :
     stepNum === 2 ? !!feature.testScenarios :
     stepNum === 3 ? testCaseCount > 0 :
     stepNum === 4 ? !!feature.devPlanWorkflow :
@@ -31,6 +41,29 @@ export function textToArr(text: string) {
     .filter(Boolean);
 }
 
+export function parseLayer1Field<T>(raw?: string | null): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+export function getLayer1Data(feature: Feature): {
+  ssr: SSRData | null;
+  stories: UserStories | null;
+  mapping: Mapping | null;
+  validation: ValidationResult | null;
+} {
+  return {
+    ssr: parseLayer1Field<SSRData>(feature.layer1SSR),
+    stories: parseLayer1Field<UserStories>(feature.layer1Stories),
+    mapping: parseLayer1Field<Mapping>(feature.layer1Mapping),
+    validation: parseLayer1Field<ValidationResult>(feature.layer1Validation),
+  };
+}
+
 // ── Markdown export helpers ───────────────────────────────────────────────────
 
 export function downloadMarkdown(text: string, filename: string): void {
@@ -44,6 +77,94 @@ export function downloadMarkdown(text: string, filename: string): void {
 }
 
 export function step1ToMarkdown(feature: Feature): string {
+  const { ssr, stories, mapping, validation } = getLayer1Data(feature);
+  if (ssr || stories || mapping || validation) {
+    const lines: string[] = [`# Layer 1 Extraction — ${feature.name}`, ''];
+
+    if (ssr) {
+      lines.push('## 1A. System & Business Rules', '');
+      lines.push(`**Feature:** ${ssr.featureName}`, '');
+
+      const sections: Array<[string, string[]]> = [
+        ['System Rules', ssr.systemRules],
+        ['Business Rules', ssr.businessRules],
+        ['Constraints', ssr.constraints],
+        ['Global Policies', ssr.globalPolicies],
+        ['Entities', ssr.entities],
+      ];
+
+      sections.forEach(([title, items]) => {
+        if (!items.length) return;
+        lines.push(`### ${title}`, '');
+        items.forEach((item) => lines.push(`- ${item}`));
+        lines.push('');
+      });
+    }
+
+    if (stories) {
+      lines.push('## 1B. User Stories', '');
+      stories.stories.forEach((story) => {
+        lines.push(`### ${story.id}`, '');
+        lines.push(`- Actor: ${story.actor}`);
+        lines.push(`- Action: ${story.action}`);
+        lines.push(`- Benefit: ${story.benefit}`);
+        lines.push(`- Priority: ${story.priority}`);
+        if (story.relatedRuleIds.length) {
+          lines.push(`- Related Rules: ${story.relatedRuleIds.join(', ')}`);
+        }
+        if (story.acceptanceCriteria.length) {
+          lines.push('- Acceptance Criteria:');
+          story.acceptanceCriteria.forEach((criterion) => lines.push(`  - ${criterion}`));
+        }
+        lines.push('');
+      });
+    }
+
+    if (mapping) {
+      lines.push('## 1C. Traceability Map', '');
+      if (mapping.links.length) {
+        lines.push('| Rule ID | Rule Text | Linked Stories | Coverage |');
+        lines.push('|---------|-----------|----------------|----------|');
+        mapping.links.forEach((link) => {
+          lines.push(
+            `| ${link.ruleId} | ${link.ruleText.replace(/\|/g, '\\|')} | ${link.storyIds.join(', ')} | ${link.coverage} |`,
+          );
+        });
+        lines.push('');
+      }
+      if (mapping.uncoveredRules.length) {
+        lines.push('### Uncovered Rules', '');
+        mapping.uncoveredRules.forEach((ruleId) => lines.push(`- ${ruleId}`));
+        lines.push('');
+      }
+      if (mapping.storiesWithNoRules.length) {
+        lines.push('### Stories With No Rules', '');
+        mapping.storiesWithNoRules.forEach((storyId) => lines.push(`- ${storyId}`));
+        lines.push('');
+      }
+    }
+
+    if (validation) {
+      lines.push('## 1D. Validation', '');
+      lines.push(`- Valid: ${validation.isValid ? 'Yes' : 'No'}`);
+      lines.push(`- Score: ${validation.score}`);
+      lines.push(`- Summary: ${validation.summary}`);
+      lines.push('');
+      if (validation.issues.length) {
+        lines.push('| Severity | Type | Affected IDs | Message | Suggestion |');
+        lines.push('|----------|------|--------------|---------|------------|');
+        validation.issues.forEach((issue) => {
+          lines.push(
+            `| ${issue.severity} | ${issue.type} | ${issue.affectedIds.join(', ')} | ${issue.message.replace(/\|/g, '\\|')} | ${(issue.suggestion ?? '').replace(/\|/g, '\\|')} |`,
+          );
+        });
+        lines.push('');
+      }
+    }
+
+    return lines.join('\n');
+  }
+
   const req = feature.extractedRequirements;
   const beh = feature.extractedBehaviors;
   if (!req && !beh) return '';
