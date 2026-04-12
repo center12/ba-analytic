@@ -8,6 +8,7 @@ import { PipelineWizard } from './PipelineWizard';
 import { BADocFormatGuide } from './components/feature-detail/BADocFormatGuide';
 import { useRef } from 'react';
 import { toast } from '@/hooks/use-toast';
+import { AppFeedbackDialog } from '@/features/feedback/components/AppFeedbackDialog';
 
 export function FeatureDetailPage() {
   const { projectId, featureId } = useParams<{ projectId: string; featureId: string }>();
@@ -61,6 +62,11 @@ export function FeatureDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <AppFeedbackDialog
+            pageTitle="Feature Detail"
+            contextLabel={feature?.name || 'Feature'}
+            className="py-1.5"
+          />
           <ModelSelector />
 
           <input

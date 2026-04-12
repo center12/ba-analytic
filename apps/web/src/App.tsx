@@ -4,6 +4,7 @@ import { ProjectDetailPage } from '@/features/project/ProjectDetailPage';
 import { FeatureDetailPage } from '@/features/feature/FeatureDetailPage';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { UserManagementPage } from '@/features/user/UserManagementPage';
+import { FeedbackPage } from '@/features/feedback/FeedbackPage';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -16,6 +17,7 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="/" element={<Navigate to="/projects" replace />} />
           <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/feedback" element={<FeedbackPage />} />
           <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
           <Route path="/projects/:projectId/features/:featureId" element={<FeatureDetailPage />} />
           <Route path="/users" element={<UserManagementPage />} />

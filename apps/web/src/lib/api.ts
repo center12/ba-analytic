@@ -48,6 +48,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function requestBlob(path: string, init?: RequestInit): Promise<Blob> {
+  const token = getStoredToken();
+  const headers: Record<string, string> = {
+    ...(init?.headers as Record<string, string>),
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers });
+
+  if (res.status === 401) {
+    removeStoredToken();
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || `Request failed: ${res.status}`);
+  }
+
+  return res.blob();
+}
+
 // ── Projects ──────────────────────────────────────────────────────────────
 
 export const api = {
@@ -116,6 +139,24 @@ export const api = {
         body: form,
       });
     },
+  },
+
+  feedback: {
+    listRecent: () => request<AppFeedback[]>('/feedback'),
+    create: (data: CreateAppFeedbackInput) => {
+      const form = new FormData();
+      form.append('content', data.content);
+      form.append('routePath', data.routePath);
+      if (data.pageTitle) form.append('pageTitle', data.pageTitle);
+      if (data.contextLabel) form.append('contextLabel', data.contextLabel);
+      if (data.file) form.append('file', data.file);
+
+      return request<AppFeedback>('/feedback', {
+        method: 'POST',
+        body: form,
+      });
+    },
+    downloadMedia: (feedbackId: string) => requestBlob(`/feedback/${feedbackId}/media`),
   },
 
   testCases: {
@@ -293,6 +334,26 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   _count?: { features: number };
+}
+
+export interface AppFeedback {
+  id: string;
+  content: string;
+  routePath: string;
+  pageTitle?: string | null;
+  contextLabel?: string | null;
+  originalName?: string | null;
+  storageKey?: string | null;
+  mimeType?: string | null;
+  createdAt: string;
+}
+
+export interface CreateAppFeedbackInput {
+  content: string;
+  routePath: string;
+  pageTitle?: string;
+  contextLabel?: string;
+  file?: File;
 }
 
 export type ScenarioType = 'happy_path' | 'edge_case' | 'error' | 'boundary' | 'security';

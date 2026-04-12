@@ -17,6 +17,18 @@ model Project {
   pipelineConfigs ProjectPipelineConfig[]
 }
 
+model AppFeedback {
+  id           String   @id @default(cuid())
+  content      String   @db.Text
+  routePath    String
+  pageTitle    String?
+  contextLabel String?
+  originalName String?
+  storageKey   String?
+  mimeType     String?
+  createdAt    DateTime @default(now())
+}
+
 model ProjectPipelineConfig {
   id        String   @id @default(cuid())
   projectId String

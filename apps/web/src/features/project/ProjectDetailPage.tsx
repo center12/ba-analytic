@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type Feature } from '@/lib/api';
 import { ArrowLeft, PlusCircle, Layers, Trash2 } from 'lucide-react';
 import { PipelineConfigEditor } from './components/PipelineConfigEditor';
+import { AppFeedbackDialog } from '@/features/feedback/components/AppFeedbackDialog';
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -53,12 +54,18 @@ export function ProjectDetailPage() {
             <p className="text-muted-foreground mt-1">{project.description}</p>
           )}
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90"
-        >
-          <PlusCircle size={18} /> New Feature
-        </button>
+        <div className="flex items-center gap-2">
+          <AppFeedbackDialog
+            pageTitle="Project Detail"
+            contextLabel={project?.name || 'Project'}
+          />
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90"
+          >
+            <PlusCircle size={18} /> New Feature
+          </button>
+        </div>
       </div>
 
       <details className="border rounded-lg mb-6">

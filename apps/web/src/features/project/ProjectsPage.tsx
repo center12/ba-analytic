@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api, type Project } from '@/lib/api';
-import { PlusCircle, FolderOpen, Trash2, Users, LogOut } from 'lucide-react';
+import { PlusCircle, FolderOpen, Trash2, Users, LogOut, List } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 
 export function ProjectsPage() {
@@ -38,6 +38,13 @@ export function ProjectsPage() {
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold">Projects</h1>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/feedback')}
+            className="flex items-center gap-2 border px-3 py-2 rounded-md hover:bg-muted text-sm"
+            title="Feedback list"
+          >
+            <List size={16} /> Feedback
+          </button>
           <button
             onClick={() => navigate('/users')}
             className="flex items-center gap-2 border px-3 py-2 rounded-md hover:bg-muted text-sm"

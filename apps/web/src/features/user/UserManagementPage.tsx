@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { CreateUserForm } from './components/CreateUserForm';
 import { UserList } from './components/UserList';
+import { AppFeedbackDialog } from '@/features/feedback/components/AppFeedbackDialog';
 
 export function UserManagementPage() {
   const navigate = useNavigate();
@@ -15,7 +16,8 @@ export function UserManagementPage() {
         >
           <ArrowLeft size={20} />
         </button>
-        <h1 className="text-3xl font-bold">Users</h1>
+        <h1 className="text-3xl font-bold flex-1">Users</h1>
+        <AppFeedbackDialog pageTitle="User Management" contextLabel="Users" />
       </div>
 
       <div className="space-y-6">
