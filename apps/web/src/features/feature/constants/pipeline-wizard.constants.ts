@@ -13,6 +13,7 @@ export const MANUAL_TEMPLATES: Record<number, string> = {
     {
       ssr: {
         featureName: 'Feature Name',
+        functionalRequirements: ['FR-01: Feature requirement description'],
         systemRules: ['SYS-01: All API endpoints require authentication'],
         businessRules: ['BR-01: Rule description'],
         constraints: ['VR-01: Constraint description'],

@@ -6,7 +6,7 @@ import { PipelinePromptPreviewService } from './pipeline/pipeline-prompt-preview
 import { PipelineProviderService } from './pipeline/pipeline-provider.service';
 import { PipelineStepRunnerService } from './pipeline/pipeline-step-runner.service';
 import type { SaveStepResultsPayload } from './pipeline/types/pipeline.types';
-import type { UserStories, UserStory, SubFeatureItem } from '../ai/ai-provider.abstract';
+import type { SSRData, UserStories, UserStory, SubFeatureItem } from '../ai/ai-provider.abstract';
 
 @Injectable()
 export class FeatureAnalysisService {
@@ -111,6 +111,9 @@ export class FeatureAnalysisService {
   async extractSubFeaturesForFeature(featureId: string, _providerName?: string, _model?: string) {
     const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
     if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
+    if (feature.featureType !== 'SSR') {
+      throw new BadRequestException('Sub-feature extraction is only supported for SSR features.');
+    }
 
     // Require Step 1 to be run first — derive features from structured user stories
     if (!feature.layer1Stories) {
@@ -132,29 +135,85 @@ export class FeatureAnalysisService {
       );
     }
 
+    let parsedSSR: SSRData | null = null;
+    try {
+      parsedSSR = feature.layer1SSR ? (JSON.parse(feature.layer1SSR as string) as SSRData) : null;
+    } catch {
+      parsedSSR = null;
+    }
+
+    const acceptanceCriteriaSource = (feature.extractedRequirements as any)?.acceptanceCriteria as string[] | undefined;
+
     const features: SubFeatureItem[] = parsedStories.stories.map((story: UserStory) => ({
-      name: `${story.id}: ${story.action}`,
+      name: this.buildExtractedFeatureName(feature.code ?? feature.id, story.id, story.action),
       description: story.benefit,
-      content: this.storyToMarkdown(story),
+      content: this.storyToMarkdown(story, parsedSSR, acceptanceCriteriaSource ?? [], feature.name),
     }));
 
     return { features };
   }
 
-  private storyToMarkdown(story: UserStory): string {
+  private buildExtractedFeatureName(featureCode: string, storyId: string, fullName?: string): string {
+    const normalizedFullName = fullName?.trim();
+    return normalizedFullName ? `${featureCode}-${storyId}: ${normalizedFullName}` : `${featureCode}-${storyId}`;
+  }
+
+  private extractPrefixedId(text: string): string | null {
+    const match = text.match(/\b([A-Z]{2,}-\d+)\b/i);
+    return match ? match[1].toUpperCase() : null;
+  }
+
+  private filterItemsByIds(items: string[], ids: string[]): string[] {
+    const idSet = new Set(ids.map((id) => id.toUpperCase()));
+    return items.filter((item) => {
+      const extractedId = this.extractPrefixedId(item);
+      return extractedId ? idSet.has(extractedId) : false;
+    });
+  }
+
+  private storyToMarkdown(
+    story: UserStory,
+    ssr: SSRData | null,
+    acceptanceCriteriaSource: string[],
+    parentFeatureName: string,
+  ): string {
     const lines: string[] = [];
-    lines.push(`**Actor:** ${story.actor}`, '');
-    lines.push(`**Action:** ${story.action}`, '');
-    lines.push(`**Benefit:** ${story.benefit}`, '');
-    lines.push(`**Priority:** ${story.priority}`, '');
-    if (story.acceptanceCriteria?.length) {
-      lines.push('**Acceptance Criteria:**');
-      story.acceptanceCriteria.forEach((ac) => lines.push(`- ${ac}`));
-      lines.push('');
-    }
-    if (story.relatedRuleIds?.length) {
-      lines.push(`**Related Rules:** ${story.relatedRuleIds.join(', ')}`, '');
-    }
+    const relatedRuleIds = story.relatedRuleIds ?? [];
+    const functionalRequirements = this.filterItemsByIds(ssr?.functionalRequirements ?? [], relatedRuleIds);
+    const businessRules = this.filterItemsByIds(ssr?.businessRules ?? [], relatedRuleIds);
+    const constraints = this.filterItemsByIds(ssr?.constraints ?? [], relatedRuleIds);
+    const systemRules = [
+      ...this.filterItemsByIds(ssr?.systemRules ?? [], relatedRuleIds),
+      ...this.filterItemsByIds(ssr?.globalPolicies ?? [], relatedRuleIds),
+    ];
+    const acceptanceCriteria = this.filterItemsByIds(acceptanceCriteriaSource, story.acceptanceCriteria ?? []);
+
+    lines.push(`# ${story.action}`, '');
+    lines.push('## Overview', '');
+    lines.push(`${story.actor} needs to ${story.action} so that ${story.benefit}.`, '');
+    lines.push('## User Story', '');
+    lines.push(`- Actor: ${story.actor}`);
+    lines.push(`- Action: ${story.action}`);
+    lines.push(`- Benefit: ${story.benefit}`);
+    lines.push(`- Priority: ${story.priority}`, '');
+    lines.push('## Functional Requirements', '');
+    (functionalRequirements.length ? functionalRequirements : ['None identified']).forEach((item) => lines.push(`- ${item}`));
+    lines.push('');
+    lines.push('## Business Rules', '');
+    (businessRules.length ? businessRules : ['None identified']).forEach((item) => lines.push(`- ${item}`));
+    lines.push('');
+    lines.push('## Validation Rules', '');
+    (constraints.length ? constraints : ['None identified']).forEach((item) => lines.push(`- ${item}`));
+    lines.push('');
+    lines.push('## System Rules', '');
+    (systemRules.length ? systemRules : ['None identified']).forEach((item) => lines.push(`- ${item}`));
+    lines.push('');
+    lines.push('## Acceptance Criteria', '');
+    (acceptanceCriteria.length ? acceptanceCriteria : ['None specified']).forEach((item) => lines.push(`- ${item}`));
+    lines.push('');
+    lines.push('## Traceability', '');
+    lines.push(`- Related Rule IDs: ${relatedRuleIds.length ? relatedRuleIds.join(', ') : 'None'}`);
+    lines.push(`- Parent Feature: ${parentFeatureName}`, '');
     return lines.join('\n');
   }
 }

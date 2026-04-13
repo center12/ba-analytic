@@ -8,6 +8,14 @@ import { ProjectOverview } from './components/ProjectOverview';
 import { FeatureContentEditor } from './components/FeatureContentEditor';
 import { SSRExtractModal } from './components/SSRExtractModal';
 import { AppFeedbackDialog } from '@/features/feedback/components/AppFeedbackDialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useAppStore } from '@/store';
 
 const FEATURE_TYPE_BADGE: Record<string, { label: string; className: string }> = {
@@ -28,6 +36,7 @@ export function ProjectDetailPage() {
   const [showForm, setShowForm] = useState(false);
   const [expandedFeatureId, setExpandedFeatureId] = useState<string | null>(null);
   const [ssrExtractFeatureId, setSsrExtractFeatureId] = useState<string | null>(null);
+  const [featureToDelete, setFeatureToDelete] = useState<Feature | null>(null);
 
   const { data: project } = useQuery({
     queryKey: ['projects', projectId],
@@ -54,7 +63,12 @@ export function ProjectDetailPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.features.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['features', projectId] }),
+    onSuccess: (_, deletedFeatureId) => {
+      qc.invalidateQueries({ queryKey: ['features', projectId] });
+      setFeatureToDelete((current) => (current?.id === deletedFeatureId ? null : current));
+      setExpandedFeatureId((current) => (current === deletedFeatureId ? null : current));
+      setSsrExtractFeatureId((current) => (current === deletedFeatureId ? null : current));
+    },
   });
 
   const ssrExtractFeature = ssrExtractFeatureId
@@ -170,6 +184,9 @@ export function ProjectDetailPage() {
                   <Layers size={18} className="text-primary shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-mono rounded border bg-muted/40 px-1.5 py-0.5 text-muted-foreground">
+                        {f.code}
+                      </span>
                       <span className="font-semibold truncate">{f.name}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full border ${badge.className}`}>
                         {badge.label}
@@ -208,7 +225,7 @@ export function ProjectDetailPage() {
                       {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
                     <button
-                      onClick={() => deleteMutation.mutate(f.id)}
+                      onClick={() => setFeatureToDelete(f)}
                       className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-destructive"
                     >
                       <Trash2 size={16} />
@@ -243,6 +260,42 @@ export function ProjectDetailPage() {
           onClose={() => setSsrExtractFeatureId(null)}
         />
       )}
+
+      <Dialog
+        open={!!featureToDelete}
+        onOpenChange={(open) => {
+          if (!open && !deleteMutation.isPending) setFeatureToDelete(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete {featureToDelete?.featureType === 'SSR' ? 'SSR' : 'feature'}?</DialogTitle>
+            <DialogDescription>
+              {featureToDelete
+                ? `This will permanently delete "${featureToDelete.name}" and its related data.`
+                : 'This action cannot be undone.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setFeatureToDelete(null)}
+              disabled={deleteMutation.isPending}
+              className="border px-4 py-2 rounded-md hover:bg-muted disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => featureToDelete && deleteMutation.mutate(featureToDelete.id)}
+              disabled={!featureToDelete || deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground px-4 py-2 rounded-md hover:opacity-90 disabled:opacity-50"
+            >
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

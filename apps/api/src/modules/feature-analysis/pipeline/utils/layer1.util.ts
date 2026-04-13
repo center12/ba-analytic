@@ -31,7 +31,19 @@ type CanonicalRule = {
   ruleText: string;
 };
 
-const RULE_ID_PATTERN = /\b(?:SYS|BR|VR|AC|GP)-\d+\b/gi;
+const RULE_ID_PATTERN = /\b(?:FR|SYS|BR|VR|AC|GP)-\d+\b/gi;
+
+export function normalizeSSRData(ssr: SSRData): SSRData {
+  return {
+    featureName: ssr.featureName,
+    functionalRequirements: ssr.functionalRequirements ?? [],
+    systemRules: ssr.systemRules ?? [],
+    businessRules: ssr.businessRules ?? [],
+    constraints: ssr.constraints ?? [],
+    globalPolicies: ssr.globalPolicies ?? [],
+    entities: ssr.entities ?? [],
+  };
+}
 
 export function mergeExtractions(extractions: CombinedExtraction[]): CombinedExtraction {
   const dedup = (items: string[]) => [...new Set(items)];
@@ -51,36 +63,54 @@ export function mergeExtractions(extractions: CombinedExtraction[]): CombinedExt
   };
 }
 
+export function mergeSSRData(parts: SSRData[]): SSRData {
+  if (parts.length === 0) {
+    throw new Error('mergeSSRData: no parts to merge');
+  }
+
+  const dedup = (items: string[]) => [...new Set(items)];
+  const normalizedParts = parts.map(normalizeSSRData);
+  const first = normalizedParts[0];
+
+  return {
+    featureName: first.featureName,
+    functionalRequirements: dedup(normalizedParts.flatMap((part) => part.functionalRequirements)).slice(0, MAX_RULES),
+    systemRules: dedup(normalizedParts.flatMap((part) => part.systemRules)).slice(0, MAX_SSR_RULES),
+    businessRules: dedup(normalizedParts.flatMap((part) => part.businessRules)).slice(0, MAX_RULES),
+    constraints: dedup(normalizedParts.flatMap((part) => part.constraints)).slice(0, MAX_CONSTRAINTS),
+    globalPolicies: dedup(normalizedParts.flatMap((part) => part.globalPolicies)).slice(0, MAX_GLOBAL_POLICIES),
+    entities: dedup(normalizedParts.flatMap((part) => part.entities)).slice(0, MAX_ENTITIES),
+  };
+}
+
+export function mergeUserStories(parts: UserStories[]): UserStories {
+  if (parts.length === 0) {
+    throw new Error('mergeUserStories: no parts to merge');
+  }
+
+  const first = parts[0];
+  const storyMap = new Map<string, UserStory>();
+  for (const part of parts) {
+    for (const story of part.stories) {
+      storyMap.set(story.id, normalizeUserStory(story));
+    }
+  }
+
+  return {
+    featureName: first.featureName,
+    stories: [...storyMap.values()].slice(0, MAX_STORIES),
+  };
+}
+
 export function mergeLayer1AB(parts: Layer1ABPartial[]): Layer1ABPartial {
   if (parts.length === 0) {
     throw new Error('mergeLayer1AB: no parts to merge');
   }
 
-  const dedup = (items: string[]) => [...new Set(items)];
-  const first = parts[0];
-
-  const ssr: SSRData = {
-    featureName: first.ssr.featureName,
-    systemRules: dedup(parts.flatMap((part) => part.ssr.systemRules)).slice(0, MAX_SSR_RULES),
-    businessRules: dedup(parts.flatMap((part) => part.ssr.businessRules)).slice(0, MAX_RULES),
-    constraints: dedup(parts.flatMap((part) => part.ssr.constraints)).slice(0, MAX_CONSTRAINTS),
-    globalPolicies: dedup(parts.flatMap((part) => part.ssr.globalPolicies)).slice(0, MAX_GLOBAL_POLICIES),
-    entities: dedup(parts.flatMap((part) => part.ssr.entities)).slice(0, MAX_ENTITIES),
+  return {
+    ssr: mergeSSRData(parts.map((part) => part.ssr)),
+    stories: mergeUserStories(parts.map((part) => part.stories)),
   };
-
-  const storyMap = new Map<string, UserStory>();
-  for (const part of parts) {
-    for (const story of part.stories.stories) {
-      storyMap.set(story.id, normalizeUserStory(story));
-    }
-  }
-
-  const stories: UserStories = {
-    featureName: first.stories.featureName,
-    stories: [...storyMap.values()].slice(0, MAX_STORIES),
-  };
-
-  return { ssr, stories };
 }
 
 export function normalizeUserStory(story: UserStory): UserStory {
@@ -101,11 +131,13 @@ export function normalizeUserStories(storiesData: UserStories): UserStories {
 }
 
 export function buildCanonicalRuleInventory(ssr: SSRData): CanonicalRule[] {
+  const normalizedSSR = normalizeSSRData(ssr);
   return [
-    ...ssr.systemRules.map((ruleText) => ({ ruleId: extractAnyRuleId(ruleText, 'SYS'), ruleText })),
-    ...ssr.businessRules.map((ruleText) => ({ ruleId: extractAnyRuleId(ruleText, 'BR'), ruleText })),
-    ...ssr.constraints.map((ruleText) => ({ ruleId: extractAnyRuleId(ruleText, 'VR'), ruleText })),
-    ...ssr.globalPolicies.map((ruleText, index) => ({ ruleId: `GP-${String(index + 1).padStart(2, '0')}`, ruleText })),
+    ...normalizedSSR.functionalRequirements.map((ruleText) => ({ ruleId: extractAnyRuleId(ruleText, 'FR'), ruleText })),
+    ...normalizedSSR.systemRules.map((ruleText) => ({ ruleId: extractAnyRuleId(ruleText, 'SYS'), ruleText })),
+    ...normalizedSSR.businessRules.map((ruleText) => ({ ruleId: extractAnyRuleId(ruleText, 'BR'), ruleText })),
+    ...normalizedSSR.constraints.map((ruleText) => ({ ruleId: extractAnyRuleId(ruleText, 'VR'), ruleText })),
+    ...normalizedSSR.globalPolicies.map((ruleText, index) => ({ ruleId: `GP-${String(index + 1).padStart(2, '0')}`, ruleText })),
   ];
 }
 
@@ -166,19 +198,25 @@ export function layer1ToLegacy(
   storiesData: UserStories,
   acceptanceCriteriaText: string[] = [],
 ): { requirements: ExtractedRequirements; behaviors: ExtractedBehaviors } {
+  const normalizedSSR = normalizeSSRData(ssr);
   const normalizedStories = normalizeUserStories(storiesData);
   const requirements: ExtractedRequirements = {
     features: normalizedStories.stories.map((story: UserStory) => `${story.id}: As a ${story.actor}, I want ${story.action}`),
-    businessRules: [...ssr.businessRules, ...ssr.constraints],
+    businessRules: [...normalizedSSR.businessRules, ...normalizedSSR.constraints],
     acceptanceCriteria: dedupe(acceptanceCriteriaText).slice(0, MAX_CRITERIA),
-    entities: ssr.entities,
+    entities: normalizedSSR.entities,
   };
 
   const behaviors: ExtractedBehaviors = {
-    feature: ssr.featureName,
+    feature: normalizedSSR.featureName,
     actors: [...new Set(normalizedStories.stories.map((story: UserStory) => story.actor))],
     actions: normalizedStories.stories.map((story: UserStory) => story.action),
-    rules: [...ssr.systemRules, ...ssr.businessRules, ...ssr.globalPolicies],
+    rules: [
+      ...normalizedSSR.functionalRequirements,
+      ...normalizedSSR.systemRules,
+      ...normalizedSSR.businessRules,
+      ...normalizedSSR.globalPolicies,
+    ],
   };
 
   return { requirements, behaviors };

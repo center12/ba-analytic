@@ -17,6 +17,7 @@ interface PipelineStep1Props {
   featureId: string;
   status: 'idle' | 'running' | 'completed' | 'failed';
   isRunning: boolean;
+  runIsPendingForStep: boolean;
   isEditing: boolean;
   manualStep: number | null;
   manualJson: string;
@@ -47,6 +48,7 @@ export function PipelineStep1({
   featureId,
   status,
   isRunning,
+  runIsPendingForStep,
   isEditing,
   manualStep,
   manualJson,
@@ -94,7 +96,8 @@ export function PipelineStep1({
               onClick={() => runStep(1, promptAppend)}
               className="flex items-center gap-1.5 rounded bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
-              <Play size={13} /> Run Step 1
+              {runIsPendingForStep ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+              {runIsPendingForStep ? 'Running…' : 'Run Step 1'}
             </button>
             {manualStep !== 1 && (
               <button
@@ -126,7 +129,8 @@ export function PipelineStep1({
               onClick={() => runStep(1, promptAppend)}
               className="flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
             >
-              <RefreshCw size={13} /> Restart from scratch
+              {runIsPendingForStep ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              {runIsPendingForStep ? 'Restarting…' : 'Restart from scratch'}
             </button>
             {manualStep !== 1 && (
               <button
@@ -151,7 +155,8 @@ export function PipelineStep1({
               onClick={() => runStep(1, promptAppend)}
               className="flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
             >
-              <RefreshCw size={13} /> Re-run
+              {runIsPendingForStep ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              {runIsPendingForStep ? 'Re-running…' : 'Re-run'}
             </button>
             <CopyMarkdownButton
               getText={() => step1ToMarkdown(feature)}
@@ -195,7 +200,7 @@ export function PipelineStep1({
         <div className="space-y-4">
           <SectionCard
             title="1A — System & Business Rules"
-            subtitle="Global rules, constraints, shared policies, and entities extracted from the BA document."
+            subtitle="Functional requirements, global rules, constraints, shared policies, and entities extracted from the BA document."
             open={openSections.rules}
             onToggle={() => toggleSection('rules')}
           >

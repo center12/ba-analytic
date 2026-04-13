@@ -47,6 +47,7 @@ model ProjectPipelineConfig {
 model Feature {
   id                    String         @id @default(cuid())
   projectId             String
+  code                  String
   name                  String
   description           String?
   content               String?        @db.Text
@@ -78,6 +79,8 @@ model Feature {
   featureAnalyses       FeatureAnalysis[]
   chatSessions          ChatSession[]
   developerTasks        DeveloperTask[]
+
+  @@unique([projectId, code])
 }
 
 model BADocument {

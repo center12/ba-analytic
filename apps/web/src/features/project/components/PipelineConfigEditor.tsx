@@ -11,9 +11,30 @@ const STEP_LABELS: Record<number, string> = {
 };
 
 type StepDraft = { provider: string; model: string } | null;
+type DraftsState = Record<number, StepDraft>;
 
 interface Props {
   projectId: string;
+}
+
+const EMPTY_DRAFTS: DraftsState = { 1: null, 2: null, 3: null, 4: null };
+
+function buildDrafts(saved: ProjectStepConfig[]): DraftsState {
+  const next: DraftsState = { ...EMPTY_DRAFTS };
+  for (const row of saved) {
+    next[row.step] = { provider: row.provider, model: row.model ?? '' };
+  }
+  return next;
+}
+
+function draftsEqual(left: DraftsState, right: DraftsState): boolean {
+  return ([1, 2, 3, 4] as const).every((step) => {
+    const leftDraft = left[step];
+    const rightDraft = right[step];
+    if (leftDraft === rightDraft) return true;
+    if (!leftDraft || !rightDraft) return leftDraft === rightDraft;
+    return leftDraft.provider === rightDraft.provider && leftDraft.model === rightDraft.model;
+  });
 }
 
 export function PipelineConfigEditor({ projectId }: Props) {
@@ -25,21 +46,21 @@ export function PipelineConfigEditor({ projectId }: Props) {
     staleTime: Infinity,
   });
 
-  const { data: saved = [] } = useQuery({
+  const { data: saved } = useQuery({
     queryKey: ['project-pipeline-config', projectId],
     queryFn: () => api.projects.getPipelineConfig(projectId),
   });
 
-  const [drafts, setDrafts] = useState<Record<number, StepDraft>>({ 1: null, 2: null, 3: null, 4: null });
+  const [drafts, setDrafts] = useState<DraftsState>(EMPTY_DRAFTS);
 
   // Sync drafts when saved config loads
   useEffect(() => {
-    const next: Record<number, StepDraft> = { 1: null, 2: null, 3: null, 4: null };
-    for (const row of saved) {
-      next[row.step] = { provider: row.provider, model: row.model ?? '' };
-    }
-    setDrafts(next);
+    if (!saved) return;
+    const next = buildDrafts(saved);
+    setDrafts((current) => (draftsEqual(current, next) ? current : next));
   }, [saved]);
+
+  const savedRows = saved ?? [];
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -52,7 +73,7 @@ export function PipelineConfigEditor({ projectId }: Props) {
         }));
 
       const toDelete = ([1, 2, 3, 4] as const).filter((s) => {
-        const wasSaved = saved.some((r: ProjectStepConfig) => r.step === s);
+        const wasSaved = savedRows.some((r: ProjectStepConfig) => r.step === s);
         return wasSaved && drafts[s] === null;
       });
 
@@ -83,7 +104,7 @@ export function PipelineConfigEditor({ projectId }: Props) {
   }
 
   const isDirty = ([1, 2, 3, 4] as const).some((s) => {
-    const savedRow = saved.find((r: ProjectStepConfig) => r.step === s);
+    const savedRow = savedRows.find((r: ProjectStepConfig) => r.step === s);
     const draft = drafts[s];
     if (!savedRow && !draft) return false;
     if (!savedRow && draft) return true;
@@ -100,7 +121,7 @@ export function PipelineConfigEditor({ projectId }: Props) {
       <div className="space-y-2">
         {([1, 2, 3, 4] as const).map((step) => {
           const draft = drafts[step];
-          const isSaved = saved.some((r: ProjectStepConfig) => r.step === step);
+          const isSaved = savedRows.some((r: ProjectStepConfig) => r.step === step);
           const selectedProvider = providers.find((p: AIProviderInfo) => p.provider === draft?.provider);
           const models = selectedProvider?.models ?? [];
 

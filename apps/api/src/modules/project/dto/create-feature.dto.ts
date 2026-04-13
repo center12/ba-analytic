@@ -17,6 +17,11 @@ export class CreateFeatureDto {
   @IsOptional()
   @IsEnum(FeatureType)
   featureType?: FeatureType;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  relatedFeatureIds?: string[];
 }
 
 export class UpdateFeatureDto {

@@ -11,7 +11,6 @@ import type {
   FrontendPlan,
   FrontendTestingPlan,
   GeneratedTestCase,
-  Layer1ABPartial,
   Layer1Extraction,
   Mapping,
   SSRData,
@@ -27,6 +26,7 @@ import { AI_CONFIG } from '../constants/feature-analysis.constants';
 import { PipelineContextService } from './pipeline-context.service';
 import { PipelinePersistenceService } from './pipeline-persistence.service';
 import { PipelineProviderService } from './pipeline-provider.service';
+import type { Layer1ResumePartial } from './types/pipeline-context.types';
 import type {
   SaveStepResultsPayload,
   Step1Section,
@@ -38,8 +38,10 @@ import { compressForDownstream } from './utils/compression.util';
 import {
   extractAcceptanceCriteriaFromMarkdown,
   layer1ToLegacy,
-  mergeLayer1AB,
+  mergeSSRData,
+  mergeUserStories,
   normalizeMapping,
+  normalizeSSRData,
   normalizeUserStories,
 } from './utils/layer1.util';
 import { withRetry } from './utils/retry.util';
@@ -67,7 +69,7 @@ export class PipelineStepRunnerService {
     try {
       const provider = await this.providerService.resolveProvider(featureId, 1, providerName, model);
       const normalizedPromptAppend = this.providerService.normalizePromptAppend(promptAppend);
-      const layer1 = await this.extractLayer1(featureId, provider, 0, null, normalizedPromptAppend);
+      const layer1 = await this.extractLayer1(featureId, provider, 0, null, undefined, normalizedPromptAppend);
       return this.persistence.saveLayer1Result(featureId, layer1, await this.resolveLegacyAcceptanceCriteria(featureId));
     } catch (error) {
       const feature = await this.prisma.feature.findUnique({ where: { id: featureId }, select: { pipelineStatus: true } });
@@ -124,7 +126,7 @@ export class PipelineStepRunnerService {
           validation,
         };
       } else {
-        layer1 = await this.extractLayer1(featureId, provider, resumeFromChunk, partial);
+        layer1 = await this.extractLayer1(featureId, provider, resumeFromChunk, partial, failedPhase === 'stories' ? 'stories' : 'ssr');
       }
 
       return this.persistence.saveLayer1Result(featureId, layer1, await this.resolveLegacyAcceptanceCriteria(featureId));
@@ -543,16 +545,17 @@ export class PipelineStepRunnerService {
     const update: Record<string, unknown> = {};
 
     if (data.step === 1 && data.ssrData && data.userStories) {
+      const normalizedSSR = normalizeSSRData(data.ssrData);
       const normalizedStories = normalizeUserStories(data.userStories);
-      const normalizedMapping = data.mapping ? normalizeMapping(data.mapping, data.ssrData, normalizedStories) : undefined;
+      const normalizedMapping = data.mapping ? normalizeMapping(data.mapping, normalizedSSR, normalizedStories) : undefined;
       const legacyAcceptanceCriteria = data.acceptanceCriteriaText
         ? this.normalizeAcceptanceCriteriaText(data.acceptanceCriteriaText)
         : await this.resolveLegacyAcceptanceCriteria(featureId);
-      update.layer1SSR = JSON.stringify(data.ssrData);
+      update.layer1SSR = JSON.stringify(normalizedSSR);
       update.layer1Stories = JSON.stringify(normalizedStories);
       if (normalizedMapping) update.layer1Mapping = JSON.stringify(normalizedMapping);
       if (data.validationResult) update.layer1Validation = JSON.stringify(data.validationResult);
-      const { requirements, behaviors } = layer1ToLegacy(data.ssrData, normalizedStories, legacyAcceptanceCriteria);
+      const { requirements, behaviors } = layer1ToLegacy(normalizedSSR, normalizedStories, legacyAcceptanceCriteria);
       update.extractedRequirements = JSON.parse(JSON.stringify(requirements));
       update.extractedBehaviors = JSON.parse(JSON.stringify(behaviors));
     } else {
@@ -573,7 +576,8 @@ export class PipelineStepRunnerService {
     featureId: string,
     provider: AIProvider,
     startChunk: number,
-    previousPartial: Layer1ABPartial | null,
+    previousPartial: Layer1ResumePartial | null,
+    startPhase: 'ssr' | 'stories' = 'ssr',
     promptAppend?: string,
   ): Promise<Layer1Extraction> {
     const feature = await this.context.getFeatureWithAssets(featureId);
@@ -583,6 +587,21 @@ export class PipelineStepRunnerService {
 
     let baContent = feature.content;
     this.logger.log(`[Pipeline] Content loaded — ${baContent.length} chars (~${estimateTokens(baContent)} tokens)`);
+
+    const projectOverview = feature.project?.overview?.trim();
+    if (projectOverview) {
+      baContent = [
+        `## Project Overview Context`,
+        `Use this as background context only. If it conflicts with the feature or SSR content below, prefer the feature or SSR content.`,
+        '',
+        projectOverview,
+        '',
+        '---',
+        '',
+        baContent,
+      ].join('\n');
+      this.logger.log('[Pipeline] Prepended project overview to Step 1 context');
+    }
 
     // Append related features' content as additional context
     const relatedIds = Array.isArray((feature as any).relatedFeatureIds) ? (feature as any).relatedFeatureIds as string[] : [];
@@ -611,43 +630,47 @@ export class PipelineStepRunnerService {
     const chunks = chunkMarkdown(baContent);
     this.logger.log(`[Pipeline] Layer 1 — ${chunks.length} chunk(s), starting at chunk ${startChunk} (provider: ${provider.providerName})`);
 
-    let abPartial: Layer1ABPartial;
-    if (chunks.length === 1 && startChunk === 0) {
-      abPartial = normalizeLayer1AB(await withRetry(() => provider.extractSSRAndStories(chunks[0], promptAppend)));
-    } else {
-      const completedParts: Layer1ABPartial[] = previousPartial ? [previousPartial] : [];
-      for (let index = startChunk; index < chunks.length; index += 1) {
-        this.logger.log(`[Pipeline] Layer 1AB — chunk ${index + 1}/${chunks.length}`);
-        if (index > startChunk) await new Promise((resolve) => setTimeout(resolve, CHUNK_DELAY_MS));
+    const ssr = startPhase === 'stories' && previousPartial?.ssr
+      ? normalizeSSRData(previousPartial.ssr)
+      : await this.extractLayer1SSR(featureId, provider, chunks, startChunk, previousPartial?.ssr ?? null, promptAppend);
 
-        try {
-          const chunkWithContext = `[Chunk ${index + 1} of ${chunks.length} — partial section of a larger document. Extract every item present; similar items from other chunks will be merged.]\n\n${chunks[index]}`;
-          const part = normalizeLayer1AB(await withRetry(() => provider.extractSSRAndStories(chunkWithContext, promptAppend)));
-          completedParts.push(part);
-          const runningMerge = mergeLayer1AB(completedParts);
-          await this.persistence.saveLayer1Partial(featureId, { partial: JSON.parse(JSON.stringify(runningMerge)), phase: 'ab' });
-        } catch (error) {
-          await this.persistence.markStepFailed(featureId, 1, { pipelineFailedAt: index });
-          this.logger.error(`[Pipeline] Layer 1AB failed at chunk ${index} — use resume to continue`);
-          throw error;
-        }
-      }
+    await this.persistence.saveLayer1Partial(featureId, {
+      partial: JSON.parse(JSON.stringify({
+        ssr,
+        ...(startPhase === 'stories' && previousPartial?.stories ? { stories: previousPartial.stories } : {}),
+      })),
+      phase: 'stories',
+    });
 
-      const merged = mergeLayer1AB(completedParts);
-      this.logger.log('[Pipeline] Layer 1AB — synthesising merged extraction');
-      abPartial = normalizeLayer1AB(await withRetry(() => provider.synthesiseLayer1AB(merged)));
-    }
+    const stories = await this.extractLayer1Stories(
+      featureId,
+      provider,
+      chunks,
+      startPhase === 'stories' ? startChunk : 0,
+      ssr,
+      startPhase === 'stories' ? previousPartial?.stories ?? null : null,
+      promptAppend,
+    );
 
-    await this.persistence.saveLayer1AB(featureId, abPartial.ssr, abPartial.stories);
+    await this.persistence.saveLayer1AB(featureId, ssr, stories);
 
     let mapping: Mapping;
     try {
       this.logger.log('[Pipeline] Layer 1C — generating traceability mapping');
-      const rawMapping = await withRetry(() => provider.extractMapping(abPartial.ssr, abPartial.stories));
-      if (!rawMapping.links.length && (abPartial.ssr.systemRules.length || abPartial.ssr.businessRules.length || abPartial.ssr.constraints.length || abPartial.ssr.globalPolicies.length)) {
+      const rawMapping = await withRetry(() => provider.extractMapping(ssr, stories));
+      if (
+        !rawMapping.links.length &&
+        (
+          (ssr.functionalRequirements?.length ?? 0) ||
+          ssr.systemRules.length ||
+          ssr.businessRules.length ||
+          ssr.constraints.length ||
+          ssr.globalPolicies.length
+        )
+      ) {
         this.logger.warn('[Pipeline] Layer 1C returned empty links for non-empty SSR rules; normalizing fallback mapping');
       }
-      mapping = normalizeMapping(rawMapping, abPartial.ssr, abPartial.stories);
+      mapping = normalizeMapping(rawMapping, ssr, stories);
     } catch (error) {
       await this.persistence.markStepFailed(featureId, 1, { pipelinePartial: { phase: 'mapping' } });
       this.logger.error('[Pipeline] Layer 1C failed — use resume to retry from mapping phase');
@@ -657,7 +680,7 @@ export class PipelineStepRunnerService {
     let validation: ValidationResult;
     try {
       this.logger.log('[Pipeline] Layer 1D — validating extraction quality');
-      validation = await withRetry(() => provider.extractValidation(abPartial.ssr, abPartial.stories, mapping));
+      validation = await withRetry(() => provider.extractValidation(ssr, stories, mapping));
     } catch (error) {
       await this.persistence.markStepFailed(featureId, 1, {
         layer1Mapping: JSON.stringify(mapping),
@@ -667,7 +690,102 @@ export class PipelineStepRunnerService {
       throw error;
     }
 
-    return { ssr: abPartial.ssr, stories: abPartial.stories, mapping, validation };
+    return { ssr, stories, mapping, validation };
+  }
+
+  private async extractLayer1SSR(
+    featureId: string,
+    provider: AIProvider,
+    chunks: string[],
+    startChunk: number,
+    previousSSR: SSRData | null,
+    promptAppend?: string,
+  ): Promise<SSRData> {
+    if (chunks.length === 1 && startChunk === 0 && !previousSSR) {
+      return normalizeSSRData(await withRetry(() => provider.extractSSR(chunks[0], promptAppend)));
+    }
+
+    const completedParts: SSRData[] = previousSSR ? [normalizeSSRData(previousSSR)] : [];
+    for (let index = startChunk; index < chunks.length; index += 1) {
+      this.logger.log(`[Pipeline] Layer 1A — chunk ${index + 1}/${chunks.length}`);
+      if (index > startChunk) await new Promise((resolve) => setTimeout(resolve, CHUNK_DELAY_MS));
+
+      try {
+        const chunkWithContext = `[Chunk ${index + 1} of ${chunks.length} — partial section of a larger document. Extract every SSR item present; similar items from other chunks will be merged.]\n\n${chunks[index]}`;
+        const part = normalizeSSRData(await withRetry(() => provider.extractSSR(chunkWithContext, promptAppend)));
+        completedParts.push(part);
+        const runningMerge = mergeSSRData(completedParts);
+        await this.persistence.saveLayer1Partial(featureId, {
+          partial: JSON.parse(JSON.stringify({ ssr: runningMerge })),
+          phase: 'ssr',
+        });
+      } catch (error) {
+        await this.persistence.markStepFailed(featureId, 1, { pipelineFailedAt: index });
+        this.logger.error(`[Pipeline] Layer 1A failed at chunk ${index} — use resume to continue`);
+        throw error;
+      }
+    }
+
+    const merged = mergeSSRData(completedParts);
+    try {
+      this.logger.log('[Pipeline] Layer 1A — synthesising merged SSR extraction');
+      return normalizeSSRData(await withRetry(() => provider.synthesiseSSR(merged)));
+    } catch (error) {
+      await this.persistence.markStepFailed(featureId, 1, {
+        pipelineFailedAt: chunks.length,
+        pipelinePartial: { phase: 'ssr', partial: JSON.parse(JSON.stringify({ ssr: merged })) },
+      });
+      this.logger.error('[Pipeline] Layer 1A synthesis failed — use resume to continue');
+      throw error;
+    }
+  }
+
+  private async extractLayer1Stories(
+    featureId: string,
+    provider: AIProvider,
+    chunks: string[],
+    startChunk: number,
+    ssr: SSRData,
+    previousStories: UserStories | null,
+    promptAppend?: string,
+  ): Promise<UserStories> {
+    if (chunks.length === 1 && startChunk === 0 && !previousStories) {
+      return normalizeUserStories(await withRetry(() => provider.extractUserStories(chunks[0], ssr, promptAppend)));
+    }
+
+    const completedParts: UserStories[] = previousStories ? [normalizeUserStories(previousStories)] : [];
+    for (let index = startChunk; index < chunks.length; index += 1) {
+      this.logger.log(`[Pipeline] Layer 1B — chunk ${index + 1}/${chunks.length}`);
+      if (index > startChunk) await new Promise((resolve) => setTimeout(resolve, CHUNK_DELAY_MS));
+
+      try {
+        const chunkWithContext = `[Chunk ${index + 1} of ${chunks.length} — partial section of a larger document. Extract every user story present; similar items from other chunks will be merged.]\n\n${chunks[index]}`;
+        const part = normalizeUserStories(await withRetry(() => provider.extractUserStories(chunkWithContext, ssr, promptAppend)));
+        completedParts.push(part);
+        const runningMerge = mergeUserStories(completedParts);
+        await this.persistence.saveLayer1Partial(featureId, {
+          partial: JSON.parse(JSON.stringify({ ssr, stories: runningMerge })),
+          phase: 'stories',
+        });
+      } catch (error) {
+        await this.persistence.markStepFailed(featureId, 1, { pipelineFailedAt: index });
+        this.logger.error(`[Pipeline] Layer 1B failed at chunk ${index} — use resume to continue`);
+        throw error;
+      }
+    }
+
+    const merged = mergeUserStories(completedParts);
+    try {
+      this.logger.log('[Pipeline] Layer 1B — synthesising merged user stories');
+      return normalizeUserStories(await withRetry(() => provider.synthesiseUserStories(merged, ssr)));
+    } catch (error) {
+      await this.persistence.markStepFailed(featureId, 1, {
+        pipelineFailedAt: chunks.length,
+        pipelinePartial: { phase: 'stories', partial: JSON.parse(JSON.stringify({ ssr, stories: merged })) },
+      });
+      this.logger.error('[Pipeline] Layer 1B synthesis failed — use resume to continue');
+      throw error;
+    }
   }
 
   private async resolveLegacyAcceptanceCriteria(featureId: string): Promise<string[]> {
@@ -682,11 +800,4 @@ export class PipelineStepRunnerService {
   private normalizeAcceptanceCriteriaText(items: string[]): string[] {
     return [...new Set(items.map((item) => item.trim()).filter(Boolean))];
   }
-}
-
-function normalizeLayer1AB(partial: Layer1ABPartial): Layer1ABPartial {
-  return {
-    ssr: partial.ssr,
-    stories: normalizeUserStories(partial.stories),
-  };
 }

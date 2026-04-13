@@ -31,6 +31,15 @@ export function RulesSection({ feature, ssr, stories, isEditing, draft, setDraft
       )}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <EditableList
+          label="Functional Requirements"
+          color="text-indigo-700"
+          items={ssr?.functionalRequirements ?? []}
+          editing={isEditing}
+          fieldKey="functionalRequirements"
+          draft={draft}
+          onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
+        />
+        <EditableList
           label="System Rules"
           color="text-sky-700"
           items={ssr?.systemRules ?? []}

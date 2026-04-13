@@ -50,6 +50,18 @@ export function parseLayer1Field<T>(raw?: string | null): T | null {
   }
 }
 
+function normalizeSSRData(ssr: SSRData): SSRData {
+  return {
+    featureName: ssr.featureName,
+    functionalRequirements: ssr.functionalRequirements ?? [],
+    systemRules: ssr.systemRules ?? [],
+    businessRules: ssr.businessRules ?? [],
+    constraints: ssr.constraints ?? [],
+    globalPolicies: ssr.globalPolicies ?? [],
+    entities: ssr.entities ?? [],
+  };
+}
+
 export function getLayer1Data(feature: Feature): {
   ssr: SSRData | null;
   stories: UserStories | null;
@@ -57,7 +69,10 @@ export function getLayer1Data(feature: Feature): {
   validation: ValidationResult | null;
 } {
   return {
-    ssr: parseLayer1Field<SSRData>(feature.layer1SSR),
+    ssr: (() => {
+      const parsed = parseLayer1Field<SSRData>(feature.layer1SSR);
+      return parsed ? normalizeSSRData(parsed) : null;
+    })(),
     stories: parseLayer1Field<UserStories>(feature.layer1Stories),
     mapping: parseLayer1Field<Mapping>(feature.layer1Mapping),
     validation: parseLayer1Field<ValidationResult>(feature.layer1Validation),
@@ -86,6 +101,7 @@ export function step1ToMarkdown(feature: Feature): string {
       lines.push(`**Feature:** ${ssr.featureName}`, '');
 
       const sections: Array<[string, string[]]> = [
+        ['Functional Requirements', ssr.functionalRequirements],
         ['System Rules', ssr.systemRules],
         ['Business Rules', ssr.businessRules],
         ['Constraints', ssr.constraints],

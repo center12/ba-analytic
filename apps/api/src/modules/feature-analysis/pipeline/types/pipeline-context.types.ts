@@ -5,7 +5,6 @@ import type {
   ExtractedBehaviors,
   ExtractedRequirements,
   FrontendPlan,
-  Layer1ABPartial,
   Mapping,
   SSRData,
   TestScenario,
@@ -74,7 +73,12 @@ export interface ParsedStep4Fields {
 export interface Layer1ResumeState {
   failedPhase?: string;
   resumeFromChunk: number;
-  partial: Layer1ABPartial | null;
+  partial: Layer1ResumePartial | null;
+}
+
+export interface Layer1ResumePartial {
+  ssr?: SSRData;
+  stories?: UserStories;
 }
 
 export interface PromptStep5Context {

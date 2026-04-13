@@ -5,7 +5,6 @@ import type {
   ExtractedBehaviors,
   ExtractedRequirements,
   FrontendPlan,
-  Layer1ABPartial,
   Mapping,
   SSRData,
   TestScenario,
@@ -16,7 +15,9 @@ import type {
 } from '../../ai/ai-provider.abstract';
 import { PrismaService } from '../../../prisma.service';
 import { compressForDownstream } from './utils/compression.util';
+import { normalizeSSRData, normalizeUserStories } from './utils/layer1.util';
 import type {
+  Layer1ResumePartial,
   Layer1ResumeState,
   ParsedLayer1Fields,
   Step2Context,
@@ -38,7 +39,10 @@ export class PipelineContextService {
   async getFeatureWithAssets(featureId: string) {
     const feature = await this.prisma.feature.findUnique({
       where: { id: featureId },
-      include: { screenshots: true },
+      include: {
+        screenshots: true,
+        project: { select: { name: true, overview: true } },
+      },
     });
     if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
     return feature;
@@ -61,8 +65,9 @@ export class PipelineContextService {
   }
 
   parseLayer1Fields(feature: any): ParsedLayer1Fields {
+    const parsedSSR = this.tryParseJsonField<SSRData>(feature.layer1SSR);
     return {
-      ssr: this.tryParseJsonField<SSRData>(feature.layer1SSR),
+      ssr: parsedSSR ? normalizeSSRData(parsedSSR) : undefined,
       stories: this.tryParseJsonField<UserStories>(feature.layer1Stories),
       mapping: this.tryParseJsonField<Mapping>(feature.layer1Mapping),
       validation: this.tryParseJsonField<ValidationResult>(feature.layer1Validation),
@@ -90,10 +95,16 @@ export class PipelineContextService {
 
   getLayer1ResumeState(feature: any): Layer1ResumeState {
     const partialRaw = feature.pipelinePartial as Record<string, unknown> | null;
+    const partial = (partialRaw?.partial as Layer1ResumePartial | null) ?? null;
     return {
       failedPhase: typeof partialRaw?.phase === 'string' ? partialRaw.phase : undefined,
       resumeFromChunk: feature.pipelineFailedAt ?? 0,
-      partial: (partialRaw?.partial as Layer1ABPartial | null) ?? null,
+      partial: partial
+        ? {
+            ssr: partial.ssr ? normalizeSSRData(partial.ssr) : undefined,
+            stories: partial.stories ? normalizeUserStories(partial.stories) : undefined,
+          }
+        : null,
     };
   }
 

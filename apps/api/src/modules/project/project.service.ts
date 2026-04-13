@@ -7,6 +7,7 @@ import { CreateFeatureDto, UpdateFeatureDto } from './dto/create-feature.dto';
 import { UpsertPipelineConfigDto } from './dto/upsert-pipeline-config.dto';
 import { v4 as uuidv4 } from 'uuid';
 import * as mime from 'mime-types';
+import { FeatureType } from '@prisma/client';
 
 @Injectable()
 export class ProjectService {
@@ -75,7 +76,18 @@ export class ProjectService {
 
   async createFeature(projectId: string, dto: CreateFeatureDto) {
     await this.findOneProject(projectId);
-    return this.prisma.feature.create({ data: { ...dto, projectId } });
+    const featureType = dto.featureType ?? FeatureType.FEATURE;
+    const code = await this.generateFeatureCode(projectId, featureType);
+    const { relatedFeatureIds, ...rest } = dto;
+    return this.prisma.feature.create({
+      data: {
+        ...rest,
+        projectId,
+        featureType,
+        code,
+        ...(relatedFeatureIds !== undefined ? { relatedFeatureIds } : {}),
+      },
+    });
   }
 
   async updateFeature(id: string, dto: UpdateFeatureDto) {
@@ -134,5 +146,21 @@ export class ProjectService {
   async deleteProjectPipelineConfigStep(projectId: string, step: number) {
     await this.findOneProject(projectId);
     return this.prisma.projectPipelineConfig.deleteMany({ where: { projectId, step } });
+  }
+
+  private async generateFeatureCode(projectId: string, featureType: FeatureType): Promise<string> {
+    const prefix = featureType === FeatureType.SSR ? 'SSR' : 'FEA';
+    const features = await this.prisma.feature.findMany({
+      where: { projectId, featureType },
+      select: { code: true },
+    });
+
+    const maxSequence = features.reduce((max, feature) => {
+      const match = feature.code.match(new RegExp(`^${prefix}-(\\d+)$`));
+      if (!match) return max;
+      return Math.max(max, Number.parseInt(match[1], 10));
+    }, 0);
+
+    return `${prefix}-${String(maxSequence + 1).padStart(3, '0')}`;
   }
 }

@@ -28,7 +28,10 @@ function getLayer1Counts(feature: Feature): { rules: number; stories: number } |
   const ssr = parseJsonField<SSRData>(feature.layer1SSR);
   const storiesData = parseJsonField<UserStories>(feature.layer1Stories);
   if (!ssr && !storiesData) return null;
-  const rules = (ssr?.systemRules?.length ?? 0) + (ssr?.businessRules?.length ?? 0);
+  const rules =
+    (ssr?.functionalRequirements?.length ?? 0) +
+    (ssr?.systemRules?.length ?? 0) +
+    (ssr?.businessRules?.length ?? 0);
   const stories = storiesData?.stories?.length ?? 0;
   return { rules, stories };
 }

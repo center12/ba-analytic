@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type Feature, type SubFeatureItem, type UserStories, type UserStory } from '@/lib/api';
+import { api, type Feature, type SSRData, type SubFeatureItem, type UserStories, type UserStory } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
 import { parseLayer1Field } from '@/features/feature/helpers/pipeline-wizard.helpers';
 import { Loader2, Sparkles, Plus, Trash2, Check, ChevronDown } from 'lucide-react';
@@ -15,39 +15,118 @@ interface SSRExtractModalProps {
   onClose: () => void;
 }
 
-function storyToContent(story: UserStory): string {
-  const acceptanceCriteria = story.acceptanceCriteria?.length
-    ? story.acceptanceCriteria.map((criterion) => `- ${criterion}`).join('\n')
+function extractPrefixedId(text: string): string | null {
+  const match = text.match(/\b([A-Z]{2,}-\d+)\b/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+function filterItemsByIds(items: string[], ids: string[]): string[] {
+  const idSet = new Set(ids.map((id) => id.toUpperCase()));
+  return items.filter((item) => {
+    const extractedId = extractPrefixedId(item);
+    return extractedId ? idSet.has(extractedId) : false;
+  });
+}
+
+function storyToContent(story: UserStory, feature: Feature): string {
+  const ssr = parseLayer1Field<SSRData>(feature.layer1SSR);
+  const acceptanceCriteriaSource = feature.extractedRequirements?.acceptanceCriteria ?? [];
+  const relatedRuleIds = story.relatedRuleIds ?? [];
+
+  const functionalRequirements = filterItemsByIds(ssr?.functionalRequirements ?? [], relatedRuleIds);
+  const businessRules = filterItemsByIds(ssr?.businessRules ?? [], relatedRuleIds);
+  const constraints = filterItemsByIds(ssr?.constraints ?? [], relatedRuleIds);
+  const systemRules = filterItemsByIds(ssr?.systemRules ?? [], relatedRuleIds);
+  const globalPolicies = filterItemsByIds(ssr?.globalPolicies ?? [], relatedRuleIds);
+  const acceptanceCriteria = filterItemsByIds(acceptanceCriteriaSource, story.acceptanceCriteria ?? []);
+
+  const functionalRequirementsBlock = functionalRequirements.length
+    ? functionalRequirements.map((item) => `- ${item}`).join('\n')
+    : '- None identified';
+  const businessRulesBlock = businessRules.length
+    ? businessRules.map((item) => `- ${item}`).join('\n')
+    : '- None identified';
+  const constraintsBlock = constraints.length
+    ? constraints.map((item) => `- ${item}`).join('\n')
+    : '- None identified';
+  const systemRulesBlock = [...systemRules, ...globalPolicies].length
+    ? [...systemRules, ...globalPolicies].map((item) => `- ${item}`).join('\n')
+    : '- None identified';
+  const acceptanceCriteriaBlock = acceptanceCriteria.length
+    ? acceptanceCriteria.map((item) => `- ${item}`).join('\n')
     : '- None specified';
-  const relatedRules = story.relatedRuleIds?.length
-    ? story.relatedRuleIds.join(', ')
-    : 'None';
+  const relatedRules = relatedRuleIds.length ? relatedRuleIds.join(', ') : 'None';
 
   return [
-    `**Actor:** ${story.actor}`,
+    `# ${story.action}`,
     '',
-    `**Action:** ${story.action}`,
+    '## Overview',
     '',
-    `**Benefit:** ${story.benefit}`,
+    `${story.actor} needs to ${story.action} so that ${story.benefit}.`,
     '',
-    `**Priority:** ${story.priority}`,
+    '## User Story',
     '',
-    '**Acceptance Criteria:**',
-    acceptanceCriteria,
+    `- Actor: ${story.actor}`,
+    `- Action: ${story.action}`,
+    `- Benefit: ${story.benefit}`,
+    `- Priority: ${story.priority}`,
     '',
-    `**Related Rules:** ${relatedRules}`,
+    '## Functional Requirements',
+    '',
+    functionalRequirementsBlock,
+    '',
+    '## Business Rules',
+    '',
+    businessRulesBlock,
+    '',
+    '## Validation Rules',
+    '',
+    constraintsBlock,
+    '',
+    '## System Rules',
+    '',
+    systemRulesBlock,
+    '',
+    '## Acceptance Criteria',
+    '',
+    acceptanceCriteriaBlock,
+    '',
+    '## Traceability',
+    '',
+    `- Related Rule IDs: ${relatedRules}`,
+    `- Parent Feature: ${feature.name}`,
   ].join('\n');
 }
 
-function deriveItemsFromFeature(feature: Feature): SubFeatureItem[] {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildExtractedFeatureName(parentFeatureCode: string, storyId: string, fullName?: string): string {
+  const normalizedFullName = fullName?.trim();
+  return normalizedFullName ? `${parentFeatureCode}-${storyId}: ${normalizedFullName}` : `${parentFeatureCode}-${storyId}`;
+}
+
+function deriveItemsFromFeature(feature: Feature, parentFeatureCode: string): SubFeatureItem[] {
   const storiesData = parseLayer1Field<UserStories>(feature.layer1Stories);
   const stories = storiesData?.stories ?? [];
 
   return stories.map((story) => ({
-    name: `${story.id}: ${story.action}`,
+    name: buildExtractedFeatureName(parentFeatureCode, story.id, story.action),
     description: story.benefit,
-    content: storyToContent(story),
+    content: storyToContent(story, feature),
   }));
+}
+
+function getNextManualStoryId(items: SubFeatureItem[], parentFeatureCode: string): string {
+  const pattern = new RegExp(`^${escapeRegExp(parentFeatureCode)}-US-(\\d+)(?::.*)?$`);
+  const maxSequence = items.reduce((max, item) => {
+    const match = item.name.match(pattern);
+    if (!match) return max;
+    return Math.max(max, Number.parseInt(match[1], 10));
+  }, 0);
+
+  return `US-${String(maxSequence + 1).padStart(2, '0')}`;
 }
 
 export function SSRExtractModal({
@@ -61,6 +140,7 @@ export function SSRExtractModal({
 }: SSRExtractModalProps) {
   const qc = useQueryClient();
   const resolvedFeatureId = feature.id || featureId || '';
+  const resolvedFeatureCode = feature.code || resolvedFeatureId;
   const resolvedProjectId = feature.projectId || projectId || '';
   const resolvedFeatureName = feature.name || featureName || 'this SSR';
   const [extracted, setExtracted] = useState<SubFeatureItem[]>([]);
@@ -68,11 +148,11 @@ export function SSRExtractModal({
   const [step, setStep] = useState<'required' | 'extracted'>('required');
 
   useEffect(() => {
-    const items = deriveItemsFromFeature(feature);
+    const items = deriveItemsFromFeature(feature, resolvedFeatureCode);
     setExtracted(items);
     setSelected(new Set(items.map((_, i) => i)));
     setStep(items.length > 0 ? 'extracted' : 'required');
-  }, [feature.id, feature.layer1Stories]);
+  }, [feature.id, feature.layer1Stories, resolvedFeatureCode]);
 
   const step1Mutation = useMutation({
     mutationFn: () => api.featureAnalysis.runStep(resolvedFeatureId, 1, provider, model),
@@ -83,7 +163,7 @@ export function SSRExtractModal({
         .getQueryData<Feature[]>(['features', resolvedProjectId])
         ?.find((item) => item.id === resolvedFeatureId);
 
-      const items = deriveItemsFromFeature(updatedFeature ?? feature);
+      const items = deriveItemsFromFeature(updatedFeature ?? feature, resolvedFeatureCode);
       if (items.length > 0) {
         setExtracted(items);
         setSelected(new Set(items.map((_, i) => i)));
@@ -114,6 +194,8 @@ export function SSRExtractModal({
           name: item.name,
           description: item.description,
           content: item.content,
+          featureType: 'FEATURE',
+          relatedFeatureIds: [resolvedFeatureId],
         });
       }
       return toCreate.length;
@@ -232,7 +314,20 @@ export function SSRExtractModal({
                 </div>
               ))}
               <button
-                onClick={() => setExtracted((prev) => [...prev, { name: 'New Feature', description: '', content: '' }])}
+                onClick={() =>
+                  setExtracted((prev) => [
+                    ...prev,
+                    {
+                      name: buildExtractedFeatureName(
+                        resolvedFeatureCode,
+                        getNextManualStoryId(prev, resolvedFeatureCode),
+                        'New Feature',
+                      ),
+                      description: '',
+                      content: '',
+                    },
+                  ])
+                }
                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
               >
                 <Plus size={12} /> Add feature manually

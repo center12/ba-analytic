@@ -132,6 +132,7 @@ export function PipelineWizard({ featureId }: Props) {
     if (step === 1 && ssr && stories) {
       setDraft({
         featureName: ssr.featureName,
+        functionalRequirements: arrToText(ssr.functionalRequirements ?? []),
         systemRules: arrToText(ssr.systemRules),
         businessRules: arrToText(ssr.businessRules),
         constraints: arrToText(ssr.constraints),
@@ -242,6 +243,7 @@ export function PipelineWizard({ featureId }: Props) {
           step: 1,
           ssrData: {
             featureName: draft.featureName ?? ssr.featureName,
+            functionalRequirements: textToArr(draft.functionalRequirements ?? arrToText(ssr.functionalRequirements ?? [])),
             systemRules: textToArr(draft.systemRules ?? arrToText(ssr.systemRules)),
             businessRules: textToArr(draft.businessRules ?? arrToText(ssr.businessRules)),
             constraints: textToArr(draft.constraints ?? arrToText(ssr.constraints)),
@@ -314,6 +316,7 @@ export function PipelineWizard({ featureId }: Props) {
           featureId={featureId}
           status={statuses[0]}
           isRunning={isRunning}
+          runIsPendingForStep={runIsPendingStep === 1}
           isEditing={editingStep === 1}
           manualStep={manualStep}
           manualJson={manualJson}

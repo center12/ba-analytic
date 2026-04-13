@@ -48,6 +48,7 @@ export interface CombinedExtraction {
 /** Layer 1A — System & Business Rules Extraction */
 export interface SSRData {
   featureName: string;
+  functionalRequirements: string[]; // FR-xx  — feature-specific functional requirements
   systemRules: string[];      // SYS-xx — cross-cutting system policies
   businessRules: string[];    // BR-xx  — domain business rules
   constraints: string[];      // VR-xx / AC-xx — data/input constraints
@@ -62,7 +63,7 @@ export interface UserStory {
   action: string;
   benefit: string;
   acceptanceCriteria: string[]; // AC-xx IDs specific to this story
-  relatedRuleIds: string[];     // BR-xx / VR-xx / SYS-xx that govern this story
+  relatedRuleIds: string[];     // FR-xx / BR-xx / VR-xx / SYS-xx that govern this story
   priority: 'MUST' | 'SHOULD' | 'COULD';
 }
 
@@ -74,7 +75,7 @@ export interface UserStories {
 
 /** One rule-to-stories traceability link produced by Layer 1C */
 export interface RuleStoryLink {
-  ruleId: string;              // BR-xx, VR-xx, SYS-xx, AC-xx
+  ruleId: string;              // FR-xx, BR-xx, VR-xx, SYS-xx, AC-xx
   ruleText: string;
   storyIds: string[];          // US-xx IDs this rule applies to
   coverage: 'full' | 'partial' | 'none';
@@ -363,6 +364,10 @@ export function buildExtractAllPrompt(
 
 LANGUAGE RULE: Detect the primary language of the BA document (English or Vietnamese). Write ALL extracted string values in that same language. Do not translate or mix languages within a single response.
 
+TEXT CLEANUP RULE:
+- Remove citation artifacts and formatting noise from extracted values, including tokens such as [cite_start], [cite: 12], markdown bold/italic markers, and stray footnote wrappers.
+- Preserve the actual requirement text and IDs after cleanup.
+
 Document format notes:
 - The document is structured Markdown with ## section headings (e.g. ## Functional Requirements, ## Business Rules, ## Acceptance Criteria / ## Yêu cầu chức năng, ## Quy tắc nghiệp vụ, ## Tiêu chí chấp nhận).
 - List items may carry ID prefixes such as FR-01, BR-03, AC-02, VR-01, US-01. Preserve these IDs verbatim in every extracted string so they can be cross-referenced downstream.
@@ -444,6 +449,16 @@ LANGUAGE RULE: Detect the primary language of the document (English or Vietnames
 
 ID PRESERVATION RULE: Keep all prefixed IDs (FR-xx, BR-xx, AC-xx, VR-xx, SYS-xx, US-xx) verbatim.
 
+TEXT CLEANUP RULE:
+- Remove citation artifacts and formatting noise from extracted values, including tokens such as [cite_start], [cite: 12], markdown bold/italic markers, and stray wrappers around IDs.
+- Preserve the actual requirement text and all IDs after cleanup.
+
+CONTEXT BOUNDARY RULE:
+- The main feature document is the primary extraction target.
+- Supplemental sections appended under headings such as "## Project Overview Context", "## Related Features & Rules", or "### Related Feature:" are reference context only.
+- Use supplemental context only to resolve ambiguity or note dependencies.
+- Do NOT copy stories, rules, entities, or acceptance criteria from supplemental context unless they are explicitly restated in the primary feature content.
+
 Document format notes:
 - Structured Markdown with ## section headings.
 - List items may carry ID prefixes — preserve them.
@@ -453,6 +468,9 @@ Document format notes:
 
 1. SYSTEM & BUSINESS RULES (SSR):
    - featureName: primary feature name from the # title
+   - functionalRequirements: feature-specific functional requirements and capabilities (FR-xx). Preserve IDs verbatim.
+   - Every requirement listed under headings such as "## Functional Requirements", "## Yêu cầu chức năng", or equivalent MUST be extracted into functionalRequirements.
+   - Do NOT drop, summarize, merge away, or reclassify FR-xx items into systemRules just because similar user stories or actions exist elsewhere in the document.
    - systemRules: system-level constraints and global policies that apply across the feature (SYS-xx). Examples: auth requirements, audit logging, rate limiting, multi-tenancy isolation.
    - businessRules: domain rules governing business logic (BR-xx). Preserve IDs verbatim.
    - constraints: data validations, format rules, size limits, conditional requirements (VR-xx, AC-xx constraint items). Preserve IDs verbatim.
@@ -461,12 +479,16 @@ Document format notes:
 
 2. USER STORIES:
    - For each distinct feature unit, produce one user story.
+   - Stories must be narrower than the whole feature and focused on one concrete user goal.
+   - Split broad combined actions into separate stories when the source describes different flows, UI triggers, or rule sets. Examples: split "thêm mới" vs "chỉnh sửa", and split "import" vs "export", unless the source clearly treats them as one inseparable capability.
    - id: sequential US-01, US-02, ... (preserve existing US-xx IDs if present in doc).
    - actor: the role or persona.
-   - action: what the actor wants to do (verb phrase, under 15 words).
+   - action: what the actor wants to do (verb phrase, under 15 words). Keep it specific and implementation-facing enough to distinguish nearby flows.
    - benefit: the "so that" rationale (under 15 words).
    - acceptanceCriteria: AC-xx IDs only that apply specifically to this story. Do NOT include Given/When/Then text here.
-   - relatedRuleIds: BR-xx, VR-xx, SYS-xx IDs that govern this story (pre-fill from above).
+   - relatedRuleIds: FR-xx, BR-xx, VR-xx, SYS-xx IDs that govern this story (pre-fill from above).
+   - When a story is clearly derived from or implements one or more FR-xx items, include those FR-xx IDs in relatedRuleIds.
+   - Prefer explicit traceability: if a search story corresponds to FR-02, include FR-02; if an import/export story corresponds to FR-04 and FR-05, include both.
    - priority: MUST (core functional), SHOULD (important but not blocking), COULD (nice-to-have).
 
 Be thorough — missing a story or rule means missing test coverage.
@@ -480,6 +502,7 @@ Return ONLY valid JSON matching this exact structure (no markdown, no explanatio
 {
   "ssr": {
     "featureName": "string",
+    "functionalRequirements": ["string"],
     "systemRules": ["string"],
     "businessRules": ["string"],
     "constraints": ["string"],
@@ -504,6 +527,189 @@ Return ONLY valid JSON matching this exact structure (no markdown, no explanatio
 }
 
 /**
+ * Builds the Layer 1A prompt for extracting SSR data only.
+ */
+export function buildExtractSSRPrompt(
+  baDocumentContent: string,
+  chunkInfo?: { index: number; total: number },
+): string {
+  const chunkHeader = chunkInfo && chunkInfo.total > 1
+    ? `[Chunk ${chunkInfo.index + 1} of ${chunkInfo.total} — partial section of a larger document. Extract every SSR item present; items from other chunks will be merged later.]\n\n`
+    : '';
+
+  return `You are a senior business analyst. Read the following BA document and extract ONLY the structured SSR rule inventory.
+
+LANGUAGE RULE: Detect the primary language of the document (English or Vietnamese). Write ALL extracted values in that same language. Do not translate or mix languages.
+
+ID PRESERVATION RULE: Keep all prefixed IDs (FR-xx, BR-xx, AC-xx, VR-xx, SYS-xx, US-xx) verbatim.
+
+TEXT CLEANUP RULE:
+- Remove citation artifacts and formatting noise from extracted values, including tokens such as [cite_start], [cite: 12], markdown bold/italic markers, and stray wrappers around IDs.
+- Preserve the actual requirement text and all IDs after cleanup.
+
+CONTEXT BOUNDARY RULE:
+- The main feature document is the primary extraction target.
+- Supplemental sections appended under headings such as "## Project Overview Context", "## Related Features & Rules", or "### Related Feature:" are reference context only.
+- Use supplemental context only to resolve ambiguity or note dependencies.
+- Do NOT copy stories, rules, entities, or acceptance criteria from supplemental context unless they are explicitly restated in the primary feature content.
+
+Document format notes:
+- Structured Markdown with ## section headings.
+- List items may carry ID prefixes — preserve them.
+- Acceptance Criteria appear as Markdown tables (ID | Given | When | Then). These are supporting context for constraints/story traceability and should not be emitted directly in SSR output unless an AC item is acting as a constraint in the source.
+- Data Entities appear as Markdown tables under ### sub-headings.
+
+Extract ONLY this SSR structure:
+- featureName: primary feature name from the # title
+- functionalRequirements: feature-specific functional requirements and capabilities (FR-xx). Preserve IDs verbatim.
+- Every requirement listed under headings such as "## Functional Requirements", "## Yêu cầu chức năng", or equivalent MUST be extracted into functionalRequirements.
+- Do NOT drop, summarize, merge away, or reclassify FR-xx items into systemRules just because similar user stories or actions exist elsewhere in the document.
+- systemRules: system-level constraints and global policies that apply across the feature (SYS-xx). Examples: auth requirements, audit logging, rate limiting, multi-tenancy isolation.
+- businessRules: domain rules governing business logic (BR-xx). Preserve IDs verbatim.
+- constraints: data validations, format rules, size limits, conditional requirements (VR-xx, AC-xx constraint items). Preserve IDs verbatim.
+- globalPolicies: cross-cutting concerns not already in systemRules (e.g. GDPR retention, currency handling, timezone rules).
+- entities: key domain objects / models mentioned.
+
+Be thorough — missing a rule means missing downstream traceability and test coverage.
+
+BA Document:
+${chunkHeader}${baDocumentContent}
+
+---
+
+Return ONLY valid JSON matching this exact structure (no markdown, no explanation):
+{
+  "featureName": "string",
+  "functionalRequirements": ["string"],
+  "systemRules": ["string"],
+  "businessRules": ["string"],
+  "constraints": ["string"],
+  "globalPolicies": ["string"],
+  "entities": ["string"]
+}`;
+}
+
+/**
+ * Builds the Layer 1B prompt for extracting user stories using SSR as canonical context.
+ */
+export function buildExtractUserStoriesPrompt(
+  baDocumentContent: string,
+  ssr: SSRData,
+  chunkInfo?: { index: number; total: number },
+): string {
+  const chunkHeader = chunkInfo && chunkInfo.total > 1
+    ? `[Chunk ${chunkInfo.index + 1} of ${chunkInfo.total} — partial section of a larger document. Extract every user story present; stories from other chunks will be merged later.]\n\n`
+    : '';
+
+  return `You are a senior business analyst. Read the following BA document and extract ONLY user stories.
+
+LANGUAGE RULE: Detect the primary language of the document (English or Vietnamese). Write ALL extracted values in that same language. Do not translate or mix languages.
+
+ID PRESERVATION RULE: Keep all prefixed IDs (FR-xx, BR-xx, AC-xx, VR-xx, SYS-xx, US-xx) verbatim.
+
+TEXT CLEANUP RULE:
+- Remove citation artifacts and formatting noise from extracted values, including tokens such as [cite_start], [cite: 12], markdown bold/italic markers, and stray wrappers around IDs.
+- Preserve the actual requirement text and all IDs after cleanup.
+
+CONTEXT BOUNDARY RULE:
+- The main feature document is the primary extraction target.
+- Supplemental sections appended under headings such as "## Project Overview Context", "## Related Features & Rules", or "### Related Feature:" are reference context only.
+- Use supplemental context only to resolve ambiguity or note dependencies.
+- Do NOT copy stories or requirements from supplemental context unless they are explicitly restated in the primary feature content.
+
+Canonical SSR context (already extracted from the same primary feature document):
+${JSON.stringify(ssr, null, 0)}
+
+USER STORY RULES:
+- Produce stories that are narrower than the whole feature and focused on one concrete user goal.
+- Split broad combined actions into separate stories when the source describes different flows, UI triggers, or rule sets.
+- Especially split "thêm mới" vs "chỉnh sửa", and split "import" vs "export", unless the source clearly treats them as one inseparable capability.
+- Do NOT restate the full SSR inventory as stories.
+- Do NOT create umbrella stories that merely summarize many FR-xx items at once.
+- Stories must stay scoped to the primary feature document, not related-feature context.
+
+For each story:
+- id: sequential US-01, US-02, ... (preserve existing US-xx IDs if present in doc)
+- actor: the role or persona
+- action: what the actor wants to do (verb phrase, under 15 words). Keep it specific and implementation-facing enough to distinguish nearby flows.
+- benefit: the "so that" rationale (under 15 words)
+- acceptanceCriteria: AC-xx IDs only that apply specifically to this story. Do NOT include Given/When/Then text here.
+- relatedRuleIds: FR-xx, BR-xx, VR-xx, SYS-xx IDs that govern this story
+- When a story is clearly derived from or implements one or more FR-xx items, include those FR-xx IDs in relatedRuleIds.
+- Prefer explicit traceability: if a search story corresponds to FR-02, include FR-02; if separate import and export stories correspond to FR-04 and FR-05, include them separately.
+- Only include rules that truly govern the story; avoid attaching unrelated rules just to increase coverage.
+- priority: MUST (core functional), SHOULD (important but not blocking), COULD (nice-to-have)
+
+BA Document:
+${chunkHeader}${baDocumentContent}
+
+---
+
+Return ONLY valid JSON matching this exact structure (no markdown, no explanation):
+{
+  "featureName": "string",
+  "stories": [
+    {
+      "id": "US-01",
+      "actor": "string",
+      "action": "string",
+      "benefit": "string",
+      "acceptanceCriteria": ["AC-01"],
+      "relatedRuleIds": ["string"],
+      "priority": "MUST | SHOULD | COULD"
+    }
+  ]
+}`;
+}
+
+/**
+ * Builds the Layer 1A synthesis prompt for deduplicating merged SSR chunks.
+ */
+export function buildSSRSynthesisPrompt(merged: SSRData): string {
+  return `You are a business analyst. The SSR data below was extracted from multiple chunks of the same BA document and may contain near-duplicate or split entries.
+
+LANGUAGE RULE: Preserve the language of each string value as-is. Do not translate.
+
+Consolidation rules:
+- Items carrying ID prefixes (FR-xx, BR-xx, VR-xx, SYS-xx, AC-xx) are DISTINCT — preserve each ID and text unchanged. Never merge items with different IDs.
+- Never remove a functional requirement from functionalRequirements just because a similar action or story exists elsewhere.
+- Remove citation artifacts and markdown formatting noise from every string while preserving the underlying text and IDs.
+- Items without IDs: merge only if they describe exactly the same concept; otherwise keep both.
+- Remove exact string duplicates.
+- Keep concise; do not reword.
+
+${JSON.stringify(merged, null, 0)}
+
+Return the same JSON structure with duplicates removed. Preserve all IDs verbatim.`;
+}
+
+/**
+ * Builds the Layer 1B synthesis prompt for deduplicating merged user story chunks.
+ */
+export function buildUserStoriesSynthesisPrompt(merged: UserStories, ssr: SSRData): string {
+  return `You are a business analyst. The user stories below were extracted from multiple chunks of the same BA document and may contain near-duplicate or overlapping stories.
+
+LANGUAGE RULE: Preserve the language of each string value as-is. Do not translate.
+
+Canonical SSR context:
+${JSON.stringify(ssr, null, 0)}
+
+Consolidation rules:
+- User stories must remain narrower than the full feature and represent one concrete user goal each.
+- Split broad combined stories when the source clearly separates the flows or the SSR maps them to different FR-xx items.
+- Remove citation artifacts and markdown formatting noise from every string while preserving the underlying text and IDs.
+- Deduplicate by id when the same story ID appears more than once.
+- If IDs differ but two stories describe the same concrete user goal, keep the more specific one and drop the broader duplicate.
+- Preserve AC IDs only in acceptanceCriteria arrays.
+- Preserve relatedRuleIds only when they truly govern the story; keep them traceable to the canonical SSR above.
+- Do not invent stories that are not supported by the primary feature document.
+
+${JSON.stringify(merged, null, 0)}
+
+Return the same JSON structure with duplicates removed and story granularity improved. Preserve all IDs verbatim.`;
+}
+
+/**
  * Builds the Layer 1 synthesis prompt for deduplicating merged 1A+1B chunks.
  */
 export function buildLayer1SynthesisPrompt(merged: Layer1ABPartial): string {
@@ -512,7 +718,9 @@ export function buildLayer1SynthesisPrompt(merged: Layer1ABPartial): string {
 LANGUAGE RULE: Preserve the language of each string value as-is. Do not translate.
 
 Consolidation rules:
-- Items carrying ID prefixes (BR-xx, VR-xx, SYS-xx, US-xx, AC-xx) are DISTINCT — preserve each ID and text unchanged. Never merge items with different IDs.
+- Items carrying ID prefixes (FR-xx, BR-xx, VR-xx, SYS-xx, US-xx, AC-xx) are DISTINCT — preserve each ID and text unchanged. Never merge items with different IDs.
+- Never remove a functional requirement from ssr.functionalRequirements just because a similar user story or action appears elsewhere.
+- Remove citation artifacts and markdown formatting noise from every string while preserving the underlying text and IDs.
 - Items without IDs: merge only if they describe exactly the same concept; otherwise keep both.
 - For user stories: deduplicate by id field. If two stories share the same id, keep the more detailed one.
 - For story acceptanceCriteria arrays: preserve AC IDs only. Remove any criterion text and keep unique AC-xx IDs.
@@ -529,6 +737,7 @@ Return the same JSON structure (ssr + stories) with duplicates removed. Preserve
  */
 export function buildMappingPrompt(ssr: SSRData, stories: UserStories): string {
   const allRules = [
+    ...ssr.functionalRequirements.map(r => ({ id: extractAnyRuleId(r, 'FR'), text: r })),
     ...ssr.systemRules.map(r => ({ id: extractAnyRuleId(r, 'SYS'), text: r })),
     ...ssr.businessRules.map(r => ({ id: extractAnyRuleId(r, 'BR'), text: r })),
     ...ssr.constraints.map(r => ({ id: extractAnyRuleId(r, 'VR'), text: r })),
@@ -545,6 +754,7 @@ export function buildMappingPrompt(ssr: SSRData, stories: UserStories): string {
 
 LANGUAGE RULE: Preserve input language. Do not translate.
 ID PRESERVATION RULE: For every rule, copy the exact source ID prefix and number into ruleId. Do not rename AC-xx to VR-xx, and do not invent fallback IDs when an ID already exists in ruleText.
+TRACEABILITY RULE: If a user story clearly implements an FR-xx functional requirement, map that FR-xx to the story even when the story phrasing is shorter or paraphrased.
 
 Given the rules and user stories below, map which rules apply to which stories.
 
@@ -587,7 +797,11 @@ Return ONLY valid JSON (no markdown, no explanation):
  */
 export function buildValidationPrompt(ssr: SSRData, stories: UserStories, mapping: Mapping): string {
   const storyCount = stories.stories.length;
-  const ruleCount = ssr.businessRules.length + ssr.systemRules.length + ssr.constraints.length;
+  const ruleCount =
+    ssr.functionalRequirements.length +
+    ssr.businessRules.length +
+    ssr.systemRules.length +
+    ssr.constraints.length;
   const uncoveredCount = mapping.uncoveredRules.length;
   const orphanCount = mapping.storiesWithNoRules.length;
   const storiesWithNoAC = stories.stories.filter(s => s.acceptanceCriteria.length === 0).map(s => s.id);
@@ -1484,6 +1698,26 @@ export abstract class AIProvider {
   }
 
   // ── New Layer 1 (4-sublayer) methods ────────────────────────────────────────
+
+  /**
+   * Layer 1A — Extract SSR (rules/entities) only.
+   */
+  abstract extractSSR(baDocumentContent: string, promptAppend?: string): Promise<SSRData>;
+
+  /**
+   * Layer 1A synthesis — Consolidates near-duplicate SSR items from multi-chunk merges.
+   */
+  abstract synthesiseSSR(merged: SSRData): Promise<SSRData>;
+
+  /**
+   * Layer 1B — Extract user stories only, using SSR as canonical context.
+   */
+  abstract extractUserStories(baDocumentContent: string, ssr: SSRData, promptAppend?: string): Promise<UserStories>;
+
+  /**
+   * Layer 1B synthesis — Consolidates near-duplicate user stories from multi-chunk merges.
+   */
+  abstract synthesiseUserStories(merged: UserStories, ssr: SSRData): Promise<UserStories>;
 
   /**
    * Layer 1A+1B (combined) — Extract SSR (global rules) + User Stories in one pass.

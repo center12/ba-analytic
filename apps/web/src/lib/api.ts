@@ -114,7 +114,7 @@ export const api = {
   features: {
     list: (projectId: string) => request<Feature[]>(`/projects/${projectId}/features`),
     get: (featureId: string) => request<Feature>(`/projects/features/${featureId}`),
-    create: (projectId: string, data: { name: string; description?: string; featureType?: FeatureType; content?: string }) =>
+    create: (projectId: string, data: { name: string; description?: string; featureType?: FeatureType; content?: string; relatedFeatureIds?: string[] }) =>
       request<Feature>(`/projects/${projectId}/features`, {
         method: 'POST',
         body: JSON.stringify(data),
@@ -384,6 +384,7 @@ export interface ExtractedRequirements {
 
 export interface SSRData {
   featureName: string;
+  functionalRequirements: string[];
   systemRules: string[];
   businessRules: string[];
   constraints: string[];
@@ -454,6 +455,7 @@ export interface SubFeatureItem {
 export interface Feature {
   id: string;
   projectId: string;
+  code: string;
   name: string;
   description?: string;
   content?: string | null;

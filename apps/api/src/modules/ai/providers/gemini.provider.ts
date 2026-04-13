@@ -14,12 +14,16 @@ import {
   buildDevPlanWorkflowBackendPrompt,
   buildDevPromptInput,
   buildExtractAllPrompt,
+  buildExtractSSRPrompt,
   buildExtractSSRAndStoriesPrompt,
+  buildExtractUserStoriesPrompt,
   buildGenerateTestCasesPrompt,
+  buildSSRSynthesisPrompt,
   buildLayer1SynthesisPrompt,
   buildMappingPrompt,
   buildPlanScenariosPrompt,
   buildSynthesisPrompt,
+  buildUserStoriesSynthesisPrompt,
   buildValidationPrompt,
   ChatHistoryItem,
   CombinedExtraction,
@@ -262,6 +266,7 @@ const FrontendTestingPlanSchema = z.object({
 
 const SSRDataSchema = z.object({
   featureName: z.string(),
+  functionalRequirements: z.array(z.string()).default([]),
   systemRules: z.array(z.string()).default([]),
   businessRules: z.array(z.string()).default([]),
   constraints: z.array(z.string()).default([]),
@@ -378,6 +383,62 @@ export class GeminiProvider extends AIProvider {
   }
 
   // ── New Layer 1 (4-sublayer) methods ─────────────────────────────────────────
+
+  async extractSSR(baDocumentContent: string, promptAppend?: string): Promise<SSRData> {
+    this.logger.log('[Layer 1A] Extracting SSR...');
+    const prompt = appendPromptInstructions(buildExtractSSRPrompt(baDocumentContent), promptAppend);
+    this.logPromptSize('[Layer 1A]', prompt);
+    const { object, usage, response } = await generateObject({
+      model: google(this.modelVersion),
+      schema: SSRDataSchema,
+      prompt,
+    });
+    this.logger.log(`[Layer 1A] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Layer 1A]', response.headers);
+    return object as SSRData;
+  }
+
+  async synthesiseSSR(merged: SSRData): Promise<SSRData> {
+    this.logger.log('[Layer 1A synthesis] Consolidating SSR extraction...');
+    const prompt = buildSSRSynthesisPrompt(merged);
+    this.logPromptSize('[Layer 1A synthesis]', prompt);
+    const { object, usage, response } = await generateObject({
+      model: google(this.modelVersion),
+      schema: SSRDataSchema,
+      prompt,
+    });
+    this.logger.log(`[Layer 1A synthesis] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Layer 1A synthesis]', response.headers);
+    return object as SSRData;
+  }
+
+  async extractUserStories(baDocumentContent: string, ssr: SSRData, promptAppend?: string): Promise<UserStories> {
+    this.logger.log('[Layer 1B] Extracting user stories...');
+    const prompt = appendPromptInstructions(buildExtractUserStoriesPrompt(baDocumentContent, ssr), promptAppend);
+    this.logPromptSize('[Layer 1B]', prompt);
+    const { object, usage, response } = await generateObject({
+      model: google(this.modelVersion),
+      schema: UserStoriesSchema,
+      prompt,
+    });
+    this.logger.log(`[Layer 1B] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Layer 1B]', response.headers);
+    return object as UserStories;
+  }
+
+  async synthesiseUserStories(merged: UserStories, ssr: SSRData): Promise<UserStories> {
+    this.logger.log('[Layer 1B synthesis] Consolidating user stories...');
+    const prompt = buildUserStoriesSynthesisPrompt(merged, ssr);
+    this.logPromptSize('[Layer 1B synthesis]', prompt);
+    const { object, usage, response } = await generateObject({
+      model: google(this.modelVersion),
+      schema: UserStoriesSchema,
+      prompt,
+    });
+    this.logger.log(`[Layer 1B synthesis] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.logRateLimit('[Layer 1B synthesis]', response.headers);
+    return object as UserStories;
+  }
 
   async extractSSRAndStories(baDocumentContent: string, promptAppend?: string): Promise<Layer1ABPartial> {
     this.logger.log('[Layer 1AB] Extracting SSR + User Stories...');
