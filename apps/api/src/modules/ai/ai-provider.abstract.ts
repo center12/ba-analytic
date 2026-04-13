@@ -522,8 +522,8 @@ Return the same JSON structure (ssr + stories) with duplicates removed. Preserve
  */
 export function buildMappingPrompt(ssr: SSRData, stories: UserStories): string {
   const allRules = [
-    ...ssr.systemRules.map(r => ({ id: extractId(r, 'SYS'), text: r })),
-    ...ssr.businessRules.map(r => ({ id: extractId(r, 'BR'), text: r })),
+    ...ssr.systemRules.map(r => ({ id: extractAnyRuleId(r, 'SYS'), text: r })),
+    ...ssr.businessRules.map(r => ({ id: extractAnyRuleId(r, 'BR'), text: r })),
     ...ssr.constraints.map(r => ({ id: extractAnyRuleId(r, 'VR'), text: r })),
     ...ssr.globalPolicies.map((r, i) => ({ id: `GP-${String(i + 1).padStart(2, '0')}`, text: r })),
   ];
@@ -634,12 +634,6 @@ Return ONLY valid JSON (no markdown, no explanation):
   ],
   "summary": "string"
 }`;
-}
-
-/** Extract rule ID from a string like "BR-01: some rule" → "BR-01" */
-function extractId(text: string, prefix: string): string {
-  const match = text.match(new RegExp(`(${prefix}-\\d+)`, 'i'));
-  return match ? match[1] : `${prefix}-??`;
 }
 
 /** Extract any recognized prefixed ID while preserving its original prefix. */
