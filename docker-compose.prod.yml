@@ -33,7 +33,7 @@ services:
     ports:
       - '3000:3000'
     volumes:
-      - uploads_data:/app/uploads
+      - uploads_data:/app/apps/api/uploads
 
   web:
     build:
