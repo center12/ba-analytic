@@ -12,8 +12,6 @@ interface RulesSectionProps {
 }
 
 export function RulesSection({ feature, ssr, stories, isEditing, draft, setDraft }: RulesSectionProps) {
-  const legacyBehaviors = feature.extractedBehaviors;
-
   return (
     <div className="space-y-3">
       {isEditing ? (
@@ -78,40 +76,6 @@ export function RulesSection({ feature, ssr, stories, isEditing, draft, setDraft
           onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
         />
       </div>
-      {legacyBehaviors != null && (
-        <div className="rounded border bg-background p-3">
-          <p className="mb-3 text-xs font-semibold text-slate-700">Extracted Behaviors</p>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <EditableList
-              label="Actors"
-              color="text-violet-700"
-              items={legacyBehaviors.actors}
-              editing={false}
-              fieldKey="actors"
-              draft={draft}
-              onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
-            />
-            <EditableList
-              label="Actions"
-              color="text-blue-700"
-              items={legacyBehaviors.actions}
-              editing={false}
-              fieldKey="actions"
-              draft={draft}
-              onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
-            />
-            <EditableList
-              label="Rules"
-              color="text-orange-700"
-              items={legacyBehaviors.rules}
-              editing={false}
-              fieldKey="behaviorRules"
-              draft={draft}
-              onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
