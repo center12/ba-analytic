@@ -12,7 +12,6 @@ interface RulesSectionProps {
 }
 
 export function RulesSection({ feature, ssr, stories, isEditing, draft, setDraft }: RulesSectionProps) {
-  const legacyRequirements = feature.extractedRequirements;
   const legacyBehaviors = feature.extractedBehaviors;
 
   return (
@@ -32,50 +31,54 @@ export function RulesSection({ feature, ssr, stories, isEditing, draft, setDraft
           <p className="text-xs text-muted-foreground">{ssr?.featureName ?? stories?.featureName ?? feature.name}</p>
         </div>
       )}
-      {legacyRequirements && !isEditing && (
-        <div className="rounded border bg-background p-3">
-          <p className="mb-3 text-xs font-semibold text-slate-700">Extracted Requirements</p>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <EditableList
-              label="Features"
-              color="text-blue-700"
-              items={legacyRequirements.features}
-              editing={false}
-              fieldKey="legacyFeatures"
-              draft={draft}
-              onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
-            />
-            <EditableList
-              label="Business Rules"
-              color="text-orange-700"
-              items={legacyRequirements.businessRules}
-              editing={false}
-              fieldKey="legacyBusinessRules"
-              draft={draft}
-              onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
-            />
-            <EditableList
-              label="Acceptance Criteria"
-              color="text-green-700"
-              items={legacyRequirements.acceptanceCriteria}
-              editing={false}
-              fieldKey="legacyAcceptanceCriteria"
-              draft={draft}
-              onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
-            />
-            <EditableList
-              label="Entities"
-              color="text-slate-700"
-              items={legacyRequirements.entities}
-              editing={false}
-              fieldKey="legacyEntities"
-              draft={draft}
-              onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
-            />
-          </div>
-        </div>
-      )}
-      {legacyBehaviors && !isEditing && (
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <EditableList
+          label="System Rules"
+          color="text-sky-700"
+          items={ssr?.systemRules ?? []}
+          editing={isEditing}
+          fieldKey="systemRules"
+          draft={draft}
+          onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
+        />
+        <EditableList
+          label="Business Rules"
+          color="text-orange-700"
+          items={ssr?.businessRules ?? []}
+          editing={isEditing}
+          fieldKey="businessRules"
+          draft={draft}
+          onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
+        />
+        <EditableList
+          label="Constraints"
+          color="text-emerald-700"
+          items={ssr?.constraints ?? []}
+          editing={isEditing}
+          fieldKey="constraints"
+          draft={draft}
+          onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
+        />
+        <EditableList
+          label="Global Policies"
+          color="text-amber-700"
+          items={ssr?.globalPolicies ?? []}
+          editing={isEditing}
+          fieldKey="globalPolicies"
+          draft={draft}
+          onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
+        />
+        <EditableList
+          label="Entities"
+          color="text-slate-700"
+          items={ssr?.entities ?? []}
+          editing={isEditing}
+          fieldKey="entities"
+          draft={draft}
+          onDraftChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
+        />
+      </div>
+      {legacyBehaviors != null && (
         <div className="rounded border bg-background p-3">
           <p className="mb-3 text-xs font-semibold text-slate-700">Extracted Behaviors</p>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

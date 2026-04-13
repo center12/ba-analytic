@@ -217,6 +217,7 @@ export function PipelineStep1({
           >
             <UserStoriesSection
               stories={stories ?? undefined}
+              acceptanceCriteriaSource={feature.extractedRequirements?.acceptanceCriteria ?? []}
               isEditing={isEditing}
               draft={draft}
               setDraft={setDraft}
