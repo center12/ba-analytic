@@ -3,7 +3,7 @@
 
 ## Scope
 - In: provider availability endpoint, provider/model selection, abstract AI contract
-- Out: business-specific orchestration delegated to `test-case` and `chat` modules
+- Out: business-specific orchestration delegated to `feature-analysis` and `chat` modules
 
 ## Data Model
 | Entity | Key Fields | Storage |
@@ -33,16 +33,14 @@
 ### Shared AI contract usage
 1. Consumer requests `AIProvider` from factory.
 2. Consumer calls abstract methods for extraction/planning/generation/chat.
-3. For Step 4, consumers call separate generation methods for `workflow-backend`, `frontend`, `testing-backend`, and `testing-frontend`.
-4. All generation methods accept optional runtime `promptAppend` instructions and append them to the final prompt while preserving output schema constraints.
-5. Concrete provider executes model-specific implementation.
+3. Concrete provider executes model-specific implementation via Vercel AI SDK.
 
 ## Constraints
 - Supported providers are limited to `gemini`, `claude`, `openai`.
 - Unknown provider selection throws immediately.
 - Provider visibility in API is gated by configured API keys.
-- `promptAppend` handling is runtime-only; persistence and validation are owned by the `test-case` module.
+- Claude provider uses inline `cache_control` on all calls via `experimental_providerMetadata`.
 
 ## Dependencies
-- Depends on: `ConfigService`, provider implementations, Nest DI module wiring
-- Used by: `test-case` pipeline (`AIProviderFactory`) for Step 1-5 generation including split Step 4 runs, `chat` streaming (`AIProviderFactory`), frontend model selector endpoint
+- Depends on: `ConfigService`, provider implementations (Vercel AI SDK), Nest DI module wiring
+- Used by: `feature-analysis` pipeline (`AIProviderFactory`) for Steps 1-5, `chat` streaming (`AIProviderFactory`), frontend model selector endpoint

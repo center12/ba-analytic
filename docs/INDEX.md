@@ -7,6 +7,7 @@ _Last updated: 2026-04-13_
 | user | [docs/features/user.md](features/user.md) | Admin interface for creating and listing users |
 | project | [docs/features/project.md](features/project.md) | CRUD for projects/features and per-project AI pipeline config |
 | feature | [docs/features/feature.md](features/feature.md) | Feature detail view with BA doc/screenshot upload and 5-step AI pipeline wizard |
+| feature-analysis | [docs/features/feature-analysis.md](features/feature-analysis.md) | Test case list with priority/status management and step-by-step detail view |
 | test-case | [docs/features/test-case.md](features/test-case.md) | Display and manage AI-generated test cases |
 | chat | [docs/features/chat.md](features/chat.md) | SSE streaming AI chat sidebar scoped to a feature |
 | dev-task | [docs/features/dev-task.md](features/dev-task.md) | Developer task prompts grouped by API/Frontend/Testing |
@@ -22,7 +23,7 @@ _Last updated: 2026-04-13_
 | storage | [docs/modules/storage.md](modules/storage.md) | Pluggable storage provider contract with local adapter |
 | ai | [docs/modules/ai.md](modules/ai.md) | Provider discovery and factory for model-backed operations |
 | chat | [docs/modules/chat.md](modules/chat.md) | Feature chat sessions/messages with SSE AI streaming |
-| test-case | [docs/modules/test-case.md](modules/test-case.md) | Multi-step AI pipeline and test/dev output persistence |
+| feature-analysis | [docs/modules/feature-analysis.md](modules/feature-analysis.md) | Multi-step AI pipeline and test/dev output persistence |
 | dev-task | [docs/modules/dev-task.md](modules/dev-task.md) | Read/delete API for pipeline-generated developer tasks |
 | feedback | [docs/modules/feedback.md](modules/feedback.md) | App-wide user feedback submissions with optional file attachments |
 

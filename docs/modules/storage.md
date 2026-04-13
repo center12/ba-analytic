@@ -3,7 +3,7 @@
 
 ## Scope
 - In: upload/read-url/delete file operations through `IStorageProvider`
-- Out: file lifecycle ownership belongs to caller modules (`project`, `test-case`) that store metadata in DB
+- Out: file lifecycle ownership belongs to caller modules (`project`, `feature-analysis`, `feedback`) that store metadata in DB
 
 ## Data Model
 | Entity | Key Fields | Storage |
@@ -35,4 +35,4 @@
 
 ## Dependencies
 - Depends on: `ConfigService`, Node `fs/promises`, path utilities
-- Used by: `project` module uploads, `test-case` pipeline document reads, any future file-backed modules
+- Used by: `project` module uploads, `feature-analysis` pipeline document reads, `feedback` media attachments

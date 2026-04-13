@@ -20,7 +20,7 @@
 | GET | `/api/chat/sessions/feature/:featureId` | path:`featureId` | session list + message counts | `401/403` |
 | GET | `/api/chat/sessions/:sessionId/messages` | path:`sessionId` | ordered message list | `404 Session not found` |
 | DELETE | `/api/chat/sessions/:sessionId` | path:`sessionId` | deleted session | `404 Session not found` |
-| GET | `/api/chat/sessions/:sessionId/stream` (SSE) | query:`message`, `provider?`, `token` | SSE chunks `{"chunk":"..."}` then `{"done":true}` | `401 token invalid/missing`, `404 session` |
+| GET (SSE) | `/api/chat/sessions/:sessionId/stream` | query:`message`, `provider?`, `token` | SSE chunks `{"chunk":"..."}` then `{"done":true}` | `401 token invalid/missing`, `404 session` |
 
 ## Core Flows (top 3)
 ### Start streaming chat response

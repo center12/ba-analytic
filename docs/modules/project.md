@@ -3,7 +3,7 @@
 
 ## Scope
 - In: project/feature lifecycle, BA doc + screenshot metadata, pipeline step config overrides
-- Out: file persistence delegated to `IStorageProvider`; downstream pipelines/chat/test generation handled by other modules
+- Out: file persistence delegated to `IStorageProvider`; downstream pipelines/chat handled by other modules
 
 ## Data Model
 | Entity | Key Fields | Storage |
@@ -24,7 +24,7 @@
 | POST | `/api/projects` | body:`CreateProjectDto` | created project | validation/auth errors |
 | PUT | `/api/projects/:id` | path:`id`, body partial project | updated project | `404` |
 | DELETE | `/api/projects/:id` | path:`id` | `204 No Content` | `404` |
-| GET | `/api/projects/:projectId/features` | path:`projectId` | feature list + upload/test/chat counts | `404 Project not found` |
+| GET | `/api/projects/:projectId/features` | path:`projectId` | feature list + upload/analysis/chat counts | `404 Project not found` |
 | POST | `/api/projects/:projectId/features` | path:`projectId`, body:`CreateFeatureDto` | created feature | `404 Project not found` |
 | GET | `/api/projects/features/:featureId` | path:`featureId` | feature + baDocument + screenshots | `404 Feature not found` |
 | PUT | `/api/projects/features/:featureId` | path:`featureId`, body partial feature | updated feature | `404` |
@@ -60,4 +60,4 @@
 
 ## Dependencies
 - Depends on: `PrismaService`, `StorageModule` (`STORAGE_PROVIDER`), `MulterModule`
-- Used by: `test-case` pipeline (reads BA docs/screenshots and project config), frontend project/feature management pages
+- Used by: `feature-analysis` pipeline (reads BA docs/screenshots and project config), frontend project/feature management pages
