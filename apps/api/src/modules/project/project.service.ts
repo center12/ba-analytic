@@ -1,9 +1,9 @@
-import * as path from 'path';
-import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { STORAGE_PROVIDER, IStorageProvider } from '../storage/storage.interface';
 import { CreateProjectDto } from './dto/create-project.dto';
-import { CreateFeatureDto } from './dto/create-feature.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
+import { CreateFeatureDto, UpdateFeatureDto } from './dto/create-feature.dto';
 import { UpsertPipelineConfigDto } from './dto/upsert-pipeline-config.dto';
 import { v4 as uuidv4 } from 'uuid';
 import * as mime from 'mime-types';
@@ -37,7 +37,7 @@ export class ProjectService {
     return this.prisma.project.create({ data: dto });
   }
 
-  async updateProject(id: string, dto: Partial<CreateProjectDto>) {
+  async updateProject(id: string, dto: UpdateProjectDto) {
     await this.findOneProject(id);
     return this.prisma.project.update({ where: { id }, data: dto });
   }
@@ -55,7 +55,7 @@ export class ProjectService {
       where: { projectId },
       orderBy: { createdAt: 'desc' },
       include: {
-        baDocument: true,
+        screenshots: true,
         _count: { select: { screenshots: true, featureAnalyses: true } },
       },
     });
@@ -65,7 +65,6 @@ export class ProjectService {
     const feature = await this.prisma.feature.findUnique({
       where: { id },
       include: {
-        baDocument: true,
         screenshots: true,
         _count: { select: { featureAnalyses: true, chatSessions: true } },
       },
@@ -79,9 +78,16 @@ export class ProjectService {
     return this.prisma.feature.create({ data: { ...dto, projectId } });
   }
 
-  async updateFeature(id: string, dto: Partial<CreateFeatureDto>) {
+  async updateFeature(id: string, dto: UpdateFeatureDto) {
     await this.findOneFeature(id);
-    return this.prisma.feature.update({ where: { id }, data: dto });
+    const { relatedFeatureIds, ...rest } = dto;
+    return this.prisma.feature.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(relatedFeatureIds !== undefined ? { relatedFeatureIds } : {}),
+      },
+    });
   }
 
   async deleteFeature(id: string) {
@@ -90,21 +96,6 @@ export class ProjectService {
   }
 
   // ── File Uploads ──────────────────────────────────────────────────────────
-
-  async uploadBADocument(featureId: string, file: Express.Multer.File) {
-    await this.findOneFeature(featureId);
-    if (path.extname(file.originalname).toLowerCase() !== '.md')
-      throw new BadRequestException('Only Markdown (.md) files are accepted');
-    const ext = 'md';
-    const key = `features/${featureId}/ba-document/${uuidv4()}.${ext}`;
-    await this.storage.upload(file.buffer, key, file.mimetype);
-
-    return this.prisma.bADocument.upsert({
-      where: { featureId },
-      update: { originalName: file.originalname, storageKey: key, mimeType: file.mimetype },
-      create: { featureId, originalName: file.originalname, storageKey: key, mimeType: file.mimetype },
-    });
-  }
 
   async uploadScreenshot(featureId: string, file: Express.Multer.File) {
     await this.findOneFeature(featureId);

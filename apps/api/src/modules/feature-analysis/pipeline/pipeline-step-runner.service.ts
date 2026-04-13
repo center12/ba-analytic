@@ -42,7 +42,6 @@ import {
   normalizeMapping,
   normalizeUserStories,
 } from './utils/layer1.util';
-import { readDocumentContent } from './utils/document-reader.util';
 import { withRetry } from './utils/retry.util';
 
 const {
@@ -578,13 +577,30 @@ export class PipelineStepRunnerService {
     promptAppend?: string,
   ): Promise<Layer1Extraction> {
     const feature = await this.context.getFeatureWithAssets(featureId);
-    if (!feature.baDocument) throw new BadRequestException(`Feature ${featureId} has no BA document uploaded`);
+    if (!feature.content?.trim()) throw new BadRequestException(`Feature ${featureId} has no content. Add requirements in the project page before running the pipeline.`);
 
-    const baDocumentPath = await this.storage.getSignedUrl(feature.baDocument.storageKey);
     const screenshotPaths = await Promise.all(feature.screenshots.map((screenshot) => this.storage.getSignedUrl(screenshot.storageKey)));
 
-    let baContent = await readDocumentContent(baDocumentPath);
-    this.logger.log(`[Pipeline] Document read — ${baContent.length} chars (~${estimateTokens(baContent)} tokens)`);
+    let baContent = feature.content;
+    this.logger.log(`[Pipeline] Content loaded — ${baContent.length} chars (~${estimateTokens(baContent)} tokens)`);
+
+    // Append related features' content as additional context
+    const relatedIds = Array.isArray((feature as any).relatedFeatureIds) ? (feature as any).relatedFeatureIds as string[] : [];
+    if (relatedIds.length > 0) {
+      const relatedFeatures = await this.prisma.feature.findMany({
+        where: { id: { in: relatedIds } },
+        select: { name: true, content: true },
+      });
+      const relatedContext = relatedFeatures
+        .filter((f) => f.content?.trim())
+        .map((f) => `### Related Feature: ${f.name}\n${f.content}`)
+        .join('\n\n');
+      if (relatedContext) {
+        baContent += `\n\n---\n## Related Features & Rules\n\n${relatedContext}`;
+        this.logger.log(`[Pipeline] Appended ${relatedFeatures.length} related feature(s) to context`);
+      }
+    }
+
     if (screenshotPaths.length > 0) baContent += `\n\nDesign screenshots are available at: ${screenshotPaths.join(', ')}`;
 
     if (baContent.length > MAX_DOC_CHARS) {
@@ -658,11 +674,9 @@ export class PipelineStepRunnerService {
     const feature = await this.context.getFeatureWithAssets(featureId);
     const existing = (feature.extractedRequirements as ExtractedRequirements | null)?.acceptanceCriteria ?? [];
     if (existing.length && existing.some((item) => !/^AC-\d+$/i.test(item.trim()))) return existing;
-    if (!feature.baDocument) return [];
+    if (!feature.content?.trim()) return [];
 
-    const baDocumentPath = await this.storage.getSignedUrl(feature.baDocument.storageKey);
-    const baContent = await readDocumentContent(baDocumentPath);
-    return extractAcceptanceCriteriaFromMarkdown(baContent);
+    return extractAcceptanceCriteriaFromMarkdown(feature.content);
   }
 
   private normalizeAcceptanceCriteriaText(items: string[]): string[] {

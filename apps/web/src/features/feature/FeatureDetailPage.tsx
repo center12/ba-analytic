@@ -1,47 +1,19 @@
 import { useParams, Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { ArrowLeft, Upload } from 'lucide-react';
+import { ArrowLeft, AlertCircle } from 'lucide-react';
 import { ModelSelector } from '@/features/ai/ModelSelector';
 import { DeveloperTaskPanel } from '@/features/dev-task/DeveloperTaskPanel';
 import { PipelineWizard } from './PipelineWizard';
-import { BADocFormatGuide } from './components/feature-detail/BADocFormatGuide';
-import { useRef } from 'react';
-import { toast } from '@/hooks/use-toast';
 import { AppFeedbackDialog } from '@/features/feedback/components/AppFeedbackDialog';
 
 export function FeatureDetailPage() {
   const { projectId, featureId } = useParams<{ projectId: string; featureId: string }>();
-  const qc = useQueryClient();
-  const baInputRef = useRef<HTMLInputElement>(null);
-  const ssInputRef = useRef<HTMLInputElement>(null);
 
   const { data: feature } = useQuery({
     queryKey: ['features', featureId],
     queryFn: () => api.features.get(featureId!),
     enabled: !!featureId,
-  });
-
-  const uploadBAMutation = useMutation({
-    mutationFn: (file: File) => api.features.uploadBADocument(featureId!, file),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['features', featureId] });
-      toast({ variant: 'success', title: 'BA document uploaded' });
-    },
-    onError: (err: Error) => {
-      toast({ variant: 'destructive', title: 'Upload failed', description: err.message });
-    },
-  });
-
-  const uploadSSMutation = useMutation({
-    mutationFn: (file: File) => api.features.uploadScreenshot(featureId!, file),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['features', featureId] });
-      toast({ variant: 'success', title: 'Screenshot uploaded' });
-    },
-    onError: (err: Error) => {
-      toast({ variant: 'destructive', title: 'Upload failed', description: err.message });
-    },
   });
 
   return (
@@ -68,44 +40,20 @@ export function FeatureDetailPage() {
             className="py-1.5"
           />
           <ModelSelector />
-
-          <input
-            ref={baInputRef}
-            type="file"
-            accept=".md"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) uploadBAMutation.mutate(f);
-            }}
-          />
-          <button
-            onClick={() => baInputRef.current?.click()}
-            className="flex items-center gap-1 border px-3 py-1.5 rounded text-sm hover:bg-muted"
-          >
-            <Upload size={14} />
-            {feature?.baDocument ? 'Replace BA Doc' : 'Upload BA Doc'}
-          </button>
-          <BADocFormatGuide />
-
-          <input
-            ref={ssInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) uploadSSMutation.mutate(f);
-            }}
-          />
-          <button
-            onClick={() => ssInputRef.current?.click()}
-            className="flex items-center gap-1 border px-3 py-1.5 rounded text-sm hover:bg-muted"
-          >
-            <Upload size={14} /> Screenshot
-          </button>
         </div>
       </header>
+
+      {/* No content warning */}
+      {feature && !feature.content?.trim() && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-2 flex items-center gap-2 text-sm text-amber-800">
+          <AlertCircle size={14} />
+          No requirements content yet. Go to the{' '}
+          <Link to={`/projects/${projectId}`} className="underline font-medium">
+            project page
+          </Link>{' '}
+          and add content to this feature before running the pipeline.
+        </div>
+      )}
 
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">

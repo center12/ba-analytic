@@ -11,6 +11,7 @@ model Project {
   id              String                  @id @default(cuid())
   name            String
   description     String?
+  overview        String?                 @db.Text
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
   features        Feature[]
@@ -48,6 +49,9 @@ model Feature {
   projectId             String
   name                  String
   description           String?
+  content               String?        @db.Text
+  featureType           FeatureType    @default(FEATURE)
+  relatedFeatureIds     Json?
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
   extractedRequirements Json?
@@ -153,6 +157,11 @@ enum PipelineStatus {
   RUNNING
   FAILED
   COMPLETED
+}
+
+enum FeatureType {
+  SSR
+  FEATURE
 }
 
 enum DevTaskCategory {

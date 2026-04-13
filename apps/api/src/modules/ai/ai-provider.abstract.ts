@@ -149,6 +149,12 @@ export interface DatabaseField {
   description?: string;
 }
 
+export interface SubFeatureItem {
+  name: string;
+  description: string;
+  content?: string;
+}
+
 export interface DatabaseEntity {
   name: string;
   tableName: string;
@@ -1633,4 +1639,10 @@ export abstract class AIProvider {
    * if they want to reuse the cached context.
    */
   abstract cacheContext(content: string): Promise<string | null>;
+
+  /**
+   * Parse SSR (System/Software Requirements Specification) content and extract
+   * a list of discrete features/user stories from it.
+   */
+  abstract extractSubFeaturesFromSSR(ssrContent: string): Promise<SubFeatureItem[]>;
 }

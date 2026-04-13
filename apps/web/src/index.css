@@ -57,3 +57,110 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .prose {
+    @apply max-w-none text-foreground leading-7;
+  }
+
+  .prose-sm {
+    @apply text-sm leading-6;
+  }
+
+  .prose > :first-child {
+    @apply mt-0;
+  }
+
+  .prose > :last-child {
+    @apply mb-0;
+  }
+
+  .prose h1 {
+    @apply mt-8 mb-4 text-3xl font-bold tracking-tight;
+  }
+
+  .prose h2 {
+    @apply mt-8 mb-3 border-b pb-2 text-2xl font-semibold tracking-tight;
+  }
+
+  .prose h3 {
+    @apply mt-6 mb-3 text-xl font-semibold;
+  }
+
+  .prose h4 {
+    @apply mt-5 mb-2 text-base font-semibold;
+  }
+
+  .prose p {
+    @apply my-4;
+  }
+
+  .prose strong {
+    @apply font-semibold text-foreground;
+  }
+
+  .prose a {
+    @apply font-medium text-primary underline underline-offset-4;
+  }
+
+  .prose ul {
+    @apply my-4 list-disc pl-6;
+  }
+
+  .prose ol {
+    @apply my-4 list-decimal pl-6;
+  }
+
+  .prose li {
+    @apply my-1;
+  }
+
+  .prose li > ul,
+  .prose li > ol {
+    @apply my-2;
+  }
+
+  .prose blockquote {
+    @apply my-4 border-l-4 border-border pl-4 italic text-muted-foreground;
+  }
+
+  .prose hr {
+    @apply my-6 border-border;
+  }
+
+  .prose pre {
+    @apply my-4 overflow-x-auto rounded-lg border bg-muted px-4 py-3 text-sm leading-6 text-foreground;
+  }
+
+  .prose pre code {
+    @apply bg-transparent p-0 text-inherit;
+  }
+
+  .prose code {
+    @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[0.875em] text-foreground;
+  }
+
+  .prose table {
+    @apply my-6 w-full border-collapse text-sm;
+  }
+
+  .prose thead {
+    @apply border-b;
+  }
+
+  .prose tr {
+    @apply border-b;
+  }
+
+  .prose th {
+    @apply px-3 py-2 text-left font-semibold;
+  }
+
+  .prose td {
+    @apply px-3 py-2 align-top;
+  }
+
+  .prose img {
+    @apply my-4 rounded-md border;
+  }
+}

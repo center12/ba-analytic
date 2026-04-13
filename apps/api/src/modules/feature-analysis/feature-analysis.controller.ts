@@ -161,4 +161,18 @@ export class FeatureAnalysisController {
   ) {
     return this.service.saveStepResults(featureId, body);
   }
+
+  /**
+   * POST /api/feature-analysis/feature/:featureId/extract-sub-features?provider=gemini
+   * Parses SSR feature content and returns a list of extracted sub-features.
+   * Does NOT create any records — the frontend confirms and creates them separately.
+   */
+  @Post('feature/:featureId/extract-sub-features')
+  extractSubFeatures(
+    @Param('featureId') featureId: string,
+    @Query('provider') provider?: string,
+    @Query('model') model?: string,
+  ) {
+    return this.service.extractSubFeaturesForFeature(featureId, provider, model);
+  }
 }

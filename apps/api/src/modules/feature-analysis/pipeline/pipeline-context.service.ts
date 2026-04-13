@@ -38,7 +38,7 @@ export class PipelineContextService {
   async getFeatureWithAssets(featureId: string) {
     const feature = await this.prisma.feature.findUnique({
       where: { id: featureId },
-      include: { baDocument: true, screenshots: true },
+      include: { screenshots: true },
     });
     if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
     return feature;

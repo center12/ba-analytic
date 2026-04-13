@@ -10,7 +10,6 @@ import { STORAGE_PROVIDER, IStorageProvider } from '../../storage/storage.interf
 import { Inject } from '@nestjs/common';
 import { AI_CONFIG } from '../constants/feature-analysis.constants';
 import { PipelineContextService } from './pipeline-context.service';
-import { readDocumentContent } from './utils/document-reader.util';
 import { compressForDownstream } from './utils/compression.util';
 
 const { MAX_DOC_CHARS } = AI_CONFIG;
@@ -26,10 +25,9 @@ export class PipelinePromptPreviewService {
     const feature = await this.context.getFeatureWithAssets(featureId);
 
     if (step === 1) {
-      if (!feature.baDocument) throw new BadRequestException(`Feature ${featureId} has no BA document uploaded`);
-      const baDocumentPath = await this.storage.getSignedUrl(feature.baDocument.storageKey);
+      if (!feature.content?.trim()) throw new BadRequestException(`Feature ${featureId} has no content. Add requirements in the project page first.`);
       const screenshotPaths = await Promise.all(feature.screenshots.map((screenshot) => this.storage.getSignedUrl(screenshot.storageKey)));
-      let baContent = await readDocumentContent(baDocumentPath);
+      let baContent = feature.content;
       if (screenshotPaths.length > 0) baContent += `\n\nDesign screenshots are available at: ${screenshotPaths.join(', ')}`;
       if (baContent.length > MAX_DOC_CHARS) baContent = baContent.slice(0, MAX_DOC_CHARS);
       return { prompt: buildExtractSSRAndStoriesPrompt(baContent) };

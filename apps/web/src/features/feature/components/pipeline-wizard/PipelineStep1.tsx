@@ -75,7 +75,7 @@ export function PipelineStep1({
     mapping: true,
     validation: true,
   });
-  const canRun = !!feature.baDocument && !isRunning;
+  const canRun = !!feature.content?.trim() && !isRunning;
   const { ssr, stories, mapping, validation } = getLayer1Data(feature);
   const hasLayer1 = !!(ssr || stories || mapping || validation);
   const legacyOnly = !hasLayer1 && !!(feature.extractedRequirements && feature.extractedBehaviors);

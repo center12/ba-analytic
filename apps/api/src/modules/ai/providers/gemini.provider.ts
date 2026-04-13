@@ -717,4 +717,29 @@ ${baDocumentContent}`;
     );
     return null;
   }
+
+  async extractSubFeaturesFromSSR(ssrContent: string): Promise<import('../ai-provider.abstract').SubFeatureItem[]> {
+    this.logger.log('[SSR Extract] Extracting sub-features from SSR content...');
+    const prompt = `You are a business analyst. Given the following SSR (System/Software Requirements Specification) document, extract a list of distinct features or user stories that should be implemented.
+
+For each feature, provide a concise name and a brief description.
+
+IMPORTANT: Detect the language used in the SSR document and write all feature names and descriptions in that same language.
+
+SSR Document:
+${ssrContent}
+
+Return a JSON array of features with "name" and "description" fields.`;
+    const { object } = await generateObject({
+      model: google(this.modelVersion),
+      schema: z.object({
+        features: z.array(z.object({
+          name: z.string(),
+          description: z.string(),
+        })),
+      }),
+      prompt,
+    });
+    return object.features;
+  }
 }

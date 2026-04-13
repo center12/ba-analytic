@@ -93,7 +93,7 @@ export const api = {
     get: (id: string) => request<Project>(`/projects/${id}`),
     create: (data: { name: string; description?: string }) =>
       request<Project>('/projects', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: string, data: Partial<{ name: string; description: string }>) =>
+    update: (id: string, data: Partial<{ name: string; description: string; overview: string }>) =>
       request<Project>(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) =>
       request<void>(`/projects/${id}`, { method: 'DELETE' }),
@@ -114,22 +114,16 @@ export const api = {
   features: {
     list: (projectId: string) => request<Feature[]>(`/projects/${projectId}/features`),
     get: (featureId: string) => request<Feature>(`/projects/features/${featureId}`),
-    create: (projectId: string, data: { name: string; description?: string }) =>
+    create: (projectId: string, data: { name: string; description?: string; featureType?: FeatureType; content?: string }) =>
       request<Feature>(`/projects/${projectId}/features`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    update: (featureId: string, data: Partial<{ name: string; description: string; content: string; featureType: FeatureType; relatedFeatureIds: string[] }>) =>
+      request<Feature>(`/projects/features/${featureId}`, { method: 'PUT', body: JSON.stringify(data) }),
+
     delete: (featureId: string) =>
       request<void>(`/projects/features/${featureId}`, { method: 'DELETE' }),
-
-    uploadBADocument: (featureId: string, file: File) => {
-      const form = new FormData();
-      form.append('file', file);
-      return request<BADocument>(`/projects/features/${featureId}/upload/ba-document`, {
-        method: 'POST',
-        body: form,
-      });
-    },
 
     uploadScreenshot: (featureId: string, file: File) => {
       const form = new FormData();
@@ -283,6 +277,17 @@ export const api = {
       ),
     getStepPrompt: (featureId: string, step: number) =>
       request<{ prompt: string }>(`/feature-analysis/feature/${featureId}/step-prompt/${step}`),
+
+    extractSubFeatures: (featureId: string, provider?: string, model?: string) => {
+      const params = new URLSearchParams();
+      if (provider) params.set('provider', provider);
+      if (model) params.set('model', model);
+      const qs = params.toString();
+      return request<{ features: SubFeatureItem[] }>(
+        `/feature-analysis/feature/${featureId}/extract-sub-features${qs ? `?${qs}` : ''}`,
+        { method: 'POST' },
+      );
+    },
   },
 
   chat: {
@@ -332,6 +337,7 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
+  overview?: string | null;
   createdAt: string;
   updatedAt: string;
   _count?: { features: number };
@@ -437,14 +443,24 @@ export interface TestScenario {
   userStoryId?: string;
 }
 
+export type FeatureType = 'SSR' | 'FEATURE';
+
+export interface SubFeatureItem {
+  name: string;
+  description: string;
+  content?: string;
+}
+
 export interface Feature {
   id: string;
   projectId: string;
   name: string;
   description?: string;
+  content?: string | null;
+  featureType?: FeatureType;
+  relatedFeatureIds?: string[];
   createdAt: string;
   updatedAt: string;
-  baDocument?: BADocument;
   screenshots?: Screenshot[];
   extractedRequirements?: ExtractedRequirements;
   extractedBehaviors?: ExtractedBehaviors;
@@ -464,15 +480,6 @@ export interface Feature {
   pipelineStatus?: 'IDLE' | 'RUNNING' | 'FAILED' | 'COMPLETED';
   pipelineStep?: number | null;
   pipelineFailedAt?: number | null;
-}
-
-export interface BADocument {
-  id: string;
-  featureId: string;
-  originalName: string;
-  storageKey: string;
-  mimeType: string;
-  uploadedAt: string;
 }
 
 export interface Screenshot {

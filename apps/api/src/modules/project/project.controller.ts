@@ -1,4 +1,3 @@
-import * as path from 'path';
 import {
   Controller,
   Get,
@@ -14,20 +13,10 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-
-const mdOnlyFilter: Parameters<typeof FileInterceptor>[1] = {
-  fileFilter: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const ok  = ext === '.md'
-      || file.mimetype === 'text/markdown'
-      || file.mimetype === 'text/x-markdown';
-    cb(ok ? null : new Error('Only Markdown (.md) files are allowed'), ok);
-  },
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB for BA docs
-};
 import { ProjectService } from './project.service';
 import { CreateProjectDto } from './dto/create-project.dto';
-import { CreateFeatureDto } from './dto/create-feature.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
+import { CreateFeatureDto, UpdateFeatureDto } from './dto/create-feature.dto';
 import { UpsertPipelineConfigDto } from './dto/upsert-pipeline-config.dto';
 
 @Controller('projects')
@@ -52,7 +41,7 @@ export class ProjectController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: CreateProjectDto) {
+  update(@Param('id') id: string, @Body() dto: UpdateProjectDto) {
     return this.service.updateProject(id, dto);
   }
 
@@ -85,7 +74,7 @@ export class ProjectController {
   @Put('features/:featureId')
   updateFeature(
     @Param('featureId') featureId: string,
-    @Body() dto: CreateFeatureDto,
+    @Body() dto: UpdateFeatureDto,
   ) {
     return this.service.updateFeature(featureId, dto);
   }
@@ -97,15 +86,6 @@ export class ProjectController {
   }
 
   // ── File Uploads ──────────────────────────────────────────────────────────
-
-  @Post('features/:featureId/upload/ba-document')
-  @UseInterceptors(FileInterceptor('file', mdOnlyFilter))
-  uploadBADocument(
-    @Param('featureId') featureId: string,
-    @UploadedFile() file: Express.Multer.File,
-  ) {
-    return this.service.uploadBADocument(featureId, file);
-  }
 
   @Post('features/:featureId/upload/screenshot')
   @UseInterceptors(FileInterceptor('file'))

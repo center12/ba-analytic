@@ -1,10 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { UpdateFeatureAnalysisDto } from './dto/update-feature-analysis.dto';
 import { PipelineOrchestratorService } from './pipeline/pipeline-orchestrator.service';
 import { PipelinePromptPreviewService } from './pipeline/pipeline-prompt-preview.service';
+import { PipelineProviderService } from './pipeline/pipeline-provider.service';
 import { PipelineStepRunnerService } from './pipeline/pipeline-step-runner.service';
 import type { SaveStepResultsPayload } from './pipeline/types/pipeline.types';
+import type { UserStories, UserStory, SubFeatureItem } from '../ai/ai-provider.abstract';
 
 @Injectable()
 export class FeatureAnalysisService {
@@ -13,6 +15,7 @@ export class FeatureAnalysisService {
     private readonly pipelineOrchestrator: PipelineOrchestratorService,
     private readonly pipelineStepRunner: PipelineStepRunnerService,
     private readonly pipelinePromptPreview: PipelinePromptPreviewService,
+    private readonly pipelineProvider: PipelineProviderService,
   ) {}
 
   async findByFeature(featureId: string) {
@@ -103,5 +106,55 @@ export class FeatureAnalysisService {
 
   async getStepPrompt(featureId: string, step: number) {
     return this.pipelinePromptPreview.getStepPrompt(featureId, step);
+  }
+
+  async extractSubFeaturesForFeature(featureId: string, _providerName?: string, _model?: string) {
+    const feature = await this.prisma.feature.findUnique({ where: { id: featureId } });
+    if (!feature) throw new NotFoundException(`Feature ${featureId} not found`);
+
+    // Require Step 1 to be run first — derive features from structured user stories
+    if (!feature.layer1Stories) {
+      throw new BadRequestException(
+        'Step 1 must be completed first. Run Step 1 on this SSR to extract user stories before generating sub-features.',
+      );
+    }
+
+    let parsedStories: UserStories;
+    try {
+      parsedStories = JSON.parse(feature.layer1Stories as string) as UserStories;
+    } catch {
+      throw new BadRequestException('Layer 1 stories data is corrupt. Re-run Step 1 to regenerate.');
+    }
+
+    if (!parsedStories.stories?.length) {
+      throw new BadRequestException(
+        'No user stories found in Step 1 results. Re-run Step 1 to regenerate.',
+      );
+    }
+
+    const features: SubFeatureItem[] = parsedStories.stories.map((story: UserStory) => ({
+      name: `${story.id}: ${story.action}`,
+      description: story.benefit,
+      content: this.storyToMarkdown(story),
+    }));
+
+    return { features };
+  }
+
+  private storyToMarkdown(story: UserStory): string {
+    const lines: string[] = [];
+    lines.push(`**Actor:** ${story.actor}`, '');
+    lines.push(`**Action:** ${story.action}`, '');
+    lines.push(`**Benefit:** ${story.benefit}`, '');
+    lines.push(`**Priority:** ${story.priority}`, '');
+    if (story.acceptanceCriteria?.length) {
+      lines.push('**Acceptance Criteria:**');
+      story.acceptanceCriteria.forEach((ac) => lines.push(`- ${ac}`));
+      lines.push('');
+    }
+    if (story.relatedRuleIds?.length) {
+      lines.push(`**Related Rules:** ${story.relatedRuleIds.join(', ')}`, '');
+    }
+    return lines.join('\n');
   }
 }
