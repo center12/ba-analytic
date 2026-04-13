@@ -18,7 +18,7 @@
 ---
 
 ## Services
-- `api` (`lib/api.ts`) — typed HTTP client wrappers for auth, users, projects, features, test-cases, chat, ai, and dev-tasks.
+- `api` (`lib/api.ts`) — typed HTTP client wrappers for auth, users, projects, features, test-cases, chat, ai, dev-tasks, and feedback.
 
 ---
 

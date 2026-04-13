@@ -1,6 +1,5 @@
 # Documentation Index
-_Last updated: 2026-04-08_
-
+_Last updated: 2026-04-13_
 ## Frontend Features (`apps/web/src/features/`)
 | Feature | Doc | Purpose |
 |---------|-----|---------|
@@ -12,6 +11,7 @@ _Last updated: 2026-04-08_
 | chat | [docs/features/chat.md](features/chat.md) | SSE streaming AI chat sidebar scoped to a feature |
 | dev-task | [docs/features/dev-task.md](features/dev-task.md) | Developer task prompts grouped by API/Frontend/Testing |
 | ai | [docs/features/ai.md](features/ai.md) | Global AI provider and model selector |
+| feedback | [docs/features/feedback.md](features/feedback.md) | Submit and view app-wide user feedback with optional file attachments |
 
 ## Backend Modules (`apps/api/src/modules/`)
 | Module | Doc | Purpose |
@@ -24,6 +24,7 @@ _Last updated: 2026-04-08_
 | chat | [docs/modules/chat.md](modules/chat.md) | Feature chat sessions/messages with SSE AI streaming |
 | test-case | [docs/modules/test-case.md](modules/test-case.md) | Multi-step AI pipeline and test/dev output persistence |
 | dev-task | [docs/modules/dev-task.md](modules/dev-task.md) | Read/delete API for pipeline-generated developer tasks |
+| feedback | [docs/modules/feedback.md](modules/feedback.md) | App-wide user feedback submissions with optional file attachments |
 
 ## Usage
 Reference these docs instead of source code to reduce token usage:
