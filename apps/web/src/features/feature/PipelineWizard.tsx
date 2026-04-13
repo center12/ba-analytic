@@ -137,6 +137,7 @@ export function PipelineWizard({ featureId }: Props) {
         constraints: arrToText(ssr.constraints),
         globalPolicies: arrToText(ssr.globalPolicies),
         entities: arrToText(ssr.entities),
+        acceptanceCriteria: arrToText(req?.acceptanceCriteria ?? []),
         storiesJson: JSON.stringify(stories.stories, null, 2),
       });
     } else if (step === 1 && req && beh) {
@@ -227,6 +228,16 @@ export function PipelineWizard({ featureId }: Props) {
     if (step === 1 && ssr && stories) {
       try {
         const parsedStories = JSON.parse(draft.storiesJson ?? JSON.stringify(stories.stories)) as UserStories['stories'];
+        const acceptanceCriteriaText = textToArr(draft.acceptanceCriteria ?? arrToText(f.extractedRequirements?.acceptanceCriteria ?? []));
+        const invalidAcceptanceCriteria = acceptanceCriteriaText.find((criterion) => !/^(AC-\d+)\s*:/i.test(criterion));
+        if (invalidAcceptanceCriteria) {
+          toast({
+            variant: 'destructive',
+            title: 'Invalid Acceptance Criteria',
+            description: `Each line must start with an AC ID. Invalid row: ${invalidAcceptanceCriteria}`,
+          });
+          return;
+        }
         saveMutation.mutate({
           step: 1,
           ssrData: {
@@ -241,6 +252,7 @@ export function PipelineWizard({ featureId }: Props) {
             featureName: draft.featureName ?? stories.featureName,
             stories: parsedStories,
           },
+          acceptanceCriteriaText,
           mapping: mapping ?? { links: [], uncoveredRules: [], storiesWithNoRules: [] },
           validationResult: validation ?? { isValid: true, score: 0, issues: [], summary: '' },
         });

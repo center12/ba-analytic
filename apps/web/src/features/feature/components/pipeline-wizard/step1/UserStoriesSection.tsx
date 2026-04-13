@@ -1,5 +1,6 @@
 import { Dispatch, SetStateAction } from 'react';
 import { UserStories } from '@/lib/api';
+import { arrToText, textToArr } from '../../../helpers/pipeline-wizard.helpers';
 
 interface UserStoriesSectionProps {
   stories?: UserStories;
@@ -27,6 +28,7 @@ export function UserStoriesSection({
   setDraft,
 }: UserStoriesSectionProps) {
   const storyDraftValue = draft.storiesJson ?? (stories ? JSON.stringify(stories.stories, null, 2) : '[]');
+  const acceptanceCriteriaDraftValue = draft.acceptanceCriteria ?? arrToText(acceptanceCriteriaSource);
   const draftStories = (() => {
     try {
       return JSON.parse(storyDraftValue) as UserStories['stories'];
@@ -36,7 +38,7 @@ export function UserStoriesSection({
   })();
   const acceptanceCriteriaLookup = new Map<string, string>();
 
-  acceptanceCriteriaSource.forEach((criterion) => {
+  textToArr(acceptanceCriteriaDraftValue).forEach((criterion) => {
     acceptanceCriteriaLookup.set(getAcceptanceCriteriaId(criterion), criterion.trim());
   });
   draftStories.forEach((story) => {
@@ -50,11 +52,13 @@ export function UserStoriesSection({
   const acceptanceCriteria = Array.from(
     new Set(draftStories.flatMap((story) => story.acceptanceCriteria ?? []).map((criterion) => getAcceptanceCriteriaId(criterion))),
   );
+  const editableAcceptanceCriteria = textToArr(acceptanceCriteriaDraftValue);
+  const hasInvalidAcceptanceCriteria = editableAcceptanceCriteria.some((criterion) => !/^(AC-\d+)\s*:/i.test(criterion));
 
   function renderAcceptanceCriterion(criterion: string) {
     const id = getAcceptanceCriteriaId(criterion);
-    const resolved = acceptanceCriteriaLookup.get(id) ?? criterion;
-    const text = getAcceptanceCriteriaText(resolved);
+    const resolved = acceptanceCriteriaLookup.get(id);
+    const text = resolved ? getAcceptanceCriteriaText(resolved) : 'No matching acceptance criteria text.';
 
     return (
       <div key={`${id}-${text}`} className="rounded border bg-background px-2 py-1.5">
@@ -69,6 +73,21 @@ export function UserStoriesSection({
       <div className="space-y-3">
         <div className="rounded border border-dashed bg-muted/20 p-3">
           <p className="mb-2 text-xs font-semibold text-green-700">Acceptance Criteria</p>
+          <textarea
+            className="min-h-[140px] w-full rounded border bg-background p-2 font-mono text-xs"
+            value={acceptanceCriteriaDraftValue}
+            onChange={(e) => setDraft((d) => ({ ...d, acceptanceCriteria: e.target.value }))}
+            placeholder="One item per line. Example: AC-01: Given ..., When ..., Then ..."
+          />
+          <p className="mt-2 text-xs text-muted-foreground">
+            Edit full acceptance criteria text here. Keep each line in `AC-xx: Given ..., When ..., Then ...` format.
+          </p>
+          {hasInvalidAcceptanceCriteria && (
+            <p className="mt-2 text-xs text-destructive">
+              Each acceptance criteria row must start with an `AC-xx:` ID prefix before you save.
+            </p>
+          )}
+          <p className="mt-3 mb-2 text-xs font-semibold text-green-700">Story References</p>
           {acceptanceCriteria.length > 0 ? (
             <div className="space-y-2">
               {acceptanceCriteria.map((criterion) => renderAcceptanceCriterion(criterion))}
@@ -77,7 +96,7 @@ export function UserStoriesSection({
             <p className="text-xs text-muted-foreground">No acceptance criteria found in the current user stories draft.</p>
           )}
           <p className="mt-2 text-xs text-muted-foreground">
-            Acceptance criteria are derived from the current `1B — User Stories` JSON draft. Edit them in the user stories JSON below.
+            User stories below should reference acceptance criteria by `AC-xx` IDs only. Missing matches are shown as unresolved.
           </p>
         </div>
         <p className="text-xs text-muted-foreground">

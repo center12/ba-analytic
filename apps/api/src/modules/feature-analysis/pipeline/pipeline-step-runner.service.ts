@@ -546,7 +546,9 @@ export class PipelineStepRunnerService {
     if (data.step === 1 && data.ssrData && data.userStories) {
       const normalizedStories = normalizeUserStories(data.userStories);
       const normalizedMapping = data.mapping ? normalizeMapping(data.mapping, data.ssrData, normalizedStories) : undefined;
-      const legacyAcceptanceCriteria = await this.resolveLegacyAcceptanceCriteria(featureId);
+      const legacyAcceptanceCriteria = data.acceptanceCriteriaText
+        ? this.normalizeAcceptanceCriteriaText(data.acceptanceCriteriaText)
+        : await this.resolveLegacyAcceptanceCriteria(featureId);
       update.layer1SSR = JSON.stringify(data.ssrData);
       update.layer1Stories = JSON.stringify(normalizedStories);
       if (normalizedMapping) update.layer1Mapping = JSON.stringify(normalizedMapping);
@@ -661,6 +663,10 @@ export class PipelineStepRunnerService {
     const baDocumentPath = await this.storage.getSignedUrl(feature.baDocument.storageKey);
     const baContent = await readDocumentContent(baDocumentPath);
     return extractAcceptanceCriteriaFromMarkdown(baContent);
+  }
+
+  private normalizeAcceptanceCriteriaText(items: string[]): string[] {
+    return [...new Set(items.map((item) => item.trim()).filter(Boolean))];
   }
 }
 

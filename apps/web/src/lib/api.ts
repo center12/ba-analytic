@@ -269,6 +269,7 @@ export const api = {
       extractedBehaviors?: ExtractedBehaviors;
       ssrData?: SSRData;
       userStories?: UserStories;
+      acceptanceCriteriaText?: string[];
       mapping?: Mapping;
       validationResult?: ValidationResult;
       testScenarios?: TestScenario[];
