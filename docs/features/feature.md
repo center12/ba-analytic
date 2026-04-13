@@ -14,6 +14,7 @@
 6. In Step 5, run `backend`, `frontend`, or `testing` sections individually.
 7. Edit outputs inline (Step 1 & 2) or copy step prompt to external AI, paste refined JSON back.
 8. Review generated test cases, dev plan, prompts, and developer task list.
+9. In Step 1 manual/edit flows, `layer1Stories.stories[].acceptanceCriteria` uses AC IDs only; full acceptance-criteria text remains in legacy `extractedRequirements`.
 
 ---
 

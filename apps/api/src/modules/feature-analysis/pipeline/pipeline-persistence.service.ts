@@ -58,8 +58,8 @@ export class PipelinePersistenceService {
     });
   }
 
-  async saveLayer1Result(featureId: string, layer1: Layer1Extraction) {
-    const { requirements, behaviors } = layer1ToLegacy(layer1.ssr, layer1.stories);
+  async saveLayer1Result(featureId: string, layer1: Layer1Extraction, acceptanceCriteriaText: string[] = []) {
+    const { requirements, behaviors } = layer1ToLegacy(layer1.ssr, layer1.stories, acceptanceCriteriaText);
     await this.prisma.feature.update({
       where: { id: featureId },
       data: ({

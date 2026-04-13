@@ -27,7 +27,7 @@ export const MANUAL_TEMPLATES: Record<number, string> = {
             actor: 'User',
             action: 'submit the form',
             benefit: 'the data is saved correctly',
-            acceptanceCriteria: ['AC-01: Form submits successfully with valid data', 'AC-02: Error shown for invalid data'],
+            acceptanceCriteria: ['AC-01', 'AC-02'],
             relatedRuleIds: ['BR-01'],
             priority: 'MUST',
           },

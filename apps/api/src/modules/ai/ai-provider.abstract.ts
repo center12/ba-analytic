@@ -61,7 +61,7 @@ export interface UserStory {
   actor: string;
   action: string;
   benefit: string;
-  acceptanceCriteria: string[]; // AC-xx conditions specific to this story
+  acceptanceCriteria: string[]; // AC-xx IDs specific to this story
   relatedRuleIds: string[];     // BR-xx / VR-xx / SYS-xx that govern this story
   priority: 'MUST' | 'SHOULD' | 'COULD';
 }
@@ -459,7 +459,7 @@ Document format notes:
    - actor: the role or persona.
    - action: what the actor wants to do (verb phrase, under 15 words).
    - benefit: the "so that" rationale (under 15 words).
-   - acceptanceCriteria: AC-xx IDs and/or criteria text that apply specifically to this story.
+   - acceptanceCriteria: AC-xx IDs only that apply specifically to this story. Do NOT include Given/When/Then text here.
    - relatedRuleIds: BR-xx, VR-xx, SYS-xx IDs that govern this story (pre-fill from above).
    - priority: MUST (core functional), SHOULD (important but not blocking), COULD (nice-to-have).
 
@@ -488,7 +488,7 @@ Return ONLY valid JSON matching this exact structure (no markdown, no explanatio
         "actor": "string",
         "action": "string",
         "benefit": "string",
-        "acceptanceCriteria": ["string"],
+        "acceptanceCriteria": ["AC-01"],
         "relatedRuleIds": ["string"],
         "priority": "MUST | SHOULD | COULD"
       }
@@ -509,6 +509,7 @@ Consolidation rules:
 - Items carrying ID prefixes (BR-xx, VR-xx, SYS-xx, US-xx, AC-xx) are DISTINCT — preserve each ID and text unchanged. Never merge items with different IDs.
 - Items without IDs: merge only if they describe exactly the same concept; otherwise keep both.
 - For user stories: deduplicate by id field. If two stories share the same id, keep the more detailed one.
+- For story acceptanceCriteria arrays: preserve AC IDs only. Remove any criterion text and keep unique AC-xx IDs.
 - Remove exact string duplicates.
 - Keep concise; do not reword.
 
@@ -529,7 +530,7 @@ export function buildMappingPrompt(ssr: SSRData, stories: UserStories): string {
   ];
 
   const storyList = stories.stories.map(s =>
-    `${s.id}: As a ${s.actor}, I want ${s.action} (priority: ${s.priority})`
+    `${s.id}: As a ${s.actor}, I want ${s.action} (priority: ${s.priority}) | AC IDs: ${s.acceptanceCriteria.join(', ') || 'none'} | Related rules: ${s.relatedRuleIds.join(', ') || 'none'}`
   ).join('\n');
 
   const ruleList = allRules.map(r => `${r.id}: ${r.text}`).join('\n');
@@ -546,6 +547,11 @@ ${ruleList}
 
 ## User Stories
 ${storyList}
+
+STRICT COMPLETENESS RULES:
+- Return exactly one link entry for every rule listed in ## Rules.
+- Never omit a rule from links, even if no story matches it.
+- If no story covers a rule, return that rule with storyIds: [] and coverage: "none".
 
 For each rule, determine:
 - storyIds: which US-xx IDs this rule applies to
@@ -637,9 +643,18 @@ Return ONLY valid JSON (no markdown, no explanation):
 }
 
 /** Extract any recognized prefixed ID while preserving its original prefix. */
-function extractAnyRuleId(text: string, fallbackPrefix: string): string {
+export function extractAnyRuleId(text: string, fallbackPrefix: string): string {
   const match = text.match(/\b([A-Z]{2,}-\d+)\b/i);
   return match ? match[1] : `${fallbackPrefix}-??`;
+}
+
+export function extractAcceptanceCriteriaIds(items: string[]): string[] {
+  const ids: string[] = [];
+  for (const item of items) {
+    const matches = item.match(/\bAC-\d+\b/gi) ?? [];
+    matches.forEach((match) => ids.push(match.toUpperCase()));
+  }
+  return [...new Set(ids)];
 }
 
 /**

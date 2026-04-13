@@ -15,7 +15,7 @@ export function UserStoriesSection({ stories, isEditing, draft, setDraft }: User
     return (
       <div className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          Edit stories as JSON. This preserves acceptance criteria, related rule IDs, and priority per story.
+          Edit stories as JSON. Store `acceptanceCriteria` as AC IDs only, and preserve related rule IDs and priority.
         </p>
         <textarea
           className="min-h-[240px] w-full rounded border bg-background p-2 font-mono text-xs"
@@ -61,15 +61,17 @@ export function UserStoriesSection({ stories, isEditing, draft, setDraft }: User
                   <div className="space-y-2 rounded border bg-muted/20 p-2">
                     {story.acceptanceCriteria.length > 0 && (
                       <div>
-                        <p className="mb-1 text-[11px] font-semibold text-muted-foreground">Acceptance Criteria</p>
-                        <ul className="space-y-1">
-                          {story.acceptanceCriteria.map((criterion, index) => (
-                            <li key={index} className="flex gap-1.5 text-[11px] text-muted-foreground">
-                              <span className="shrink-0">•</span>
-                              <span>{criterion}</span>
-                            </li>
+                        <p className="mb-1 text-[11px] font-semibold text-muted-foreground">Acceptance Criteria IDs</p>
+                        <div className="flex flex-wrap gap-1">
+                          {story.acceptanceCriteria.map((criterionId) => (
+                            <span
+                              key={criterionId}
+                              className="rounded bg-emerald-100 px-2 py-0.5 text-[11px] text-emerald-800"
+                            >
+                              {criterionId}
+                            </span>
                           ))}
-                        </ul>
+                        </div>
                       </div>
                     )}
                     {story.relatedRuleIds.length > 0 && (

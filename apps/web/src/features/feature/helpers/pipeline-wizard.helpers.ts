@@ -113,7 +113,7 @@ export function step1ToMarkdown(feature: Feature): string {
           lines.push(`- Related Rules: ${story.relatedRuleIds.join(', ')}`);
         }
         if (story.acceptanceCriteria.length) {
-          lines.push('- Acceptance Criteria:');
+          lines.push('- Acceptance Criteria IDs:');
           story.acceptanceCriteria.forEach((criterion) => lines.push(`  - ${criterion}`));
         }
         lines.push('');

@@ -35,7 +35,13 @@ import type {
 } from './types/pipeline.types';
 import { chunkMarkdown, estimateTokens } from './utils/chunking.util';
 import { compressForDownstream } from './utils/compression.util';
-import { layer1ToLegacy, mergeLayer1AB } from './utils/layer1.util';
+import {
+  extractAcceptanceCriteriaFromMarkdown,
+  layer1ToLegacy,
+  mergeLayer1AB,
+  normalizeMapping,
+  normalizeUserStories,
+} from './utils/layer1.util';
 import { readDocumentContent } from './utils/document-reader.util';
 import { withRetry } from './utils/retry.util';
 
@@ -63,7 +69,7 @@ export class PipelineStepRunnerService {
       const provider = await this.providerService.resolveProvider(featureId, 1, providerName, model);
       const normalizedPromptAppend = this.providerService.normalizePromptAppend(promptAppend);
       const layer1 = await this.extractLayer1(featureId, provider, 0, null, normalizedPromptAppend);
-      return this.persistence.saveLayer1Result(featureId, layer1);
+      return this.persistence.saveLayer1Result(featureId, layer1, await this.resolveLegacyAcceptanceCriteria(featureId));
     } catch (error) {
       const feature = await this.prisma.feature.findUnique({ where: { id: featureId }, select: { pipelineStatus: true } });
       if (feature?.pipelineStatus !== 'FAILED') {
@@ -97,7 +103,11 @@ export class PipelineStepRunnerService {
 
         if (failedPhase === 'mapping') {
           this.logger.log('[Pipeline] Resume Step 1 — resuming from 1C (mapping)');
-          mapping = await withRetry(() => provider.extractMapping(parsed.ssr as SSRData, parsed.stories as UserStories));
+          mapping = normalizeMapping(
+            await withRetry(() => provider.extractMapping(parsed.ssr as SSRData, parsed.stories as UserStories)),
+            parsed.ssr as SSRData,
+            parsed.stories as UserStories,
+          );
           validation = await withRetry(() => provider.extractValidation(parsed.ssr as SSRData, parsed.stories as UserStories, mapping));
         } else {
           if (!parsed.mapping) {
@@ -118,7 +128,7 @@ export class PipelineStepRunnerService {
         layer1 = await this.extractLayer1(featureId, provider, resumeFromChunk, partial);
       }
 
-      return this.persistence.saveLayer1Result(featureId, layer1);
+      return this.persistence.saveLayer1Result(featureId, layer1, await this.resolveLegacyAcceptanceCriteria(featureId));
     } catch (error) {
       const current = await this.prisma.feature.findUnique({ where: { id: featureId }, select: { pipelineStatus: true } });
       if (current?.pipelineStatus !== 'FAILED') {
@@ -147,7 +157,11 @@ export class PipelineStepRunnerService {
     }
 
     const provider = await this.providerService.resolveProvider(featureId, 1, providerName, model);
-    const mapping = await withRetry(() => provider.extractMapping(parsed.ssr as SSRData, parsed.stories as UserStories));
+    const mapping = normalizeMapping(
+      await withRetry(() => provider.extractMapping(parsed.ssr as SSRData, parsed.stories as UserStories)),
+      parsed.ssr as SSRData,
+      parsed.stories as UserStories,
+    );
     await this.persistence.saveLayer1Mapping(featureId, mapping);
     return { mapping };
   }
@@ -530,11 +544,14 @@ export class PipelineStepRunnerService {
     const update: Record<string, unknown> = {};
 
     if (data.step === 1 && data.ssrData && data.userStories) {
+      const normalizedStories = normalizeUserStories(data.userStories);
+      const normalizedMapping = data.mapping ? normalizeMapping(data.mapping, data.ssrData, normalizedStories) : undefined;
+      const legacyAcceptanceCriteria = await this.resolveLegacyAcceptanceCriteria(featureId);
       update.layer1SSR = JSON.stringify(data.ssrData);
-      update.layer1Stories = JSON.stringify(data.userStories);
-      if (data.mapping) update.layer1Mapping = JSON.stringify(data.mapping);
+      update.layer1Stories = JSON.stringify(normalizedStories);
+      if (normalizedMapping) update.layer1Mapping = JSON.stringify(normalizedMapping);
       if (data.validationResult) update.layer1Validation = JSON.stringify(data.validationResult);
-      const { requirements, behaviors } = layer1ToLegacy(data.ssrData, data.userStories);
+      const { requirements, behaviors } = layer1ToLegacy(data.ssrData, normalizedStories, legacyAcceptanceCriteria);
       update.extractedRequirements = JSON.parse(JSON.stringify(requirements));
       update.extractedBehaviors = JSON.parse(JSON.stringify(behaviors));
     } else {
@@ -578,7 +595,7 @@ export class PipelineStepRunnerService {
 
     let abPartial: Layer1ABPartial;
     if (chunks.length === 1 && startChunk === 0) {
-      abPartial = await withRetry(() => provider.extractSSRAndStories(chunks[0], promptAppend));
+      abPartial = normalizeLayer1AB(await withRetry(() => provider.extractSSRAndStories(chunks[0], promptAppend)));
     } else {
       const completedParts: Layer1ABPartial[] = previousPartial ? [previousPartial] : [];
       for (let index = startChunk; index < chunks.length; index += 1) {
@@ -587,7 +604,7 @@ export class PipelineStepRunnerService {
 
         try {
           const chunkWithContext = `[Chunk ${index + 1} of ${chunks.length} — partial section of a larger document. Extract every item present; similar items from other chunks will be merged.]\n\n${chunks[index]}`;
-          const part = await withRetry(() => provider.extractSSRAndStories(chunkWithContext, promptAppend));
+          const part = normalizeLayer1AB(await withRetry(() => provider.extractSSRAndStories(chunkWithContext, promptAppend)));
           completedParts.push(part);
           const runningMerge = mergeLayer1AB(completedParts);
           await this.persistence.saveLayer1Partial(featureId, { partial: JSON.parse(JSON.stringify(runningMerge)), phase: 'ab' });
@@ -600,7 +617,7 @@ export class PipelineStepRunnerService {
 
       const merged = mergeLayer1AB(completedParts);
       this.logger.log('[Pipeline] Layer 1AB — synthesising merged extraction');
-      abPartial = await withRetry(() => provider.synthesiseLayer1AB(merged));
+      abPartial = normalizeLayer1AB(await withRetry(() => provider.synthesiseLayer1AB(merged)));
     }
 
     await this.persistence.saveLayer1AB(featureId, abPartial.ssr, abPartial.stories);
@@ -608,7 +625,11 @@ export class PipelineStepRunnerService {
     let mapping: Mapping;
     try {
       this.logger.log('[Pipeline] Layer 1C — generating traceability mapping');
-      mapping = await withRetry(() => provider.extractMapping(abPartial.ssr, abPartial.stories));
+      const rawMapping = await withRetry(() => provider.extractMapping(abPartial.ssr, abPartial.stories));
+      if (!rawMapping.links.length && (abPartial.ssr.systemRules.length || abPartial.ssr.businessRules.length || abPartial.ssr.constraints.length || abPartial.ssr.globalPolicies.length)) {
+        this.logger.warn('[Pipeline] Layer 1C returned empty links for non-empty SSR rules; normalizing fallback mapping');
+      }
+      mapping = normalizeMapping(rawMapping, abPartial.ssr, abPartial.stories);
     } catch (error) {
       await this.persistence.markStepFailed(featureId, 1, { pipelinePartial: { phase: 'mapping' } });
       this.logger.error('[Pipeline] Layer 1C failed — use resume to retry from mapping phase');
@@ -630,4 +651,22 @@ export class PipelineStepRunnerService {
 
     return { ssr: abPartial.ssr, stories: abPartial.stories, mapping, validation };
   }
+
+  private async resolveLegacyAcceptanceCriteria(featureId: string): Promise<string[]> {
+    const feature = await this.context.getFeatureWithAssets(featureId);
+    const existing = (feature.extractedRequirements as ExtractedRequirements | null)?.acceptanceCriteria ?? [];
+    if (existing.length && existing.some((item) => !/^AC-\d+$/i.test(item.trim()))) return existing;
+    if (!feature.baDocument) return [];
+
+    const baDocumentPath = await this.storage.getSignedUrl(feature.baDocument.storageKey);
+    const baContent = await readDocumentContent(baDocumentPath);
+    return extractAcceptanceCriteriaFromMarkdown(baContent);
+  }
+}
+
+function normalizeLayer1AB(partial: Layer1ABPartial): Layer1ABPartial {
+  return {
+    ssr: partial.ssr,
+    stories: normalizeUserStories(partial.stories),
+  };
 }

@@ -47,6 +47,13 @@
 
 ---
 
+## Layer 1 Notes
+- `layer1Stories.stories[].acceptanceCriteria` should contain only AC IDs such as `AC-01`.
+- `layer1Mapping.links` should contain one row per SSR rule, even when no story covers that rule.
+- Full Given/When/Then acceptance-criteria text is preserved in legacy `extractedRequirements.acceptanceCriteria` for downstream planning.
+
+---
+
 ## UX States
 - Loading: shows "Loading test cases..." text
 - Empty: centered prompt to upload BA doc and generate

@@ -31,6 +31,7 @@ import {
   FrontendPlan,
   FrontendTestingPlan,
   GeneratedTestCase,
+  extractAcceptanceCriteriaIds,
   Layer1ABPartial,
   Mapping,
   SSRData,
@@ -56,6 +57,11 @@ const BehaviorsSchema = z.object({
   actions: z.array(z.string()),
   rules: z.array(z.string()),
 });
+
+const AcceptanceCriteriaIdListSchema = z.preprocess(
+  (input) => Array.isArray(input) ? extractAcceptanceCriteriaIds(input.filter((item): item is string => typeof item === 'string')) : input,
+  z.array(z.string().regex(/^AC-\d+$/i)).default([]),
+);
 
 const ScenariosSchema = z.object({
   scenarios: z.array(
@@ -268,7 +274,7 @@ const UserStorySchema = z.object({
   actor: z.string(),
   action: z.string(),
   benefit: z.string(),
-  acceptanceCriteria: z.array(z.string()).default([]),
+  acceptanceCriteria: AcceptanceCriteriaIdListSchema,
   relatedRuleIds: z.array(z.string()).default([]),
   priority: z.enum(['MUST', 'SHOULD', 'COULD']).default('SHOULD'),
 });

@@ -58,6 +58,9 @@
 - Retry uses exponential backoff starting at 30s for 429/quota errors.
 - `promptAppend` trimmed, ignored when empty, max 2000 chars, never persisted.
 - Step prerequisites: Step 2 needs Step 1; `frontend` requires `workflow-backend`; `testing-backend` requires backend; `testing-frontend` requires backend + frontend.
+- Layer 1B stores `stories[].acceptanceCriteria` as AC IDs only (`AC-01`, `AC-02`, ...), not full Given/When/Then text.
+- Layer 1C must persist one mapping link per SSR rule/system policy; omitted AI links are normalized into `coverage: 'none'` fallback rows.
+- Legacy `extractedRequirements.acceptanceCriteria` remains full-text Given/When/Then content for downstream scenario and test generation.
 
 ## Dependencies
 - Depends on: `PrismaService`, `AIModule` (`AIProviderFactory`), `StorageModule` (`STORAGE_PROVIDER`)
