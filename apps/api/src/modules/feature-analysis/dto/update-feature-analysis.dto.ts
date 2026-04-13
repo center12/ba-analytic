@@ -1,7 +1,7 @@
 import { IsString, IsOptional, IsEnum, IsArray } from 'class-validator';
-import { TestCasePriority, TestCaseStatus } from '@prisma/client';
+import { FeatureAnalysisPriority, FeatureAnalysisStatus } from '@prisma/client';
 
-export class UpdateTestCaseDto {
+export class UpdateFeatureAnalysisDto {
   @IsOptional()
   @IsString()
   title?: string;
@@ -15,12 +15,12 @@ export class UpdateTestCaseDto {
   preconditions?: string;
 
   @IsOptional()
-  @IsEnum(TestCasePriority)
-  priority?: TestCasePriority;
+  @IsEnum(FeatureAnalysisPriority)
+  priority?: FeatureAnalysisPriority;
 
   @IsOptional()
-  @IsEnum(TestCaseStatus)
-  status?: TestCaseStatus;
+  @IsEnum(FeatureAnalysisStatus)
+  status?: FeatureAnalysisStatus;
 
   @IsOptional()
   @IsArray()

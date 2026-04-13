@@ -52,7 +52,7 @@ function SectionGenerateButton({
 
   const mutation = useMutation({
     mutationFn: () =>
-      api.testCases.runStep5Section(featureId, section, activeProvider ?? undefined, activeModel, promptAppend),
+      api.featureAnalysis.runStep5Section(featureId, section, activeProvider ?? undefined, activeModel, promptAppend),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['features', featureId] });
       qc.invalidateQueries({ queryKey: ['dev-tasks', featureId] });

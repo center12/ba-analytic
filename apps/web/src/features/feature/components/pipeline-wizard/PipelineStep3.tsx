@@ -1,15 +1,15 @@
 import { FileText, Loader2, Play, RefreshCw } from 'lucide-react';
-import { TestCase } from '@/lib/api';
+import { FeatureAnalysis } from '@/lib/api';
 import { MANUAL_TEMPLATES } from '../../constants/pipeline-wizard.constants';
 import { step3ToMarkdown } from '../../helpers/pipeline-wizard.helpers';
 import { ManualPanel } from './ManualPanel';
-import { TestCaseDashboard } from '@/features/test-case/TestCaseDashboard';
+import { FeatureAnalysisDashboard } from '@/features/feature-analysis/FeatureAnalysisDashboard';
 import { CopyMarkdownButton } from './CopyMarkdownButton';
 
 interface PipelineStep3Props {
   featureId: string;
   featureName: string;
-  testCases: TestCase[];
+  testCases: FeatureAnalysis[];
   status: 'idle' | 'running' | 'completed' | 'failed';
   previousStepCompleted: boolean;
   isRunning: boolean;
@@ -132,7 +132,7 @@ export function PipelineStep3({
 
       {status === 'completed' && (
         <>
-          <TestCaseDashboard featureId={featureId} />
+          <FeatureAnalysisDashboard featureId={featureId} />
           <div className="flex justify-end">
             <button onClick={() => setOpenStep(4)} className="text-sm text-primary hover:underline">
               Proceed to Step 4 →

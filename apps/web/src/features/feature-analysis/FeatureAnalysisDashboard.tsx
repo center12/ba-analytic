@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type TestCase } from '@/lib/api';
+import { api, type FeatureAnalysis } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { CheckCircle2, Clock, XCircle, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import { useState } from 'react';
@@ -16,24 +16,24 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   DEPRECATED: <XCircle size={14} className="text-red-500" />,
 };
 
-export function TestCaseDashboard({ featureId }: { featureId: string }) {
+export function FeatureAnalysisDashboard({ featureId }: { featureId: string }) {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const { data: testCases = [], isLoading } = useQuery({
-    queryKey: ['test-cases', featureId],
-    queryFn: () => api.testCases.list(featureId),
+    queryKey: ['feature-analysis', featureId],
+    queryFn: () => api.featureAnalysis.list(featureId),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.testCases.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['test-cases', featureId] }),
+    mutationFn: (id: string) => api.featureAnalysis.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['feature-analysis', featureId] }),
   });
 
   const updateStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: TestCase['status'] }) =>
-      api.testCases.update(id, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['test-cases', featureId] }),
+    mutationFn: ({ id, status }: { id: string; status: FeatureAnalysis['status'] }) =>
+      api.featureAnalysis.update(id, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['feature-analysis', featureId] }),
   });
 
   const toggle = (id: string) => {
@@ -61,7 +61,7 @@ export function TestCaseDashboard({ featureId }: { featureId: string }) {
         <h2 className="font-semibold text-lg">{testCases.length} Test Cases</h2>
       </div>
 
-      {testCases.map((tc: TestCase) => (
+      {testCases.map((tc: FeatureAnalysis) => (
         <div key={tc.id} className="bg-card border rounded-lg overflow-hidden">
           <div className="flex items-center gap-3 p-4">
             <button onClick={() => toggle(tc.id)} className="text-muted-foreground">

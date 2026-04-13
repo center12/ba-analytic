@@ -119,7 +119,7 @@ function SectionGenerateButton({
 
   const mutation = useMutation({
     mutationFn: () =>
-      api.testCases.runStep4Section(featureId, section, activeProvider ?? undefined, activeModel, promptAppend),
+      api.featureAnalysis.runStep4Section(featureId, section, activeProvider ?? undefined, activeModel, promptAppend),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['features', featureId] });
       toast({ variant: 'success', title: `${label} generated` });

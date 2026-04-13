@@ -56,7 +56,7 @@ export class ProjectService {
       orderBy: { createdAt: 'desc' },
       include: {
         baDocument: true,
-        _count: { select: { screenshots: true, testCases: true } },
+        _count: { select: { screenshots: true, featureAnalyses: true } },
       },
     });
   }
@@ -67,7 +67,7 @@ export class ProjectService {
       include: {
         baDocument: true,
         screenshots: true,
-        _count: { select: { testCases: true, chatSessions: true } },
+        _count: { select: { featureAnalyses: true, chatSessions: true } },
       },
     });
     if (!feature) throw new NotFoundException(`Feature ${id} not found`);

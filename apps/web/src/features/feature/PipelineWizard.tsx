@@ -8,6 +8,7 @@ import {
   ExtractedBehaviors,
   TestScenario,
   GeneratedTestCase,
+  FeatureAnalysis,
   DevPrompt,
   Mapping,
   SSRData,
@@ -45,9 +46,9 @@ export function PipelineWizard({ featureId }: Props) {
     enabled: !!featureId,
   });
 
-  const { data: testCases = [] } = useQuery({
-    queryKey: ['test-cases', featureId],
-    queryFn: () => api.testCases.list(featureId),
+  const { data: featureAnalyses = [] } = useQuery({
+    queryKey: ['feature-analysis', featureId],
+    queryFn: () => api.featureAnalysis.list(featureId),
     enabled: !!featureId,
   });
 
@@ -162,13 +163,13 @@ export function PipelineWizard({ featureId }: Props) {
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['features', featureId] });
-    qc.invalidateQueries({ queryKey: ['test-cases', featureId] });
+    qc.invalidateQueries({ queryKey: ['feature-analysis', featureId] });
     qc.invalidateQueries({ queryKey: ['dev-tasks', featureId] });
   };
 
   const runMutation = useMutation({
     mutationFn: ({ step, promptAppend }: { step: number; promptAppend?: string }) =>
-      api.testCases.runStep(featureId, step, activeProvider ?? undefined, activeModel, undefined, promptAppend),
+      api.featureAnalysis.runStep(featureId, step, activeProvider ?? undefined, activeModel, undefined, promptAppend),
     onSuccess: (_, { step }) => {
       invalidate();
       toast({ variant: 'success', title: `Step ${step} completed` });
@@ -181,7 +182,7 @@ export function PipelineWizard({ featureId }: Props) {
   });
 
   const resumeMutation = useMutation({
-    mutationFn: () => api.testCases.resumeStep1(featureId, activeProvider ?? undefined, activeModel),
+    mutationFn: () => api.featureAnalysis.resumeStep1(featureId, activeProvider ?? undefined, activeModel),
     onSuccess: () => {
       invalidate();
       toast({ variant: 'success', title: 'Step 1 resumed' });
@@ -194,8 +195,8 @@ export function PipelineWizard({ featureId }: Props) {
   });
 
   const saveMutation = useMutation({
-    mutationFn: (data: Parameters<typeof api.testCases.saveStepResults>[1]) =>
-      api.testCases.saveStepResults(featureId, data),
+    mutationFn: (data: Parameters<typeof api.featureAnalysis.saveStepResults>[1]) =>
+      api.featureAnalysis.saveStepResults(featureId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['features', featureId] });
       toast({ variant: 'success', title: 'Changes saved' });
@@ -208,8 +209,8 @@ export function PipelineWizard({ featureId }: Props) {
   });
 
   const manualSaveMutation = useMutation({
-    mutationFn: (data: Parameters<typeof api.testCases.saveStepResults>[1]) =>
-      api.testCases.saveStepResults(featureId, data),
+    mutationFn: (data: Parameters<typeof api.featureAnalysis.saveStepResults>[1]) =>
+      api.featureAnalysis.saveStepResults(featureId, data),
     onSuccess: (_, vars) => {
       invalidate();
       toast({ variant: 'success', title: `Step ${vars.step} saved manually` });
@@ -286,7 +287,7 @@ export function PipelineWizard({ featureId }: Props) {
     resumeMutation.isPending ? 1 :
     null;
 
-  const statuses = [1, 2, 3, 4, 5].map(n => deriveStatus(n, feature, testCases.length, activeStep));
+  const statuses = [1, 2, 3, 4, 5].map(n => deriveStatus(n, feature, featureAnalyses.length, activeStep));
 
   const runStep = (step: number, promptAppend?: string) => runMutation.mutate({ step, promptAppend });
   const runIsPendingStep = runMutation.isPending ? (runMutation.variables?.step ?? null) : null;
@@ -365,7 +366,7 @@ export function PipelineWizard({ featureId }: Props) {
         <PipelineStep3
           featureId={featureId}
           featureName={feature.name}
-          testCases={testCases}
+          testCases={featureAnalyses as FeatureAnalysis[]}
           status={statuses[2]}
           previousStepCompleted={statuses[1] === 'completed'}
           isRunning={isRunning}
@@ -374,7 +375,7 @@ export function PipelineWizard({ featureId }: Props) {
           manualJsonError={manualJsonError}
           manualIsSaving={manualSaveMutation.isPending}
           runIsPendingForStep={runIsPendingStep === 3}
-          testCasesCount={testCases.length}
+          testCasesCount={featureAnalyses.length}
           openManual={openManual}
           closeManual={closeManual}
           handleManualJsonChange={handleManualJsonChange}

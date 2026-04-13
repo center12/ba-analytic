@@ -71,7 +71,7 @@ model Feature {
   project               Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   baDocument            BADocument?
   screenshots           Screenshot[]
-  testCases             TestCase[]
+  featureAnalyses       FeatureAnalysis[]
   chatSessions          ChatSession[]
   developerTasks        DeveloperTask[]
 }
@@ -96,14 +96,14 @@ model Screenshot {
   feature      Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
 }
 
-model TestCase {
+model FeatureAnalysis {
   id           String           @id @default(cuid())
   featureId    String
   title        String
   description  String?
   preconditions String?
-  priority     TestCasePriority @default(MEDIUM)
-  status       TestCaseStatus   @default(DRAFT)
+  priority     FeatureAnalysisPriority @default(MEDIUM)
+  status       FeatureAnalysisStatus   @default(DRAFT)
   steps           Json
   requirementRefs Json?           // Array of US-xx / FR-xx / BR-xx IDs from the scenario
   aiProvider      String
@@ -131,13 +131,13 @@ model ChatMessage {
   session   ChatSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
-enum TestCasePriority {
+enum FeatureAnalysisPriority {
   HIGH
   MEDIUM
   LOW
 }
 
-enum TestCaseStatus {
+enum FeatureAnalysisStatus {
   DRAFT
   APPROVED
   DEPRECATED

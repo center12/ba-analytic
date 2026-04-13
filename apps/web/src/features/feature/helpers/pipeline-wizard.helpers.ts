@@ -1,6 +1,6 @@
 import {
   Feature,
-  TestCase,
+  FeatureAnalysis,
   DevPlan,
   DevTaskItem,
   SSRData,
@@ -233,7 +233,7 @@ export function step2ToMarkdown(feature: Feature): string {
   return lines.join('\n');
 }
 
-export function step3ToMarkdown(testCases: TestCase[], featureName: string): string {
+export function step3ToMarkdown(testCases: FeatureAnalysis[], featureName: string): string {
   if (!testCases.length) return '';
 
   const lines: string[] = [`# Test Cases — ${featureName}`, ''];

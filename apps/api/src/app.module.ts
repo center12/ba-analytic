@@ -4,7 +4,7 @@ import { ProjectModule } from './modules/project/project.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { AIModule } from './modules/ai/ai.module';
 import { ChatModule } from './modules/chat/chat.module';
-import { TestCaseModule } from './modules/test-case/test-case.module';
+import { FeatureAnalysisModule } from './modules/feature-analysis/feature-analysis.module';
 import { DevTaskModule } from './modules/dev-task/dev-task.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
@@ -20,7 +20,7 @@ import { FeedbackModule } from './modules/feedback/feedback.module';
     StorageModule,
     AIModule,
     ChatModule,
-    TestCaseModule,
+    FeatureAnalysisModule,
     DevTaskModule,
   ],
 })

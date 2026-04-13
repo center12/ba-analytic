@@ -12,15 +12,15 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { TestCaseService } from './test-case.service';
-import { UpdateTestCaseDto } from './dto/update-test-case.dto';
+import { FeatureAnalysisService } from './feature-analysis.service';
+import { UpdateFeatureAnalysisDto } from './dto/update-feature-analysis.dto';
 
-@Controller('test-cases')
-export class TestCaseController {
-  constructor(private readonly service: TestCaseService) {}
+@Controller('feature-analysis')
+export class FeatureAnalysisController {
+  constructor(private readonly service: FeatureAnalysisService) {}
 
   /**
-   * GET /api/test-cases/feature/:featureId/step-prompt/:step
+   * GET /api/feature-analysis/feature/:featureId/step-prompt/:step
    * Returns the prompt that would be sent to AI for the given step, without calling AI.
    */
   @Get('feature/:featureId/step-prompt/:step')
@@ -42,7 +42,7 @@ export class TestCaseController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateTestCaseDto) {
+  update(@Param('id') id: string, @Body() dto: UpdateFeatureAnalysisDto) {
     return this.service.update(id, dto);
   }
 
@@ -53,7 +53,7 @@ export class TestCaseController {
   }
 
   /**
-   * POST /api/test-cases/feature/:featureId/generate?provider=gemini
+   * POST /api/feature-analysis/feature/:featureId/generate?provider=gemini
    * Triggers AI generation and persists results.
    */
   @Post('feature/:featureId/generate')
@@ -66,7 +66,7 @@ export class TestCaseController {
   }
 
   /**
-   * POST /api/test-cases/feature/:featureId/resume?provider=gemini&model=gemini-2.0-flash
+   * POST /api/feature-analysis/feature/:featureId/resume?provider=gemini&model=gemini-2.0-flash
    * Continues a FAILED pipeline run from the chunk that failed.
    */
   @Post('feature/:featureId/resume')
@@ -79,7 +79,7 @@ export class TestCaseController {
   }
 
   /**
-   * POST /api/test-cases/feature/:featureId/run-step/:step?provider=gemini&model=gemini-2.0-flash
+   * POST /api/feature-analysis/feature/:featureId/run-step/:step?provider=gemini&model=gemini-2.0-flash
    * Runs a single pipeline step (1–5) independently.
    */
   @Post('feature/:featureId/run-step/:step')
@@ -94,7 +94,7 @@ export class TestCaseController {
   }
 
   /**
-   * POST /api/test-cases/feature/:featureId/run-step-1-section/:sublayer?provider=gemini
+   * POST /api/feature-analysis/feature/:featureId/run-step-1-section/:sublayer?provider=gemini
    * Re-runs a single sublayer of Step 1 (ssr-stories | mapping | validation).
    */
   @Post('feature/:featureId/run-step-1-section/:sublayer')
@@ -108,7 +108,7 @@ export class TestCaseController {
   }
 
   /**
-   * POST /api/test-cases/feature/:featureId/run-step-4-section/:section?provider=gemini
+   * POST /api/feature-analysis/feature/:featureId/run-step-4-section/:section?provider=gemini
    * Generates a single section of Step 4 (workflow-backend | frontend | testing | testing-backend | testing-frontend).
    */
   @Post('feature/:featureId/run-step-4-section/:section')
@@ -123,7 +123,7 @@ export class TestCaseController {
   }
 
   /**
-   * POST /api/test-cases/feature/:featureId/run-step-5-section/:section?provider=gemini
+   * POST /api/feature-analysis/feature/:featureId/run-step-5-section/:section?provider=gemini
    * Generates one Step 5 section (backend|api alias | frontend | testing).
    */
   @Post('feature/:featureId/run-step-5-section/:section')
@@ -138,7 +138,7 @@ export class TestCaseController {
   }
 
   /**
-   * POST /api/test-cases/feature/:featureId/resume-step1?provider=gemini&model=gemini-2.0-flash
+   * POST /api/feature-analysis/feature/:featureId/resume-step1?provider=gemini&model=gemini-2.0-flash
    * Resumes Step 1 from the failed chunk.
    */
   @Post('feature/:featureId/resume-step1')
@@ -151,7 +151,7 @@ export class TestCaseController {
   }
 
   /**
-   * PATCH /api/test-cases/feature/:featureId/step-results
+   * PATCH /api/feature-analysis/feature/:featureId/step-results
    * Saves user-edited step results without re-running AI.
    */
   @Patch('feature/:featureId/step-results')

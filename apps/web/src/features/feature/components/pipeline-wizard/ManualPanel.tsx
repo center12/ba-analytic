@@ -32,7 +32,7 @@ export function ManualPanel({
   async function copyPrompt() {
     setCopyingPrompt(true);
     try {
-      const { prompt } = await api.testCases.getStepPrompt(featureId, step);
+      const { prompt } = await api.featureAnalysis.getStepPrompt(featureId, step);
       await navigator.clipboard.writeText(prompt);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);

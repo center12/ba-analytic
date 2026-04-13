@@ -159,19 +159,19 @@ export const api = {
     downloadMedia: (feedbackId: string) => requestBlob(`/feedback/${feedbackId}/media`),
   },
 
-  testCases: {
-    list: (featureId: string) => request<TestCase[]>(`/test-cases/feature/${featureId}`),
-    get: (id: string) => request<TestCase>(`/test-cases/${id}`),
-    update: (id: string, data: Partial<TestCase>) =>
-      request<TestCase>(`/test-cases/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id: string) => request<void>(`/test-cases/${id}`, { method: 'DELETE' }),
+  featureAnalysis: {
+    list: (featureId: string) => request<FeatureAnalysis[]>(`/feature-analysis/feature/${featureId}`),
+    get: (id: string) => request<FeatureAnalysis>(`/feature-analysis/${id}`),
+    update: (id: string, data: Partial<FeatureAnalysis>) =>
+      request<FeatureAnalysis>(`/feature-analysis/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id: string) => request<void>(`/feature-analysis/${id}`, { method: 'DELETE' }),
     generate: (featureId: string, provider?: string, model?: string) => {
       const params = new URLSearchParams();
       if (provider) params.set('provider', provider);
       if (model) params.set('model', model);
       const qs = params.toString();
-      return request<{ generated: number; testCases: TestCase[]; pipeline: { requirementsCount: number; scenariosCount: number } }>(
-        `/test-cases/feature/${featureId}/generate${qs ? `?${qs}` : ''}`,
+      return request<{ generated: number; featureAnalyses: FeatureAnalysis[]; pipeline: { requirementsCount: number; scenariosCount: number } }>(
+        `/feature-analysis/feature/${featureId}/generate${qs ? `?${qs}` : ''}`,
         { method: 'POST' },
       );
     },
@@ -180,8 +180,8 @@ export const api = {
       if (provider) params.set('provider', provider);
       if (model) params.set('model', model);
       const qs = params.toString();
-      return request<{ generated: number; testCases: TestCase[]; pipeline: { requirementsCount: number; scenariosCount: number } }>(
-        `/test-cases/feature/${featureId}/resume${qs ? `?${qs}` : ''}`,
+      return request<{ generated: number; featureAnalyses: FeatureAnalysis[]; pipeline: { requirementsCount: number; scenariosCount: number } }>(
+        `/feature-analysis/feature/${featureId}/resume${qs ? `?${qs}` : ''}`,
         { method: 'POST' },
       );
     },
@@ -202,7 +202,7 @@ export const api = {
           ? JSON.stringify({ override, promptAppend })
           : undefined;
       return request<unknown>(
-        `/test-cases/feature/${featureId}/run-step/${step}${qs ? `?${qs}` : ''}`,
+        `/feature-analysis/feature/${featureId}/run-step/${step}${qs ? `?${qs}` : ''}`,
         { method: 'POST', body },
       );
     },
@@ -217,7 +217,7 @@ export const api = {
       if (model) params.set('model', model);
       const qs = params.toString();
       return request<unknown>(
-        `/test-cases/feature/${featureId}/run-step-1-section/${sublayer}${qs ? `?${qs}` : ''}`,
+        `/feature-analysis/feature/${featureId}/run-step-1-section/${sublayer}${qs ? `?${qs}` : ''}`,
         { method: 'POST' },
       );
     },
@@ -233,7 +233,7 @@ export const api = {
       if (model) params.set('model', model);
       const qs = params.toString();
       return request<unknown>(
-        `/test-cases/feature/${featureId}/run-step-4-section/${section}${qs ? `?${qs}` : ''}`,
+        `/feature-analysis/feature/${featureId}/run-step-4-section/${section}${qs ? `?${qs}` : ''}`,
         { method: 'POST', body: promptAppend ? JSON.stringify({ promptAppend }) : undefined },
       );
     },
@@ -249,7 +249,7 @@ export const api = {
       if (model) params.set('model', model);
       const qs = params.toString();
       return request<unknown>(
-        `/test-cases/feature/${featureId}/run-step-5-section/${section}${qs ? `?${qs}` : ''}`,
+        `/feature-analysis/feature/${featureId}/run-step-5-section/${section}${qs ? `?${qs}` : ''}`,
         { method: 'POST', body: promptAppend ? JSON.stringify({ promptAppend }) : undefined },
       );
     },
@@ -259,7 +259,7 @@ export const api = {
       if (model) params.set('model', model);
       const qs = params.toString();
       return request<unknown>(
-        `/test-cases/feature/${featureId}/resume-step1${qs ? `?${qs}` : ''}`,
+        `/feature-analysis/feature/${featureId}/resume-step1${qs ? `?${qs}` : ''}`,
         { method: 'POST' },
       );
     },
@@ -277,11 +277,11 @@ export const api = {
       devPrompt?: DevPrompt;
     }) =>
       request<unknown>(
-        `/test-cases/feature/${featureId}/step-results`,
+        `/feature-analysis/feature/${featureId}/step-results`,
         { method: 'PATCH', body: JSON.stringify(data) },
       ),
     getStepPrompt: (featureId: string, step: number) =>
-      request<{ prompt: string }>(`/test-cases/feature/${featureId}/step-prompt/${step}`),
+      request<{ prompt: string }>(`/feature-analysis/feature/${featureId}/step-prompt/${step}`),
   },
 
   chat: {
@@ -690,7 +690,7 @@ export interface DevPlan {
   testing:   TestingPlan;
 }
 
-export interface TestCase {
+export interface FeatureAnalysis {
   id: string;
   featureId: string;
   title: string;
