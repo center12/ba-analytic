@@ -128,7 +128,14 @@ pnpm install
 
 ### 2. Configure environment
 
-Copy `.env.example` (repo root) to `apps/api/.env` and fill in your values:
+Copy the example files and adjust values as needed:
+
+```bash
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
+```
+
+`apps/api/.env` contains the NestJS backend settings:
 
 ```env
 # Database
@@ -143,12 +150,12 @@ ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 
 # Default AI provider: gemini | claude | openai
-AI_PROVIDER=gemini
+AI_PROVIDER=openai
 
 # Model to use per provider (optional — falls back to the defaults below)
 GEMINI_MODEL=gemini-2.0-flash
 CLAUDE_MODEL=claude-sonnet-4-6
-OPENAI_MODEL=gpt-4o
+OPENAI_MODEL=gpt-4.1-mini
 
 # Storage
 UPLOAD_DIR=./uploads
@@ -162,6 +169,15 @@ JWT_SECRET=change-me-to-a-long-random-secret-in-production
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=changeme123
 ```
+
+`apps/web/.env` contains the Vite frontend settings:
+
+```env
+VITE_API_BASE_URL=http://localhost:3000/api
+VITE_PORT=5173
+```
+
+For Docker or Nginx-based deployments, set `VITE_API_BASE_URL=/api` before building the web image so browser requests stay on the same origin and are forwarded by Nginx.
 
 The admin account is created automatically on first startup if no user with that username exists. Change the credentials before deploying.
 
@@ -183,7 +199,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-The web app is at [http://localhost:5173](http://localhost:5173). All `/api` requests are proxied to the NestJS server on `:3000`.
+The web app is at [http://localhost:5173](http://localhost:5173). In local development, the frontend calls the API URL from `apps/web/.env`, which defaults to `http://localhost:3000/api`.
 
 ## BA Document Format
 
