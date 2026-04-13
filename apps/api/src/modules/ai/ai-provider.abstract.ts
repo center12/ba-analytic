@@ -524,7 +524,7 @@ export function buildMappingPrompt(ssr: SSRData, stories: UserStories): string {
   const allRules = [
     ...ssr.systemRules.map(r => ({ id: extractId(r, 'SYS'), text: r })),
     ...ssr.businessRules.map(r => ({ id: extractId(r, 'BR'), text: r })),
-    ...ssr.constraints.map(r => ({ id: extractId(r, 'VR'), text: r })),
+    ...ssr.constraints.map(r => ({ id: extractAnyRuleId(r, 'VR'), text: r })),
     ...ssr.globalPolicies.map((r, i) => ({ id: `GP-${String(i + 1).padStart(2, '0')}`, text: r })),
   ];
 
@@ -537,6 +537,7 @@ export function buildMappingPrompt(ssr: SSRData, stories: UserStories): string {
   return `You are a business analyst creating a requirements traceability matrix.
 
 LANGUAGE RULE: Preserve input language. Do not translate.
+ID PRESERVATION RULE: For every rule, copy the exact source ID prefix and number into ruleId. Do not rename AC-xx to VR-xx, and do not invent fallback IDs when an ID already exists in ruleText.
 
 Given the rules and user stories below, map which rules apply to which stories.
 
@@ -639,6 +640,12 @@ Return ONLY valid JSON (no markdown, no explanation):
 function extractId(text: string, prefix: string): string {
   const match = text.match(new RegExp(`(${prefix}-\\d+)`, 'i'));
   return match ? match[1] : `${prefix}-??`;
+}
+
+/** Extract any recognized prefixed ID while preserving its original prefix. */
+function extractAnyRuleId(text: string, fallbackPrefix: string): string {
+  const match = text.match(/\b([A-Z]{2,}-\d+)\b/i);
+  return match ? match[1] : `${fallbackPrefix}-??`;
 }
 
 /**
