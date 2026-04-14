@@ -4,16 +4,15 @@ An AI-powered platform that transforms Business Analyst documents into test case
 
 ## What It Does
 
-Upload a BA specification document as a **Markdown (`.md`) file**, optionally attach design screenshots, then click **Generate**. The platform runs a 4-layer AI pipeline that produces:
+Write or paste a BA specification as **Markdown content** directly in the feature editor, optionally attach design screenshots, then click **Generate**. The platform runs a 5-step AI pipeline that produces:
 
-- **Extracted Requirements** — domain features, business rules, acceptance criteria
-- **Extracted Behaviors** — actors, user actions, behavioral rules
-- **Test Scenarios** — categorized scenarios (happy path, edge cases, errors, boundary, security)
-- **Test Cases** — fully written test cases with steps and expected results, persisted to the database
-- **Development Plan** — workflow steps, backend architecture (entities, API routes, folder structure), frontend architecture, and a testing plan; each section can be generated independently
-- **Developer Tasks** — focused implementation prompts split into sub-tasks per category (API, Frontend, Testing); number of sub-tasks scales with feature complexity
+- **Layer 1 — Requirements & Behaviors** — 4-sublayer extraction: system/business rules (SSR), user stories (with IDs and AC references), rule-to-story traceability map, and a quality validation score
+- **Step 2 — Test Scenarios** — categorized scenarios (happy path, edge cases, errors, boundary, security) with requirement references
+- **Step 3 — Test Cases** — fully written test cases with preconditions, numbered steps, and expected results, persisted to the database
+- **Step 4 — Development Plan** — workflow steps, backend architecture (entities, API routes, folder structure, query design), frontend architecture, and a testing plan; each section can be generated independently
+- **Step 5 — Developer Tasks** — focused implementation prompts split by category (API, Frontend, Testing); number of sub-tasks scales with feature complexity
 
-An AI chat sidebar lets you ask questions about the feature in the context of all uploaded documents.
+An AI chat sidebar lets you ask questions about the feature in the context of all pipeline outputs. A per-project **Pipeline AI Configuration** panel lets you set different AI providers and models per pipeline step.
 
 ## Tech Stack
 
@@ -32,40 +31,42 @@ An AI chat sidebar lets you ask questions about the feature in the context of al
 ```
 ba-analytic/
 ├── apps/
-│   ├── api/                        # NestJS backend (:3000)
+│   ├── api/                            # NestJS backend (:3000)
 │   │   ├── prisma/
 │   │   │   └── schema.prisma
 │   │   └── src/
 │   │       ├── modules/
-│   │       │   ├── auth/           # JWT auth — login, guard, admin seeder
-│   │       │   ├── user/           # User CRUD
-│   │       │   ├── ai/             # AI providers + factory
-│   │       │   ├── chat/           # Chat sessions + SSE streaming
-│   │       │   ├── dev-task/       # Developer task CRUD
-│   │       │   ├── project/        # Project + Feature CRUD + file uploads
-│   │       │   ├── storage/        # Storage interface + local adapter
-│   │       │   └── test-case/      # Pipeline orchestration + test case CRUD
+│   │       │   ├── auth/               # JWT auth — login, guard, admin seeder
+│   │       │   ├── user/               # User CRUD
+│   │       │   ├── ai/                 # AI providers + factory + shared pipeline types
+│   │       │   ├── chat/               # Chat sessions + SSE streaming
+│   │       │   ├── dev-task/           # Developer task CRUD
+│   │       │   ├── feature-analysis/   # Pipeline orchestration + test case CRUD
+│   │       │   ├── feedback/           # User feedback submissions
+│   │       │   ├── project/            # Project + Feature CRUD + screenshot uploads
+│   │       │   └── storage/            # Storage interface + local adapter
 │   │       ├── app.module.ts
 │   │       ├── main.ts
 │   │       └── prisma.service.ts
-│   └── web/                        # Vite + React frontend (:5173)
+│   └── web/                            # Vite + React frontend (:5173)
 │       └── src/
 │           ├── features/
-│           │   ├── auth/           # Login page + auth helpers/types
-│           │   ├── user/           # User management page
-│           │   ├── ai/             # Provider selector
-│           │   ├── chat/           # Chat sidebar (SSE)
-│           │   ├── dev-task/       # Developer task panel
-│           │   ├── feature/        # Feature detail page + pipeline panels
-│           │   │   └── components/ # Feature-scoped components (BADocFormatGuide, …)
-│           │   ├── project/        # Project list + detail pages
-│           │   └── test-case/      # Test case dashboard
+│           │   ├── auth/               # Login page + auth helpers/types
+│           │   ├── user/               # User management page
+│           │   ├── ai/                 # Provider/model selector
+│           │   ├── chat/               # Chat sidebar (SSE)
+│           │   ├── dev-task/           # Developer task panel
+│           │   ├── feature/            # Feature detail page + 5-step pipeline wizard
+│           │   ├── feature-analysis/   # Test case list with priority/status management
+│           │   ├── feedback/           # User feedback dialog and list page
+│           │   ├── project/            # Project list + detail pages + feature content editor
+│           │   └── test-case/          # Test case dashboard
 │           ├── components/
-│           │   ├── ui/             # Shared Shadcn/UI primitives
+│           │   ├── ui/                 # Shared Shadcn/UI primitives
 │           │   └── ProtectedRoute.tsx
 │           ├── hooks/
-│           ├── lib/api.ts          # Typed fetch wrappers
-│           └── store/              # Zustand global state (app + auth)
+│           ├── lib/api.ts              # Typed fetch wrappers
+│           └── store/                  # Zustand global state (app + auth)
 └── docker-compose.yml
 ```
 
@@ -104,7 +105,7 @@ apps/api/src/modules/<module-name>/
 ```
 
 Naming convention (API uses kebab-case):
-- `constants/<domain>.constants.ts` (example: `constants/test-case.constants.ts`)
+- `constants/<domain>.constants.ts` (example: `constants/feature-analysis.constants.ts`)
 - `helpers/<domain>.helpers.ts` (example: `helpers/pipeline.helpers.ts`)
 - DTOs: `create-*.dto.ts`, `update-*.dto.ts`
 - Keep controller/service/module filenames in kebab-case to match route/module names.
@@ -152,7 +153,7 @@ OPENAI_API_KEY=
 # Default AI provider: gemini | claude | openai
 AI_PROVIDER=openai
 
-# Model to use per provider (optional — falls back to the defaults below)
+# Model to use per provider (optional — falls back to provider defaults)
 GEMINI_MODEL=gemini-2.0-flash
 CLAUDE_MODEL=claude-sonnet-4-6
 OPENAI_MODEL=gpt-4.1-mini
@@ -201,13 +202,20 @@ pnpm dev
 
 The web app is at [http://localhost:5173](http://localhost:5173). In local development, the frontend calls the API URL from `apps/web/.env`, which defaults to `http://localhost:3000/api`.
 
+## Feature Types
+
+Two feature types are supported, each with an auto-generated code:
+
+| Type | Code prefix | Purpose |
+|---|---|---|
+| `FEATURE` | `FEA-001`, `FEA-002`, … | A single user-facing capability |
+| `SSR` | `SSR-001`, `SSR-002`, … | A System Requirements Specification document covering multiple sub-features |
+
+SSR features get an **Extract Sub-Features** button on the project page. Clicking it sends the SSR content to the AI, which returns a list of sub-features that can then be confirmed and created as individual `FEATURE` records.
+
 ## BA Document Format
 
-BA documents must be uploaded as **Markdown (`.md`) files**. Binary formats (PDF, DOCX) are not supported — the pipeline reads the document as plain text and chunks it section-by-section for the AI.
-
-A **Format Guide** button is available in the UI next to the upload button. It provides:
-- A downloadable Markdown template (`ba-document-template.md`)
-- A copy-ready AI conversion prompt for converting existing documents via ChatGPT/Claude
+Feature content is written as **Markdown** directly in the inline editor on the project detail page. The editor provides template buttons (SSR and FEATURE templates) and a copy-ready AI conversion prompt if you need to convert an existing document.
 
 ### Recommended structure
 
@@ -227,38 +235,53 @@ A **Format Guide** button is available in the UI next to the upload button. It p
 ## Assumptions & Dependencies
 ```
 
-The pipeline chunks large documents at `##` section boundaries so no heading is ever separated from its content. Screenshots can still be uploaded separately for additional visual context.
+The pipeline chunks large documents (`> 40 000 chars`) at section boundaries so no heading is ever separated from its content. Screenshots can be uploaded alongside content for additional visual context.
 
 ## AI Pipeline
 
-The pipeline runs when you click **Generate** on a feature with an uploaded BA document.
+The pipeline runs when you click **Generate** on a feature.
 
 ```
-BA Document
+Feature Content
     │
-    ├─── Step 1A: Domain Extraction ──────────────────────┐
-    │                                                      ├─▶ Step 2: Scenario Planning
-    └─── Step 1B: Behavior Extraction ────────────────────┘        │
-                                                                    ▼
-                                                           Step 3: Test Case Generation
-                                                                    │
-                                                                    ▼
-                                                           Step 4: Development Plan
-                                                           ┌──────────────┬──────────┬─────────┐
-                                                           4A Workflow+   4B         4C
-                                                              Backend     Frontend   Testing
-                                                                    │
-                                                                    ▼
-                                                           Step 5: Dev Prompt Generation
-                                                           ┌────────┬──────────┬─────────┐
-                                                           API     Frontend   Testing
+    └─── Step 1 — Layer 1 Extraction (4 sublayers, sequential)
+              1A: SSR & Business Rules Extraction
+              1B: User Story Extraction
+              1C: Rule-to-Story Traceability Mapping
+              1D: Quality Validation
+                        │
+                        ▼
+              Step 2: Scenario Planning
+                        │
+                        ▼
+              Step 3: Test Case Generation
+                        │
+                        ▼
+              Step 4: Development Plan
+         ┌────────────────┬────────────┬──────────────┐
+         4A Workflow +    4B           4C Backend      4C Frontend
+            Backend       Frontend     Testing         Testing
+                        │
+                        ▼
+              Step 5: Dev Prompt Generation
+         ┌──────────┬──────────────┬─────────┐
+         Backend    Frontend       Testing
 ```
 
-Steps 1A and 1B run in parallel. Each step's output is saved to the database immediately so the UI can show partial results.
+Each step persists its output to the database immediately. **Individual steps and sub-sections can be re-run independently** via the pipeline wizard UI:
 
-**Step 4 sections are individually regenerable** — the UI presents Workflow+Backend, Frontend, and Testing controls, while the backend contract uses `workflow-backend`, `frontend`, `testing-backend`, and `testing-frontend`. Frontend requires Workflow+Backend first; backend testing requires backend output; frontend testing requires both backend and frontend.
+- Step 1 sub-sections: `ssr-stories`, `mapping`, `validation`
+- Step 4 sub-sections: `workflow-backend` → `frontend` → `testing-backend` / `testing-frontend`
+- Step 5 sub-sections: `backend` / `api`, `frontend`, `testing`
 
-**Supported providers**: Gemini (`gemini-2.0-flash`), Claude (`claude-sonnet-4-6`), OpenAI (`gpt-4o`). The active provider is selectable in the UI at runtime.
+A **Manual Edit flow** is available for every step: copy the step's AI prompt, refine the output in an external tool, then paste the JSON back via the Manual panel to save it without re-running the AI.
+
+**Per-project pipeline config**: Each project can override the AI provider and model for each step independently. Runtime `?provider=` and `?model=` query params take highest precedence.
+
+**Supported providers and models:**
+- Gemini: `gemini-2.0-flash`, `gemini-2.0-flash-lite`, `gemini-1.5-pro`, `gemini-1.5-flash`
+- Claude: `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-haiku-4-5-20251001`, `claude-3-5-sonnet-20241022`
+- OpenAI: `gpt-5`, `gpt-5-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`, `gpt-4o`, `gpt-4o-mini`, `o1`, `o3`
 
 ## Authentication
 
@@ -288,36 +311,55 @@ The SSE chat stream (`/api/chat/sessions/:id/stream`) passes the token as a quer
 | POST | `/api/auth/login` | — | Login, returns `accessToken` |
 | GET | `/api/users` | required | List all users |
 | POST | `/api/users` | required | Create a user |
-| GET | `/api/ai/providers` | required | List available providers |
+| GET | `/api/ai/providers` | required | List available providers with model lists |
 | GET | `/api/projects` | required | List all projects |
 | POST | `/api/projects` | required | Create a project |
+| GET | `/api/projects/:id` | required | Get project with features |
+| PUT | `/api/projects/:id` | required | Update project overview |
+| DELETE | `/api/projects/:id` | required | Delete project (cascade) |
 | GET | `/api/projects/:id/features` | required | List features in a project |
-| POST | `/api/projects/:id/features` | required | Create a feature |
-| POST | `/api/projects/features/:id/upload/ba-document` | required | Upload BA document |
+| POST | `/api/projects/:id/features` | required | Create a feature (`name`, `description`, `featureType`) |
+| GET | `/api/projects/features/:id` | required | Get feature detail |
+| PUT | `/api/projects/features/:id` | required | Update feature content / name / relatedFeatureIds |
+| DELETE | `/api/projects/features/:id` | required | Delete feature |
 | POST | `/api/projects/features/:id/upload/screenshot` | required | Upload screenshot |
-| GET | `/api/test-cases/feature/:id` | required | List test cases for a feature |
-| POST | `/api/test-cases/feature/:id/generate` | required | Run the full AI pipeline |
-| POST | `/api/test-cases/feature/:id/run-step/:step` | required | Run a single pipeline step (1–5) |
-| POST | `/api/test-cases/feature/:id/run-step-4-section/:section` | required | Generate one Step 4 section (`workflow-backend` / `frontend` / `testing-backend` / `testing-frontend`; UI may also call high-level `testing`) |
-| POST | `/api/test-cases/feature/:id/run-step-5-section/:section` | required | Generate one Step 5 section (`backend` / `frontend` / `testing`; API also accepts `api` alias for backend) |
+| GET | `/api/projects/:id/pipeline-config` | required | Get per-step AI config |
+| PUT | `/api/projects/:id/pipeline-config` | required | Upsert per-step AI config |
+| DELETE | `/api/projects/:id/pipeline-config/:step` | required | Remove step config override |
+| GET | `/api/feature-analysis/feature/:id` | required | List test cases for a feature |
+| POST | `/api/feature-analysis/feature/:id/generate` | required | Run the full AI pipeline |
+| POST | `/api/feature-analysis/feature/:id/resume` | required | Resume a failed pipeline run |
+| POST | `/api/feature-analysis/feature/:id/run-step/:step` | required | Run a single pipeline step (1–5) |
+| POST | `/api/feature-analysis/feature/:id/run-step-1-section/:sublayer` | required | Run one Step 1 sublayer (`ssr-stories` / `mapping` / `validation`) |
+| POST | `/api/feature-analysis/feature/:id/run-step-4-section/:section` | required | Run one Step 4 section (`workflow-backend` / `frontend` / `testing-backend` / `testing-frontend`) |
+| POST | `/api/feature-analysis/feature/:id/run-step-5-section/:section` | required | Run one Step 5 section (`backend` / `api` / `frontend` / `testing`) |
+| POST | `/api/feature-analysis/feature/:id/resume-step1` | required | Resume a failed Step 1 from the failed chunk |
+| GET | `/api/feature-analysis/feature/:id/step-prompt/:step` | required | Get the AI prompt for a step (for manual flow) |
+| PATCH | `/api/feature-analysis/feature/:id/step-results` | required | Save user-edited step output without re-running AI |
+| POST | `/api/feature-analysis/feature/:id/extract-sub-features` | required | AI-extract sub-features from an SSR document |
+| PUT | `/api/feature-analysis/:id` | required | Update a test case (e.g. change status) |
+| DELETE | `/api/feature-analysis/:id` | required | Delete a test case |
 | GET | `/api/dev-tasks/feature/:id` | required | List developer tasks for a feature |
 | DELETE | `/api/dev-tasks/:id` | required | Delete a developer task |
 | POST | `/api/chat/sessions` | required | Create a chat session |
 | GET | `/api/chat/sessions/feature/:id` | required | List sessions for a feature |
 | GET | `/api/chat/sessions/:id/stream` | `?token=` | SSE stream — send message + stream response |
+| POST | `/api/feedback` | required | Submit user feedback |
+| GET | `/api/feedback` | required | List all feedback submissions |
 
 ## Adding a New AI Provider
 
 1. Create `apps/api/src/modules/ai/providers/myprovider.provider.ts` extending `AIProvider`
-2. Implement all abstract methods: `extractRequirements`, `extractBehaviors`, `planTestScenarios`, `generateTestCasesFromScenarios`, `generateDevPlanWorkflowBackend`, `generateDevPlanFrontend`, `generateDevPlanTesting`, `generateDevPrompt`, `chat`
-3. Register the provider in `AIProviderFactory` and add the API key mapping
+2. Implement all abstract methods defined in `ai-provider.abstract.ts` (extraction, scenario planning, test case generation, dev plan sections, dev prompt sections, chat)
+3. Register the provider in `ai.module.ts` and `AIProviderFactory`
+4. Add the API key env var mapping in `AIController`'s `KEY_MAP` and `SUPPORTED_MODELS` in `ai.constants.ts`
 
 ## Extending Storage
 
-The `IStorageProvider` interface (`modules/storage/storage.interface.ts`) defines `save`, `getSignedUrl`, and `delete`. Swap `LocalStorageAdapter` for an S3 implementation by implementing the interface and rebinding the `STORAGE_PROVIDER` injection token in `StorageModule`.
+The `IStorageProvider` interface (`modules/storage/storage.interface.ts`) defines `upload`, `getUrl`, and `delete`. Swap `LocalStorageAdapter` for an S3 implementation by implementing the interface and rebinding the `STORAGE_PROVIDER` injection token in `StorageModule`.
 
 ## Future Integrations
 
 - **Jira sync** — `DeveloperTask` records are designed to map 1:1 to Jira tickets. A sync adapter can POST tasks to Jira and write back the ticket ID.
 - **S3 storage** — replace `LocalStorageAdapter` with an S3 adapter for production file storage.
-- **Context caching** — Gemini's `CachedContent` API is not yet wired; Claude's `cache_control` is active on all pipeline calls.
+- **Context caching** — Gemini's `CachedContent` API is not yet wired; Claude's `cache_control` is active on all pipeline calls via `experimental_providerMetadata`.

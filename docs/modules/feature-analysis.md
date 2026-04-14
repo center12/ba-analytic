@@ -30,6 +30,7 @@
 | POST | `/api/feature-analysis/feature/:featureId/run-step-5-section/:section` | `section`: `backend`\|`api`\|`frontend`\|`testing`, query provider/model, body:`promptAppend?` | section result | `400 invalid section/prereq` |
 | POST | `/api/feature-analysis/feature/:featureId/resume-step1` | query provider/model | resumed extraction | `400` if step1 not FAILED |
 | PATCH | `/api/feature-analysis/feature/:featureId/step-results` | body edited step payload | persisted step output | `400` invalid body |
+| POST | `/api/feature-analysis/feature/:featureId/extract-sub-features` | query:`provider?`,`model?` | `SubFeature[]` (no records created) | `404 feature` |
 
 ## Core Flows (top 3)
 ### Full pipeline run (steps 1–5)

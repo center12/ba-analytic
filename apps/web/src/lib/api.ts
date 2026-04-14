@@ -2,6 +2,10 @@ import { getStoredToken, removeStoredToken } from '@/features/auth/helpers/auth.
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
+export function getStorageUrl(storageKey: string): string {
+  return `${BASE_URL}/storage/${storageKey}`;
+}
+
 export interface AIModelInfo {
   id: string;
   label: string;

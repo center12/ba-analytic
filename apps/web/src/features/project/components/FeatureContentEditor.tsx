@@ -1,11 +1,12 @@
 import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type Feature, type FeatureType, type SSRData, type UserStories } from '@/lib/api';
+import { api, getStorageUrl, type Feature, type FeatureType, type SSRData, type UserStories } from '@/lib/api';
 import { MarkdownPreview } from '@/components/ui/MarkdownPreview';
 import { toast } from '@/hooks/use-toast';
 import { useAppStore } from '@/store';
 import { Save, X, Upload, Eye, Edit2, Trash2, FileText, Copy, Play, RefreshCw, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
+import { ImageLightbox } from './ImageLightbox';
 import { MultiSelect } from '@/components/ui/multi-select';
 import {
   SSR_DOCUMENT_TEMPLATE,
@@ -47,6 +48,7 @@ export function FeatureContentEditor({ feature, allFeatures, onClose }: FeatureC
   const [content, setContent] = useState(feature.content ?? '');
   const [featureType, setFeatureType] = useState<FeatureType>(feature.featureType ?? 'FEATURE');
   const [relatedIds, setRelatedIds] = useState<string[]>(feature.relatedFeatureIds ?? []);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const updateMutation = useMutation({
     mutationFn: () =>
@@ -264,12 +266,13 @@ export function FeatureContentEditor({ feature, allFeatures, onClose }: FeatureC
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Uploaded images</p>
           <div className="flex flex-wrap gap-2">
-            {feature.screenshots.map((s) => (
+            {feature.screenshots.map((s, i) => (
               <div key={s.id} className="relative group">
                 <img
-                  src={`/api/storage/${s.storageKey}`}
+                  src={getStorageUrl(s.storageKey)}
                   alt={s.originalName}
-                  className="h-16 w-16 object-cover rounded border"
+                  className="h-16 w-16 object-cover rounded border cursor-zoom-in"
+                  onClick={() => setLightboxIndex(i)}
                 />
                 <button
                   onClick={() => deleteImgMutation.mutate(s.id)}
@@ -281,6 +284,14 @@ export function FeatureContentEditor({ feature, allFeatures, onClose }: FeatureC
             ))}
           </div>
         </div>
+      )}
+
+      {lightboxIndex !== null && feature.screenshots && (
+        <ImageLightbox
+          images={feature.screenshots.map((s) => ({ src: getStorageUrl(s.storageKey), alt: s.originalName }))}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
 
       {/* Related features */}

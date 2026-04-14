@@ -1,13 +1,13 @@
 # Documentation Index
-_Last updated: 2026-04-13_
+_Last updated: 2026-04-14_
 ## Frontend Features (`apps/web/src/features/`)
 | Feature | Doc | Purpose |
 |---------|-----|---------|
 | auth | [docs/features/auth.md](features/auth.md) | Login/logout and JWT token management |
 | user | [docs/features/user.md](features/user.md) | Admin interface for creating and listing users |
-| project | [docs/features/project.md](features/project.md) | CRUD for projects/features and per-project AI pipeline config |
-| feature | [docs/features/feature.md](features/feature.md) | Feature detail view with BA doc/screenshot upload and 5-step AI pipeline wizard |
-| feature-analysis | [docs/features/feature-analysis.md](features/feature-analysis.md) | Test case list with priority/status management and step-by-step detail view |
+| project | [docs/features/project.md](features/project.md) | CRUD for projects/features, feature content editing, screenshot upload, SSR sub-feature extraction, and pipeline config |
+| feature | [docs/features/feature.md](features/feature.md) | Feature detail page for running the 5-step AI pipeline, reviewing outputs, and accessing developer tasks |
+| feature-analysis | [docs/features/feature-analysis.md](features/feature-analysis.md) | Test case list with priority/status management and step-by-step detail view (embedded in FeatureDetailPage) |
 | test-case | [docs/features/test-case.md](features/test-case.md) | Display and manage AI-generated test cases |
 | chat | [docs/features/chat.md](features/chat.md) | SSE streaming AI chat sidebar scoped to a feature |
 | dev-task | [docs/features/dev-task.md](features/dev-task.md) | Developer task prompts grouped by API/Frontend/Testing |
