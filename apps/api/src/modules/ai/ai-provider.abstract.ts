@@ -323,6 +323,19 @@ export interface DevPlan {
   testing:   TestingPlan;
 }
 
+/**
+ * Compact representation of a related feature's dev plan, injected into Step 4
+ * prompts so the AI knows which entities, APIs, and components already exist and
+ * should be referenced rather than re-created.
+ */
+export interface RelatedFeatureDevPlan {
+  featureName: string;
+  featureCode: string;
+  workflow?: WorkflowStep[];
+  backend?: BackendPlan;
+  frontend?: FrontendPlan;
+}
+
 export type ScenarioType = 'happy_path' | 'edge_case' | 'error' | 'boundary' | 'security';
 
 export interface TestScenario {
@@ -1144,16 +1157,41 @@ export function buildDevPlanWorkflowBackendPrompt(
   behaviors: ExtractedBehaviors,
   scenarios: TestScenario[],
   userStories?: UserStory[],
+  relatedFeatures?: RelatedFeatureDevPlan[],
 ): string {
   const userStoriesSection = userStories && userStories.length > 0 ? `
 ## User Stories
 ${userStories.map(s => `${s.id} [${s.priority}]: As a ${s.actor}, I want ${s.action}, so that ${s.benefit}`).join('\n')}
 ` : '';
 
+  const relatedFeaturesSection = relatedFeatures && relatedFeatures.length > 0 ? `
+## Shared Architecture (from related SSR features)
+
+IMPORTANT: The entities, API routes, and structures below are ALREADY implemented by related features in the same SSR.
+DO NOT redefine or duplicate them. Reference them by name only. Only design what is NEW or SPECIFIC to THIS feature.
+
+${relatedFeatures.map(rf => {
+  const entityLines = rf.backend?.database?.entities?.map(e =>
+    `  - ${e.name} (table: ${e.tableName})` +
+    (e.fields?.length ? ` — fields: ${e.fields.map(f => f.name).join(', ')}` : '')
+  ).join('\n') ?? '';
+  const routeLines = rf.backend?.apiRoutes?.map(r => `  - ${r.method} ${r.path} — ${r.description}`).join('\n') ?? '';
+  const componentLines = rf.frontend?.components?.join(', ') ?? '';
+  const workflowLines = rf.workflow?.map(w => `  - ${w.order}. ${w.title} (${w.actor})`).join('\n') ?? '';
+  return `### [${rf.featureCode}] ${rf.featureName}
+${entityLines ? `#### Database Entities\n${entityLines}` : ''}
+${routeLines ? `#### API Routes\n${routeLines}` : ''}
+${componentLines ? `#### Frontend Components\n  ${componentLines}` : ''}
+${workflowLines ? `#### Workflow Steps\n${workflowLines}` : ''}`.trim();
+}).join('\n\n')}
+
+---
+` : '';
+
   return `You are a senior software architect. Based on the feature analysis below, define the user workflow and produce a comprehensive, highly technical backend plan.
 
 LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values in that same language. Do not translate or mix languages.
-
+${relatedFeaturesSection}
 ## Feature: ${behaviors.feature}
 ${userStoriesSection}
 ## Actors
@@ -1316,6 +1354,7 @@ export function buildDevPlanFrontendPrompt(
   workflowSummary: string,
   backendPlan?: BackendPlan | null,
   userStories?: UserStory[],
+  relatedFeatures?: RelatedFeatureDevPlan[],
 ): string {
   const backendContractSection = backendPlan ? `
 ## Backend Contract
@@ -1339,10 +1378,27 @@ ${backendPlan.security.map(s => `- ${s}`).join('\n')}` : ''}` : '';
 ${userStories.map(s => `${s.id} [${s.priority}]: As a ${s.actor}, I want ${s.action}, so that ${s.benefit}`).join('\n')}
 ` : '';
 
+  const relatedFeaturesFrontendSection = relatedFeatures && relatedFeatures.length > 0 ? `
+## Shared Frontend Architecture (from related SSR features)
+
+IMPORTANT: The components and pages below are ALREADY implemented by related features in the same SSR.
+DO NOT recreate them. Reuse or extend them. Only design what is NEW or SPECIFIC to THIS feature.
+
+${relatedFeatures.map(rf => {
+  const componentLines = rf.frontend?.components?.join(', ') ?? '';
+  const routeLines = rf.backend?.apiRoutes?.map(r => `  - ${r.method} ${r.path} — ${r.description}`).join('\n') ?? '';
+  return `### [${rf.featureCode}] ${rf.featureName}
+${componentLines ? `#### Existing Components\n  ${componentLines}` : ''}
+${routeLines ? `#### Available API Routes\n${routeLines}` : ''}`.trim();
+}).join('\n\n')}
+
+---
+` : '';
+
   return `You are a senior frontend architect. Based on the feature analysis, workflow, and backend contract below, design the complete frontend architecture.
 
 LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values in that same language. Do not translate or mix languages.
-
+${relatedFeaturesFrontendSection}
 ## Feature: ${behaviors.feature}
 ${userStoriesSection4B}
 ## Actors
@@ -1793,6 +1849,7 @@ export abstract class AIProvider {
     scenarios: TestScenario[],
     promptAppend?: string,
     userStories?: UserStory[],
+    relatedFeatures?: RelatedFeatureDevPlan[],
   ): Promise<{ workflow: WorkflowStep[]; backend: BackendPlan }>;
 
   /**
@@ -1806,6 +1863,7 @@ export abstract class AIProvider {
     backendPlan?: BackendPlan | null,
     promptAppend?: string,
     userStories?: UserStory[],
+    relatedFeatures?: RelatedFeatureDevPlan[],
   ): Promise<FrontendPlan>;
 
   /**

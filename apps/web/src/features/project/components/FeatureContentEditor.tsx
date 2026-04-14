@@ -6,6 +6,7 @@ import { MarkdownPreview } from '@/components/ui/MarkdownPreview';
 import { toast } from '@/hooks/use-toast';
 import { useAppStore } from '@/store';
 import { Save, X, Upload, Eye, Edit2, Trash2, FileText, Copy, Play, RefreshCw, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
+import { MultiSelect } from '@/components/ui/multi-select';
 import {
   SSR_DOCUMENT_TEMPLATE,
   FEATURE_DOCUMENT_TEMPLATE,
@@ -92,12 +93,6 @@ export function FeatureContentEditor({ feature, allFeatures, onClose }: FeatureC
   });
 
   const otherFeatures = allFeatures.filter((f) => f.id !== feature.id);
-
-  const toggleRelated = (id: string) => {
-    setRelatedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  };
 
   const handleUseTemplate = () => {
     const template = featureType === 'SSR' ? SSR_DOCUMENT_TEMPLATE : FEATURE_DOCUMENT_TEMPLATE;
@@ -292,24 +287,16 @@ export function FeatureContentEditor({ feature, allFeatures, onClose }: FeatureC
       {otherFeatures.length > 0 && (
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Related features & rules (added as pipeline context)</p>
-          <div className="flex flex-wrap gap-2">
-            {otherFeatures.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => toggleRelated(f.id)}
-                className={`text-xs px-2 py-1 rounded border transition-colors ${
-                  relatedIds.includes(f.id)
-                    ? 'bg-primary/10 border-primary text-primary'
-                    : 'hover:bg-muted'
-                }`}
-              >
-                {f.name}
-                {f.featureType === 'SSR' && (
-                  <span className="ml-1 text-muted-foreground">(SSR)</span>
-                )}
-              </button>
-            ))}
-          </div>
+          <MultiSelect
+            options={otherFeatures.map((f) => ({
+              value: f.id,
+              label: f.featureType === 'SSR' ? `${f.name} (SSR)` : f.name,
+            }))}
+            defaultValue={relatedIds}
+            onValueChange={setRelatedIds}
+            placeholder="Select related features..."
+            maxCount={5}
+          />
         </div>
       )}
 

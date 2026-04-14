@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileText, Loader2, Play, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Loader2, Play, RefreshCw } from 'lucide-react';
 import {
   api,
   Feature,
@@ -39,6 +40,7 @@ interface PipelineStep4Props {
   onPromptAppendChange: (v: string) => void;
   sectionPromptAppend: Record<Step4Section, string>;
   onSectionPromptAppendChange: (section: Step4Section, v: string) => void;
+  relatedFeaturesWithPlan?: Feature[];
 }
 
 type Step4Section = 'workflow-backend' | 'frontend' | 'testing-backend' | 'testing-frontend';
@@ -164,7 +166,9 @@ export function PipelineStep4({
   onPromptAppendChange,
   sectionPromptAppend,
   onSectionPromptAppendChange,
+  relatedFeaturesWithPlan = [],
 }: PipelineStep4Props) {
+  const [expandedRelated, setExpandedRelated] = useState<Record<string, boolean>>({});
   const canRun = previousStepCompleted && !isRunning;
 
   // Parse whichever sections are already available
@@ -269,6 +273,53 @@ export function PipelineStep4({
           onSave={() => handleManualSave(4)}
           onCancel={closeManual}
         />
+      )}
+
+      {/* Shared architecture from related SSR features */}
+      {relatedFeaturesWithPlan.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">
+            Shared architecture context — injected into generation prompt
+          </p>
+          {relatedFeaturesWithPlan.map((rf) => {
+            let rfWorkflow: WorkflowStep[] | null = null;
+            let rfBackend: BackendPlan | null = null;
+            let rfFrontend: FrontendPlan | null = null;
+            try { if (rf.devPlanWorkflow) rfWorkflow = JSON.parse(rf.devPlanWorkflow); } catch {}
+            try { if (rf.devPlanBackend)  rfBackend  = JSON.parse(rf.devPlanBackend);  } catch {}
+            try { if (rf.devPlanFrontend) rfFrontend = JSON.parse(rf.devPlanFrontend); } catch {}
+            const isOpen = expandedRelated[rf.id] ?? false;
+            const rfDevPlan = buildDevPlan(rfWorkflow, rfBackend, rfFrontend, null);
+            const entityCount = rfBackend?.database?.entities?.length ?? 0;
+            const routeCount = rfBackend?.apiRoutes?.length ?? 0;
+            const componentCount = rfFrontend?.components?.length ?? 0;
+            return (
+              <div key={rf.id} className="border rounded-md overflow-hidden">
+                <button
+                  onClick={() => setExpandedRelated((prev) => ({ ...prev, [rf.id]: !isOpen }))}
+                  className="w-full flex items-center justify-between px-3 py-2 bg-muted/30 hover:bg-muted/50 text-left"
+                >
+                  <span className="text-xs font-medium">
+                    [{rf.code}] {rf.name}
+                    <span className="ml-2 font-normal text-muted-foreground">
+                      {[
+                        entityCount && `${entityCount} entities`,
+                        routeCount  && `${routeCount} routes`,
+                        componentCount && `${componentCount} components`,
+                      ].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                  {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                </button>
+                {isOpen && (
+                  <div className="px-3 py-3">
+                    <DevPlanPanel devPlan={rfDevPlan} sectionsFilter={['workflow', 'backend', 'frontend']} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {/* Per-section panels — always visible when previousStepCompleted */}

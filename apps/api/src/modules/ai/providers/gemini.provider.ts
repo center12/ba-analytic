@@ -38,6 +38,7 @@ import {
   extractAcceptanceCriteriaIds,
   Layer1ABPartial,
   Mapping,
+  RelatedFeatureDevPlan,
   SSRData,
   TestScenario,
   UserStories,
@@ -614,10 +615,11 @@ ${baDocumentContent}`;
     scenarios: TestScenario[],
     promptAppend?: string,
     userStories?: UserStory[],
+    relatedFeatures?: RelatedFeatureDevPlan[],
   ): Promise<{ workflow: WorkflowStep[]; backend: BackendPlan }> {
     this.logger.log('[Step 4A] Generating workflow + backend plan...');
     const prompt4a = appendPromptInstructions(
-      buildDevPlanWorkflowBackendPrompt(requirements, behaviors, scenarios, userStories),
+      buildDevPlanWorkflowBackendPrompt(requirements, behaviors, scenarios, userStories, relatedFeatures),
       promptAppend,
     );
     this.logPromptSize('[Step 4A]', prompt4a);
@@ -640,10 +642,11 @@ ${baDocumentContent}`;
     backendPlan?: BackendPlan | null,
     promptAppend?: string,
     userStories?: UserStory[],
+    relatedFeatures?: RelatedFeatureDevPlan[],
   ): Promise<FrontendPlan> {
     this.logger.log('[Step 4B] Generating frontend plan...');
     const prompt4b = appendPromptInstructions(
-      buildDevPlanFrontendPrompt(requirements, behaviors, workflowSummary, backendPlan, userStories),
+      buildDevPlanFrontendPrompt(requirements, behaviors, workflowSummary, backendPlan, userStories, relatedFeatures),
       promptAppend,
     );
     this.logPromptSize('[Step 4B]', prompt4b);

@@ -6,6 +6,7 @@ import type {
   ExtractedRequirements,
   FrontendPlan,
   Mapping,
+  RelatedFeatureDevPlan,
   SSRData,
   TestScenario,
   UserStories,
@@ -43,6 +44,7 @@ export interface Step4Context extends LoadedFeatureContext {
   compressedRequirements: ExtractedRequirements;
   compressedBehaviors: ExtractedBehaviors;
   compressedStories?: UserStory[];
+  relatedFeatures?: RelatedFeatureDevPlan[];
 }
 
 export interface Step5Context extends LoadedFeatureContext {

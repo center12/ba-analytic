@@ -257,6 +257,7 @@ export class PipelineStepRunnerService {
           context.testScenarios,
           normalizedPromptAppend,
           context.compressedStories,
+          context.relatedFeatures,
         ),
       );
 
@@ -270,6 +271,7 @@ export class PipelineStepRunnerService {
           undefined,
           normalizedPromptAppend,
           context.compressedStories,
+          context.relatedFeatures,
         ),
       );
 
@@ -335,6 +337,7 @@ export class PipelineStepRunnerService {
         context.testScenarios,
         normalizedPromptAppend,
         context.compressedStories,
+        context.relatedFeatures,
       ),
     );
 
@@ -343,28 +346,25 @@ export class PipelineStepRunnerService {
   }
 
   async runStep4b(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
-    const feature = await this.context.getFeature(featureId);
-    const requirements = feature.extractedRequirements as ExtractedRequirements | null;
-    const behaviors = feature.extractedBehaviors as ExtractedBehaviors | null;
+    const context = await this.context.getStep4Context(featureId);
+    const feature = context.feature;
     const workflow = this.context.tryParseJsonField<WorkflowStep[]>((feature as any).devPlanWorkflow);
     const backend = this.context.tryParseJsonField<BackendPlan>((feature as any).devPlanBackend);
-    if (!requirements || !behaviors) throw new BadRequestException(`Feature ${featureId} has no Layer 1 results — run Step 1 first`);
     if (!workflow) throw new BadRequestException(`Feature ${featureId} has no workflow — generate Workflow+Backend first`);
 
-    const userStories = this.context.getUserStories(feature);
-    const compressed = compressForDownstream(requirements, behaviors, userStories);
     const provider = await this.providerService.resolveProvider(featureId, 4, providerName, model);
     const normalizedPromptAppend = this.providerService.normalizePromptAppend(promptAppend);
 
     this.logger.log('[Pipeline] Step 4B (manual) — generating frontend plan');
     const frontend = await withRetry(() =>
       provider.generateDevPlanFrontend(
-        compressed.req,
-        compressed.beh,
+        context.compressedRequirements,
+        context.compressedBehaviors,
         this.context.buildWorkflowSummary(workflow),
         backend,
         normalizedPromptAppend,
-        compressed.stories,
+        context.compressedStories,
+        context.relatedFeatures,
       ),
     );
 

@@ -52,6 +52,19 @@ export function PipelineWizard({ featureId }: Props) {
     enabled: !!featureId,
   });
 
+  const { data: siblingFeatures = [] } = useQuery({
+    queryKey: ['features', feature?.projectId],
+    queryFn: () => api.features.list(feature!.projectId),
+    enabled: !!feature?.projectId,
+  });
+
+  const relatedFeaturesWithPlan = siblingFeatures.filter(
+    (f) =>
+      f.id !== featureId &&
+      feature?.relatedFeatureIds?.includes(f.id) &&
+      (f.devPlanWorkflow || f.devPlanBackend || f.devPlanFrontend),
+  );
+
   // Which steps are open
   const [openStep, setOpenStep] = useState<number>(1);
   // Edit mode per step
@@ -428,6 +441,7 @@ export function PipelineWizard({ featureId }: Props) {
           onSectionPromptAppendChange={(section, v) =>
             setStep4SectionPromptAppend((prev) => ({ ...prev, [section]: v }))
           }
+          relatedFeaturesWithPlan={relatedFeaturesWithPlan}
         />
       ),
     },

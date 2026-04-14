@@ -6,6 +6,7 @@ import type {
   ExtractedRequirements,
   FrontendPlan,
   Mapping,
+  RelatedFeatureDevPlan,
   SSRData,
   TestScenario,
   UserStories,
@@ -174,6 +175,7 @@ export class PipelineContextService {
 
     const userStories = this.getUserStories(feature);
     const compressed = compressForDownstream(requirements, behaviors, userStories);
+    const relatedFeatures = await this.loadRelatedFeatureDevPlans(feature);
 
     return {
       feature,
@@ -184,7 +186,36 @@ export class PipelineContextService {
       compressedRequirements: compressed.req,
       compressedBehaviors: compressed.beh,
       compressedStories: compressed.stories,
+      relatedFeatures,
     };
+  }
+
+  private async loadRelatedFeatureDevPlans(feature: any): Promise<RelatedFeatureDevPlan[] | undefined> {
+    const relatedIds = feature.relatedFeatureIds as string[] | null;
+    if (!relatedIds?.length) return undefined;
+
+    const relatedFeatures = await this.prisma.feature.findMany({
+      where: { id: { in: relatedIds } },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        devPlanWorkflow: true,
+        devPlanBackend: true,
+        devPlanFrontend: true,
+      },
+    });
+
+    const result: RelatedFeatureDevPlan[] = [];
+    for (const rf of relatedFeatures) {
+      const workflow = this.tryParseJsonField<WorkflowStep[]>((rf as any).devPlanWorkflow);
+      const backend = this.tryParseJsonField<BackendPlan>((rf as any).devPlanBackend);
+      const frontend = this.tryParseJsonField<FrontendPlan>((rf as any).devPlanFrontend);
+      if (workflow || backend || frontend) {
+        result.push({ featureName: rf.name, featureCode: rf.code, workflow, backend, frontend });
+      }
+    }
+    return result.length > 0 ? result : undefined;
   }
 
   async getStep5Context(featureId: string): Promise<Step5Context> {
