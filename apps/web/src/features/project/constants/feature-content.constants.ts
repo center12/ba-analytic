@@ -38,6 +38,12 @@ export const SSR_DOCUMENT_TEMPLATE = `# [System/Module Name] — System Requirem
 * **VR-01**: [Validation rule description]
 * **VR-02**: [Validation rule description]
 
+## System Rules
+* **SYS-01**: [System-level constraint: authentication, session management, audit logging, rate limiting, multi-tenancy isolation, etc.]
+
+## Global Policies
+* [Cross-cutting concern: GDPR/data retention, timezone handling, currency rules, accessibility requirements, etc.]
+
 ## Out of Scope
 * [Feature or behavior explicitly not covered by this module]
 
@@ -83,6 +89,12 @@ export const FEATURE_DOCUMENT_TEMPLATE = `# [Feature Name]
 
 ## Validation Rules
 * **VR-01**: [Validation description]
+
+## System Rules
+* **SYS-01**: [System-level constraint: authentication, audit logging, rate limiting, multi-tenancy isolation, etc.]
+
+## Global Policies
+* [Cross-cutting concern: data retention, timezone handling, currency rules, etc.]
 `;
 
 // ── SSR Conversion Prompt ─────────────────────────────────────────────────────
@@ -122,6 +134,12 @@ Use exactly this section structure:
 ## Validation Rules
 * **VR-01**: [Validation]
 
+## System Rules
+* **SYS-01**: [System constraint: auth, audit logging, rate limiting, multi-tenancy, etc.]
+
+## Global Policies
+* [Cross-cutting concern: data retention, timezone handling, currency rules, etc.]
+
 ## Out of Scope
 * [Items explicitly not covered]
 
@@ -131,7 +149,7 @@ Use exactly this section structure:
 
 IMPORTANT RULES:
 - Detect the language of the input document and write ALL output in that same language
-- Keep IDs (US-XX, FR-XX, BR-XX, AC-XX, VR-XX) sequential and consistent
+- Keep IDs (US-XX, FR-XX, BR-XX, AC-XX, VR-XX, SYS-XX) sequential and consistent
 - In Acceptance Criteria, always reference the relevant BR/FR IDs in the "Then" column
 - Do not invent requirements not present in the source document
 
@@ -177,9 +195,15 @@ Use exactly this section structure:
 ## Validation Rules
 * **VR-01**: [Validation]
 
+## System Rules
+* **SYS-01**: [System constraint: auth, session, audit logging, rate limiting, etc.]
+
+## Global Policies
+* [Cross-cutting concern: data retention, timezone handling, currency rules, etc.]
+
 IMPORTANT RULES:
 - Detect the language of the input document and write ALL output in that same language
-- Keep IDs (US-XX, FR-XX, BR-XX, AC-XX, VR-XX) sequential and consistent
+- Keep IDs (US-XX, FR-XX, BR-XX, AC-XX, VR-XX, SYS-XX) sequential and consistent
 - In Acceptance Criteria, always reference the relevant BR/FR IDs in the "Then" column
 - Be concise but complete — do not invent requirements not present in the source
 

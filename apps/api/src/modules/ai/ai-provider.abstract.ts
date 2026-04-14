@@ -640,6 +640,8 @@ USER STORY RULES:
 - Do NOT restate the full SSR inventory as stories.
 - Do NOT create umbrella stories that merely summarize many FR-xx items at once.
 - Stories must stay scoped to the primary feature document, not related-feature context.
+- Every story explicitly listed under "## User Stories" in the source document MUST appear in the output. Do not drop, merge, or replace source-defined US-xx stories with inferred ones.
+- SCOPE RULE: If the document contains a "## User Stories" section with one or more US-xx entries, output ONLY those explicitly listed stories — do NOT add inferred stories from FR-xx items. Link FR-xx items to the explicit stories via relatedRuleIds instead. Only infer stories from functional requirements when the document has NO "## User Stories" section at all.
 
 For each story:
 - id: sequential US-01, US-02, ... (preserve existing US-xx IDs if present in doc)
@@ -716,6 +718,7 @@ Consolidation rules:
 - Preserve AC IDs only in acceptanceCriteria arrays.
 - Preserve relatedRuleIds only when they truly govern the story; keep them traceable to the canonical SSR above.
 - Do not invent stories that are not supported by the primary feature document.
+- If the merged set contains US-xx stories that were explicitly authored in the source (they have sequential US-xx IDs that align with a "## User Stories" section), do NOT add inferred stories from FR-xx items. Remove any inferred story that lacks an explicit US-xx ID from the source.
 
 ${JSON.stringify(merged, null, 0)}
 
@@ -916,6 +919,10 @@ ${userStories.map(s =>
     ? `,\n    "userStoryId": "US-xx"`
     : '';
 
+  const scenarioCap = userStories && userStories.length > 0
+    ? Math.max(20, userStories.length * 2)
+    : 20;
+
   return `You are a QA strategist. Using the user stories and domain context below, identify ALL test scenarios that need to be covered.
 
 LANGUAGE RULE: Detect the primary language of the input data (English or Vietnamese). Write ALL output string values — titles and requirementRefs phrases — in that same language. Do not translate or mix languages.
@@ -940,7 +947,7 @@ For each scenario specify:
 - requirementRefs: which requirements or actions this scenario covers — use the item's ID when one is present (e.g. "FR-01", "BR-03", "AC-02", "US-01"); use a short phrase only when there is no ID
 ${userStoryInstruction}
 
-${userStories && userStories.length > 0 ? 'Generate at least one scenario per user story. ' : ''}Ensure complete coverage. Return at most 15 scenarios. Prioritise happy_path and error scenarios. Be concise — one line per title.
+${userStories && userStories.length > 0 ? 'Generate at least one happy_path and one error or edge_case scenario per user story. ' : ''}Ensure complete coverage. Return at most ${scenarioCap} scenarios. Prioritise happy_path and error scenarios. Be concise — one line per title.
 
 ---
 
@@ -993,7 +1000,7 @@ For each scenario write a concise test case:
 - description: one sentence describing what is being tested
 - preconditions: one sentence describing the required system state
 - priority: HIGH (critical path/security), MEDIUM (important features), LOW (edge cases)
-- steps: at most 6 steps, each action and expectedResult under 20 words
+- steps: at most 8 steps, each action and expectedResult under 25 words
 - When a scenario has userStoryId, use that user story's actor, action, benefit, acceptance criteria, and related rules as the primary testing intent
 - Use requirementRefs as supporting traceability context, not the primary planning unit
 
@@ -1090,6 +1097,9 @@ ${userStoriesSection}
 ## Actors
 ${behaviors.actors.map((a) => `- ${a}`).join('\n')}
 
+## Functional Requirements
+${requirements.features.length > 0 ? requirements.features.map((f) => `- ${f}`).join('\n') : '(none)'}
+
 ## Actions (atomic flows)
 ${behaviors.actions.map((a) => `- ${a}`).join('\n')}
 
@@ -1117,7 +1127,7 @@ ${sectionScope}
 - Group logically related scenarios together into each sub-task (e.g. "Authentication flows", "Data CRUD", "Error handling"), but do not overload one task beyond the 8-hour scope.
 - Title pattern: \`"API — [theme]"\`, \`"Frontend — [theme]"\`, \`"Testing — [theme]"\`.
 - Each sub-task prompt must be **fully self-contained** (embed all context needed to implement that slice).
-- Keep each sub-task prompt under **400 words**. Use placeholders for boilerplate — do not write full implementations.
+- Keep each sub-task prompt under **600 words**. Use placeholders for boilerplate — do not write full implementations.
 - Always return arrays — for simple features (1 sub-task), still return an array with one element.
 ${userStories && userStories.length > 0 ? '- userStoryIds: list the US-xx IDs that this sub-task implements.\n' : ''}
 ## Prompt Quality Rules (apply to every sub-task prompt)
@@ -1199,6 +1209,9 @@ ${behaviors.actors.map(a => `- ${a}`).join('\n')}
 
 ## Actions (atomic flows)
 ${behaviors.actions.map(a => `- ${a}`).join('\n')}
+
+## Functional Requirements
+${requirements.features.length > 0 ? requirements.features.map(f => `- ${f}`).join('\n') : '(none)'}
 
 ## Business Rules
 ${behaviors.rules.map(r => `- ${r}`).join('\n')}
