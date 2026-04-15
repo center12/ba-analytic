@@ -4,7 +4,7 @@ import { FeatureType } from '@prisma/client';
 export class CreateFeatureDto {
   @IsString()
   @MinLength(1)
-  name: string;
+  name!: string;
 
   @IsOptional()
   @IsString()

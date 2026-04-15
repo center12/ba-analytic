@@ -85,6 +85,7 @@
 ### POST `/feature-analysis/feature/:featureId/run-step-5-section/:section` — run Step 5 section (`promptAppend?`)
 - `backend` (alias `api`) | `frontend` | `testing`
 ### GET `/feature-analysis/feature/:featureId/step-prompt/:step` — fetch manual prompt text
+### GET `/projects/:projectId/features` — load sibling features for pipeline context (query key: `['features', projectId]`)
 
 ---
 

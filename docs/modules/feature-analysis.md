@@ -2,7 +2,7 @@
 **Purpose**: Runs the multi-step AI pipeline to transform BA docs into scenarios, test cases, dev plans, and developer tasks.
 
 ## Scope
-- In: pipeline step orchestration (run/resume/sectional runs), FeatureAnalysis CRUD, prompt preview, manual result saving
+- In: pipeline step orchestration (run/resume/sectional runs), FeatureAnalysis CRUD, prompt preview, manual result saving, SSR sub-feature sync lifecycle (OUT_OF_SYNC / IN_SYNC / DIVERGED), document version AI diff generation
 - Out: model inference delegated to `AIProviderFactory`; file access delegated to `StorageModule`; project configs read from `project` data
 
 ## Data Model
@@ -31,6 +31,11 @@
 | POST | `/api/feature-analysis/feature/:featureId/resume-step1` | query provider/model | resumed extraction | `400` if step1 not FAILED |
 | PATCH | `/api/feature-analysis/feature/:featureId/step-results` | body edited step payload | persisted step output | `400` invalid body |
 | POST | `/api/feature-analysis/feature/:featureId/extract-sub-features` | query:`provider?`,`model?` | `SubFeature[]` (no records created) | `404 feature` |
+| GET | `/api/feature-analysis/ssr/:ssrId/sync-warnings` | path:`ssrId` | OUT_OF_SYNC extracted features for the SSR | — |
+| GET | `/api/feature-analysis/feature/:featureId/sync-status` | path:`featureId` | `{ syncStatus, syncChangeReason }` | — |
+| POST | `/api/feature-analysis/feature/:featureId/sync/update` | path:`featureId` | 204 — re-derives content from SSR Layer-1, sets IN_SYNC | `400` no SSR/layer1, `404` |
+| POST | `/api/feature-analysis/feature/:featureId/sync/keep` | path:`featureId` | 204 — marks feature DIVERGED, preserves content | `404` |
+| DELETE | `/api/feature-analysis/feature/:featureId/sync/remove` | path:`featureId` | 204 — deletes extracted feature and related data | `404` |
 
 ## Core Flows (top 3)
 ### Full pipeline run (steps 1–5)
@@ -46,6 +51,11 @@
 3. `run-step-5-section/:section` dispatches per category; `api` alias maps to backend.
 4. Optional `promptAppend` (≤ 2000 chars) appended to final AI prompt at runtime; never persisted.
 5. Each step sets pipeline status `RUNNING`/`FAILED`/`COMPLETED`.
+
+### SSR Sync lifecycle
+1. After Step 1 re-runs on an SSR feature, `FeatureSyncService.markAffectedOutOfSync` compares old vs new user stories via `ChangeDetectionService` and marks only affected extracted features `OUT_OF_SYNC`.
+2. Frontend calls `GET /ssr/:ssrId/sync-warnings` to list features needing review.
+3. User resolves each: `sync/update` re-derives content from SSR Layer-1 data → `IN_SYNC`; `sync/keep` marks `DIVERGED` and preserves content; `sync/remove` deletes the extracted feature entirely.
 
 ### Manual edit persistence
 1. `saveStepResults` accepts user-edited payload for steps 1–5.
@@ -65,4 +75,5 @@
 
 ## Dependencies
 - Depends on: `PrismaService`, `AIModule` (`AIProviderFactory`), `StorageModule` (`STORAGE_PROVIDER`)
-- Used by: feature detail pipeline wizard UI, dev-task module data, project pipeline config at runtime
+- Exports: `ChangeDetectionService`, `FeatureSyncService`, `DocumentVersionService`, `PipelineStepRunnerService` — consumed by `ProjectModule` (publish flow)
+- Used by: feature detail pipeline wizard UI, dev-task module data, project pipeline config at runtime, `ProjectModule` (publish triggers Step 1 re-run and AI changelog diff)

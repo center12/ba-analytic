@@ -14,6 +14,8 @@ Write or paste a BA specification as **Markdown content** directly in the featur
 
 An AI chat sidebar lets you ask questions about the feature in the context of all pipeline outputs. A per-project **Pipeline AI Configuration** panel lets you set different AI providers and models per pipeline step.
 
+**Document versioning**: each feature has a **Publish** button that snapshots the content, bumps a version counter (DRAFT → PUBLISHED), records an AI-generated changelog diff, and automatically re-runs Step 1. For SSR features, publishing triggers an **SSR Sync** check: extracted sub-features that are affected by the content change are flagged as OUT_OF_SYNC. The UI presents a resolution dialog where each conflicted sub-feature can be individually updated (re-derived from the new SSR content), kept as-is (marked DIVERGED), or deleted.
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -213,6 +215,29 @@ Two feature types are supported, each with an auto-generated code:
 
 SSR features get an **Extract Sub-Features** button on the project page. Clicking it sends the SSR content to the AI, which returns a list of sub-features that can then be confirmed and created as individual `FEATURE` records.
 
+## Document Versioning & SSR Sync
+
+### Publishing a Feature
+
+Each feature starts in **DRAFT** status. Clicking **Publish** in the content editor:
+
+1. Snapshots the current content and bumps `publishedVersion`
+2. Sets `contentStatus = PUBLISHED`
+3. Creates a `FeatureChangelog` entry; an AI diff summary is generated asynchronously and written back to the entry
+4. Triggers **Step 1** (Layer 1 extraction) asynchronously if the content changed
+
+Editing the content of a PUBLISHED feature resets its status back to DRAFT until it is published again.
+
+### SSR Sync Resolution
+
+When an **SSR** feature is published with changed content, the platform compares the old and new user stories extracted by Step 1. Extracted `FEATURE` records that trace to modified, added, or removed stories are marked **OUT_OF_SYNC**. A sync warning dialog appears on the project page with three resolution options per conflicted feature:
+
+| Action | Result |
+|---|---|
+| **Update** | Re-derives the feature content from the parent SSR's current Layer-1 output → `IN_SYNC` |
+| **Keep** | Preserves the feature's current content, marks it `DIVERGED` (won't be flagged again) |
+| **Remove** | Permanently deletes the extracted feature |
+
 ## BA Document Format
 
 Feature content is written as **Markdown** directly in the inline editor on the project detail page. The editor provides template buttons (SSR and FEATURE templates) and a copy-ready AI conversion prompt if you need to convert an existing document.
@@ -323,6 +348,8 @@ The SSE chat stream (`/api/chat/sessions/:id/stream`) passes the token as a quer
 | PUT | `/api/projects/features/:id` | required | Update feature content / name / relatedFeatureIds |
 | DELETE | `/api/projects/features/:id` | required | Delete feature |
 | POST | `/api/projects/features/:id/upload/screenshot` | required | Upload screenshot |
+| POST | `/api/projects/features/:id/publish` | required | Publish feature (snapshot, bump version, trigger Step 1) |
+| GET | `/api/projects/features/:id/changelog` | required | Get version history with AI-generated diffs |
 | GET | `/api/projects/:id/pipeline-config` | required | Get per-step AI config |
 | PUT | `/api/projects/:id/pipeline-config` | required | Upsert per-step AI config |
 | DELETE | `/api/projects/:id/pipeline-config/:step` | required | Remove step config override |
@@ -337,6 +364,11 @@ The SSE chat stream (`/api/chat/sessions/:id/stream`) passes the token as a quer
 | GET | `/api/feature-analysis/feature/:id/step-prompt/:step` | required | Get the AI prompt for a step (for manual flow) |
 | PATCH | `/api/feature-analysis/feature/:id/step-results` | required | Save user-edited step output without re-running AI |
 | POST | `/api/feature-analysis/feature/:id/extract-sub-features` | required | AI-extract sub-features from an SSR document |
+| GET | `/api/feature-analysis/ssr/:ssrId/sync-warnings` | required | List OUT_OF_SYNC extracted features for an SSR |
+| GET | `/api/feature-analysis/feature/:id/sync-status` | required | Get current sync state for an extracted feature |
+| POST | `/api/feature-analysis/feature/:id/sync/update` | required | Re-sync from parent SSR (→ IN_SYNC) |
+| POST | `/api/feature-analysis/feature/:id/sync/keep` | required | Keep current content, mark DIVERGED |
+| DELETE | `/api/feature-analysis/feature/:id/sync/remove` | required | Delete extracted feature |
 | PUT | `/api/feature-analysis/:id` | required | Update a test case (e.g. change status) |
 | DELETE | `/api/feature-analysis/:id` | required | Delete a test case |
 | GET | `/api/dev-tasks/feature/:id` | required | List developer tasks for a feature |
