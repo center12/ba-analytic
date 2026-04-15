@@ -5,9 +5,10 @@ import { api, getStorageUrl, type Feature, type FeatureType, type SSRData, type 
 import { MarkdownPreview } from '@/components/ui/MarkdownPreview';
 import { toast } from '@/hooks/use-toast';
 import { useAppStore } from '@/store';
-import { Save, X, Upload, Eye, Edit2, Trash2, FileText, Copy, Play, RefreshCw, CheckCircle2, Loader2, ExternalLink, Send } from 'lucide-react';
+import { Save, X, Upload, Eye, Edit2, Trash2, FileText, Copy, Play, RefreshCw, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
 import { ImageLightbox } from './ImageLightbox';
 import { FeatureChangelogPanel } from './FeatureChangelogPanel';
+import { PublishButton } from './PublishButton';
 import { MultiSelect } from '@/components/ui/multi-select';
 import {
   SSR_DOCUMENT_TEMPLATE,
@@ -20,7 +21,7 @@ interface FeatureContentEditorProps {
   feature: Feature;
   allFeatures: Feature[];
   onClose: () => void;
-  /** Called after a successful publish save — parent uses this to open sync warnings dialog for SSR features. */
+  /** Called after the publish changelog is reviewed and confirmed. */
   onPublish?: (featureId: string) => void;
 }
 
@@ -66,23 +67,6 @@ export function FeatureContentEditor({ feature, allFeatures, onClose, onPublish 
     },
   });
 
-  const publishMutation = useMutation({
-    mutationFn: async () => {
-      // Save content first (in case featureType/relatedIds changed), then publish
-      await api.features.update(feature.id, { content, featureType, relatedFeatureIds: relatedIds });
-      return api.features.publish(feature.id);
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['features', feature.projectId] });
-      qc.invalidateQueries({ queryKey: ['feature-changelog', feature.id] });
-      toast({ variant: 'success', title: 'Published', description: 'Document saved and published.' });
-      onPublish?.(feature.id);
-      onClose();
-    },
-    onError: (err: Error) => {
-      toast({ variant: 'destructive', title: 'Failed to publish', description: err.message });
-    },
-  });
 
   const uploadImgMutation = useMutation({
     mutationFn: (file: File) => api.features.uploadScreenshot(feature.id, file),
@@ -344,19 +328,24 @@ export function FeatureContentEditor({ feature, allFeatures, onClose, onPublish 
 
       {/* Actions */}
       <div className="flex items-center gap-2 pt-1">
-        <button
-          onClick={() => publishMutation.mutate()}
-          disabled={publishMutation.isPending || updateMutation.isPending}
-          className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-1.5 rounded text-sm hover:opacity-90 disabled:opacity-50"
-          title={featureType === 'SSR' ? 'Save and notify affected extracted features' : 'Save and mark as published'}
-        >
-          {publishMutation.isPending
-            ? <><Loader2 size={14} className="animate-spin" /> Publishing...</>
-            : <><Send size={14} /> Publish</>}
-        </button>
+        <PublishButton
+          feature={feature}
+          projectId={feature.projectId}
+          content={content}
+          featureType={featureType}
+          relatedFeatureIds={relatedIds}
+          disabled={updateMutation.isPending}
+          onPublishSuccess={() => {
+            if (onPublish) {
+              onPublish(feature.id);
+              return;
+            }
+            onClose();
+          }}
+        />
         <button
           onClick={() => updateMutation.mutate()}
-          disabled={updateMutation.isPending || publishMutation.isPending}
+          disabled={updateMutation.isPending}
           className="flex items-center gap-1 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50"
         >
           {updateMutation.isPending
