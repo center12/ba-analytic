@@ -1,11 +1,20 @@
 import { Controller, Get, Param, Res, NotFoundException, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiProduces,
+  ApiTags,
+} from '@nestjs/swagger';
 import * as fs from 'fs';
 import * as path from 'path';
 import { lookup as mimeLookup } from 'mime-types';
 import { STORAGE_PROVIDER, IStorageProvider } from './storage.interface';
 import { Public } from '../auth/decorators/public.decorator';
 
+@ApiTags('Storage')
 @Controller('storage')
 export class StorageController {
   private readonly uploadDir: string;
@@ -18,6 +27,22 @@ export class StorageController {
   }
 
   @Public()
+  @ApiOperation({
+    summary: 'Serve a stored file',
+    description: 'This endpoint is public and streams files directly from the configured upload directory.',
+    security: [],
+  })
+  @ApiParam({ name: '0', description: 'Wildcard path for the storage object key.' })
+  @ApiProduces('application/octet-stream')
+  @ApiOkResponse({
+    description: 'Binary file stream.',
+    content: {
+      'application/octet-stream': {
+        schema: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiNotFoundResponse({ description: 'File not found or invalid path.' })
   @Get('*')
   serveFile(@Param('0') key: string, @Res() res: any) {
     const filePath = path.join(this.uploadDir, key);
