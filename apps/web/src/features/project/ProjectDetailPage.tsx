@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type Feature } from '@/lib/api';
-import { ArrowLeft, PlusCircle, Layers, Trash2, ChevronDown, ChevronUp, Sparkles, FileText } from 'lucide-react';
+import { ArrowLeft, PlusCircle, Layers, Trash2, ChevronUp, Sparkles, FileText, AlertTriangle, Pencil } from 'lucide-react';
 import { PipelineConfigEditor } from './components/PipelineConfigEditor';
 import { ProjectOverview } from './components/ProjectOverview';
 import { FeatureContentEditor } from './components/FeatureContentEditor';
 import { SSRExtractModal } from './components/SSRExtractModal';
+import { SSRSyncWarningDialog } from './components/SSRSyncWarningDialog';
 import { AppFeedbackDialog } from '@/features/feedback/components/AppFeedbackDialog';
+import { useSSRSyncWarnings } from './hooks/use-feature-sync';
 import {
   Dialog,
   DialogContent,
@@ -36,7 +38,15 @@ export function ProjectDetailPage() {
   const [showForm, setShowForm] = useState(false);
   const [expandedFeatureId, setExpandedFeatureId] = useState<string | null>(null);
   const [ssrExtractFeatureId, setSsrExtractFeatureId] = useState<string | null>(null);
+  const [ssrSyncWarningId, setSsrSyncWarningId] = useState<string | null>(null);
   const [featureToDelete, setFeatureToDelete] = useState<Feature | null>(null);
+
+  const { data: ssrSyncWarnings } = useSSRSyncWarnings(ssrSyncWarningId ?? undefined);
+
+  // Auto-dismiss sync warning state if no conflicts exist after publish
+  const handlePublishSsrId = (featureId: string) => {
+    setSsrSyncWarningId(featureId);
+  };
 
   const { data: project } = useQuery({
     queryKey: ['projects', projectId],
@@ -177,6 +187,9 @@ export function ProjectDetailPage() {
           {features.map((f: Feature) => {
             const badge = FEATURE_TYPE_BADGE[f.featureType ?? 'FEATURE'];
             const isExpanded = expandedFeatureId === f.id;
+            const outOfSyncCount = f.featureType === 'SSR'
+              ? features.filter((child: Feature) => child.extractedFromSSRId === f.id && child.syncStatus === 'OUT_OF_SYNC').length
+              : 0;
 
             return (
               <div key={f.id} className="bg-card border rounded-lg overflow-hidden">
@@ -191,9 +204,23 @@ export function ProjectDetailPage() {
                       <span className={`text-xs px-2 py-0.5 rounded-full border ${badge.className}`}>
                         {badge.label}
                       </span>
-                      {f.content && (
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <FileText size={11} /> Has content
+                      {f.contentStatus === 'PUBLISHED' ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 border border-green-200">
+                          Published v{f.publishedVersion}
+                        </span>
+                      ) : f.content ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center gap-1">
+                          <FileText size={10} /> Draft
+                        </span>
+                      ) : null}
+                      {f.syncStatus === 'OUT_OF_SYNC' && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center gap-1">
+                          <AlertTriangle size={10} /> Out of Sync
+                        </span>
+                      )}
+                      {f.syncStatus === 'DIVERGED' && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+                          Diverged
                         </span>
                       )}
                     </div>
@@ -211,18 +238,32 @@ export function ProjectDetailPage() {
                         <Sparkles size={12} /> Extract
                       </button>
                     )}
+                    {f.featureType === 'SSR' && outOfSyncCount > 0 && (
+                      <button
+                        onClick={() => setSsrSyncWarningId(f.id)}
+                        className="flex items-center gap-1 text-xs border border-yellow-300 px-2 py-1 rounded bg-yellow-50 text-yellow-800 hover:bg-yellow-100 transition-colors"
+                        title="Review out-of-sync extracted features"
+                      >
+                        <AlertTriangle size={12} /> {outOfSyncCount} out of sync
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setExpandedFeatureId(isExpanded ? null : f.id)}
+                      className="flex items-center gap-1 text-xs border px-2 py-1 rounded hover:bg-muted"
+                      title="Edit document content"
+                    >
+                      <Pencil size={12} />
+                      {isExpanded ? (
+                        <><ChevronUp size={12} /> Close</>
+                      ) : (
+                        'Edit'
+                      )}
+                    </button>
                     <button
                       onClick={() => navigate(`/projects/${projectId}/features/${f.id}`)}
                       className="text-xs border px-2 py-1 rounded hover:bg-muted"
                     >
                       Pipeline
-                    </button>
-                    <button
-                      onClick={() => setExpandedFeatureId(isExpanded ? null : f.id)}
-                      className="p-1.5 rounded hover:bg-muted text-muted-foreground"
-                      title="Edit content"
-                    >
-                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
                     <button
                       onClick={() => setFeatureToDelete(f)}
@@ -239,6 +280,12 @@ export function ProjectDetailPage() {
                       feature={f}
                       allFeatures={features}
                       onClose={() => setExpandedFeatureId(null)}
+                      onPublish={(featureId) => {
+                        setExpandedFeatureId(null);
+                        if (f.featureType === 'SSR') {
+                          handlePublishSsrId(featureId);
+                        }
+                      }}
                     />
                   </div>
                 )}
@@ -258,6 +305,15 @@ export function ProjectDetailPage() {
           provider={activeProvider ?? undefined}
           model={activeModel ?? undefined}
           onClose={() => setSsrExtractFeatureId(null)}
+        />
+      )}
+
+      {/* SSR Sync Warning Dialog */}
+      {ssrSyncWarningId && (
+        <SSRSyncWarningDialog
+          projectId={projectId!}
+          warnings={ssrSyncWarnings ?? null}
+          onClose={() => setSsrSyncWarningId(null)}
         />
       )}
 

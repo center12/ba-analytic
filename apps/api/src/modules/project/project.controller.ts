@@ -85,6 +85,18 @@ export class ProjectController {
     return this.service.deleteFeature(featureId);
   }
 
+  // ── Document Versioning ───────────────────────────────────────────────────
+
+  @Post('features/:featureId/publish')
+  publishFeature(@Param('featureId') featureId: string) {
+    return this.service.publishFeature(featureId);
+  }
+
+  @Get('features/:featureId/changelog')
+  getFeatureChangelog(@Param('featureId') featureId: string) {
+    return this.service.getFeatureChangelog(featureId);
+  }
+
   // ── File Uploads ──────────────────────────────────────────────────────────
 
   @Post('features/:featureId/upload/screenshot')

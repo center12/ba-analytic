@@ -107,7 +107,11 @@ function buildExtractedFeatureName(parentFeatureCode: string, storyId: string, f
   return normalizedFullName ? `${parentFeatureCode}-${storyId}: ${normalizedFullName}` : `${parentFeatureCode}-${storyId}`;
 }
 
-function deriveItemsFromFeature(feature: Feature, parentFeatureCode: string): SubFeatureItem[] {
+interface ExtractedItem extends SubFeatureItem {
+  storyId?: string;
+}
+
+function deriveItemsFromFeature(feature: Feature, parentFeatureCode: string): ExtractedItem[] {
   const storiesData = parseLayer1Field<UserStories>(feature.layer1Stories);
   const stories = storiesData?.stories ?? [];
 
@@ -115,6 +119,7 @@ function deriveItemsFromFeature(feature: Feature, parentFeatureCode: string): Su
     name: buildExtractedFeatureName(parentFeatureCode, story.id, story.action),
     description: story.benefit,
     content: storyToContent(story, feature),
+    storyId: story.id,
   }));
 }
 
@@ -143,7 +148,7 @@ export function SSRExtractModal({
   const resolvedFeatureCode = feature.code || resolvedFeatureId;
   const resolvedProjectId = feature.projectId || projectId || '';
   const resolvedFeatureName = feature.name || featureName || 'this SSR';
-  const [extracted, setExtracted] = useState<SubFeatureItem[]>([]);
+  const [extracted, setExtracted] = useState<ExtractedItem[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [step, setStep] = useState<'required' | 'extracted'>('required');
 
@@ -196,6 +201,8 @@ export function SSRExtractModal({
           content: item.content,
           featureType: 'FEATURE',
           relatedFeatureIds: [resolvedFeatureId],
+          extractedFromSSRId: resolvedFeatureId,
+          ...(item.storyId ? { extractedRequirementIds: [item.storyId] } : {}),
         });
       }
       return toCreate.length;
@@ -219,7 +226,7 @@ export function SSRExtractModal({
     });
   };
 
-  const updateItem = (index: number, field: keyof SubFeatureItem, value: string) => {
+  const updateItem = (index: number, field: keyof ExtractedItem, value: string) => {
     setExtracted((prev) => prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)));
   };
 

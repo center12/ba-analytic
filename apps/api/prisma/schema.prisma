@@ -73,14 +73,45 @@ model Feature {
   pipelineStep          Int?
   pipelineFailedAt      Int?
   pipelinePartial       Json?
+
+  // Document versioning
+  contentStatus         ContentStatus @default(DRAFT)
+  publishedVersion      Int           @default(0)
+  publishedContent      String?       @db.Text     // snapshot of last published content (for diff)
+
+  // SSR extraction & sync tracking
+  extractedFromSSRId    String?                    // FK to parent SSR feature (nullable)
+  extractedRequirementIds Json?                    // Array of requirement IDs: ["US-001", "US-002"]
+  syncStatus            FeatureSyncStatus @default(IN_SYNC)  // Tracks if extracted feature is in sync with parent SSR
+  lastSyncedWithSSRAt   DateTime?                  // Timestamp of last successful sync
+  syncChangeReason      String?                    // 'document_published' | 'story_changed'
+
   project               Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  extractedFromSSR      Feature?      @relation("ExtractedFrom", fields: [extractedFromSSRId], references: [id], onDelete: SetNull)
+  extractedFeatures     Feature[]     @relation("ExtractedFrom")
   baDocument            BADocument?
   screenshots           Screenshot[]
   featureAnalyses       FeatureAnalysis[]
   chatSessions          ChatSession[]
   developerTasks        DeveloperTask[]
+  featureChangelogs     FeatureChangelog[]
 
   @@unique([projectId, code])
+  @@index([extractedFromSSRId])
+  @@index([extractedFromSSRId, syncStatus])
+}
+
+model FeatureChangelog {
+  id              String   @id @default(cuid())
+  featureId       String
+  version         Int
+  contentSnapshot String   @db.Text
+  changeSummary   String?  @db.Text  // AI-generated diff, null until AI finishes
+  layerSnapshot   Json?              // { layer1Stories, layer1SSR, layer1Mapping, layer1Validation } for change detection on next publish
+  publishedAt     DateTime @default(now())
+  feature         Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@index([featureId])
 }
 
 model BADocument {
@@ -171,6 +202,17 @@ enum DevTaskCategory {
   API
   FRONTEND
   TESTING
+}
+
+enum FeatureSyncStatus {
+  IN_SYNC
+  OUT_OF_SYNC
+  DIVERGED
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
 }
 
 model User {

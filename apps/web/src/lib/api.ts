@@ -118,13 +118,19 @@ export const api = {
   features: {
     list: (projectId: string) => request<Feature[]>(`/projects/${projectId}/features`),
     get: (featureId: string) => request<Feature>(`/projects/features/${featureId}`),
-    create: (projectId: string, data: { name: string; description?: string; featureType?: FeatureType; content?: string; relatedFeatureIds?: string[] }) =>
+    create: (projectId: string, data: { name: string; description?: string; featureType?: FeatureType; content?: string; relatedFeatureIds?: string[]; extractedFromSSRId?: string; extractedRequirementIds?: string[] }) =>
       request<Feature>(`/projects/${projectId}/features`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     update: (featureId: string, data: Partial<{ name: string; description: string; content: string; featureType: FeatureType; relatedFeatureIds: string[] }>) =>
       request<Feature>(`/projects/features/${featureId}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+    publish: (featureId: string) =>
+      request<PublishFeatureResponse>(`/projects/features/${featureId}/publish`, { method: 'POST' }),
+
+    getChangelog: (featureId: string) =>
+      request<FeatureChangelog[]>(`/projects/features/${featureId}/changelog`),
 
     delete: (featureId: string) =>
       request<void>(`/projects/features/${featureId}`, { method: 'DELETE' }),
@@ -292,6 +298,24 @@ export const api = {
         { method: 'POST' },
       );
     },
+
+    // ── SSR Sync ────────────────────────────────────────────────────────────
+    getSSRSyncWarnings: (ssrId: string) =>
+      request<SSRSyncWarningsResponse>(`/feature-analysis/ssr/${ssrId}/sync-warnings`),
+
+    getSyncStatus: (featureId: string) =>
+      request<{ id: string; code: string | null; name: string; syncStatus: FeatureSyncStatus; extractedFromSSRId: string | null; extractedRequirementIds: string[] | null; lastSyncedWithSSRAt: string | null }>(
+        `/feature-analysis/feature/${featureId}/sync-status`,
+      ),
+
+    syncUpdate: (featureId: string) =>
+      request<void>(`/feature-analysis/feature/${featureId}/sync/update`, { method: 'POST' }),
+
+    syncKeep: (featureId: string) =>
+      request<void>(`/feature-analysis/feature/${featureId}/sync/keep`, { method: 'POST' }),
+
+    syncRemove: (featureId: string) =>
+      request<void>(`/feature-analysis/feature/${featureId}/sync/remove`, { method: 'DELETE' }),
   },
 
   chat: {
@@ -456,6 +480,21 @@ export interface SubFeatureItem {
   content?: string;
 }
 
+export type ContentStatus = 'DRAFT' | 'PUBLISHED';
+
+export interface FeatureChangelog {
+  id: string;
+  featureId: string;
+  version: number;
+  changeSummary: string | null;
+  publishedAt: string;
+}
+
+export interface PublishFeatureResponse {
+  feature: Feature;
+  changelog: FeatureChangelog | null;
+}
+
 export interface Feature {
   id: string;
   projectId: string;
@@ -463,6 +502,8 @@ export interface Feature {
   name: string;
   description?: string;
   content?: string | null;
+  contentStatus?: ContentStatus;
+  publishedVersion?: number;
   featureType?: FeatureType;
   relatedFeatureIds?: string[];
   createdAt: string;
@@ -486,6 +527,27 @@ export interface Feature {
   pipelineStatus?: 'IDLE' | 'RUNNING' | 'FAILED' | 'COMPLETED';
   pipelineStep?: number | null;
   pipelineFailedAt?: number | null;
+  /** SSR parent tracking fields */
+  extractedFromSSRId?: string | null;
+  extractedRequirementIds?: string[] | null;
+  syncStatus?: FeatureSyncStatus;
+  lastSyncedWithSSRAt?: string | null;
+}
+
+export type FeatureSyncStatus = 'IN_SYNC' | 'OUT_OF_SYNC' | 'DIVERGED';
+
+export interface SSRSyncWarningsResponse {
+  ssrId: string;
+  outOfSyncFeatures: Array<{
+    id: string;
+    code: string | null;
+    name: string;
+    syncStatus: FeatureSyncStatus;
+    syncChangeReason: string | null;
+    extractedRequirementIds: string[] | null;
+    lastSyncedWithSSRAt: string | null;
+  }>;
+  hasConflicts: boolean;
 }
 
 export interface Screenshot {

@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { FeatureAnalysisController } from './feature-analysis.controller';
 import { FeatureAnalysisService } from './feature-analysis.service';
+import { ChangeDetectionService } from './change-detection.service';
+import { FeatureSyncService } from './feature-sync.service';
+import { DocumentVersionService } from './document-version.service';
 import { PrismaService } from '../../prisma.service';
 import { AIModule } from '../ai/ai.module';
 import { StorageModule } from '../storage/storage.module';
@@ -16,13 +19,17 @@ import { PipelineStepRunnerService } from './pipeline/pipeline-step-runner.servi
   controllers: [FeatureAnalysisController],
   providers: [
     FeatureAnalysisService,
+    ChangeDetectionService,
+    FeatureSyncService,
     PipelineOrchestratorService,
     PipelineStepRunnerService,
     PipelineContextService,
     PipelinePersistenceService,
     PipelineProviderService,
     PipelinePromptPreviewService,
+    DocumentVersionService,
     PrismaService,
   ],
+  exports: [ChangeDetectionService, FeatureSyncService, DocumentVersionService, PipelineStepRunnerService],
 })
 export class FeatureAnalysisModule {}

@@ -26,6 +26,7 @@ import { AI_CONFIG } from '../constants/feature-analysis.constants';
 import { PipelineContextService } from './pipeline-context.service';
 import { PipelinePersistenceService } from './pipeline-persistence.service';
 import { PipelineProviderService } from './pipeline-provider.service';
+import { FeatureSyncService } from '../feature-sync.service';
 import type { Layer1ResumePartial } from './types/pipeline-context.types';
 import type {
   SaveStepResultsPayload,
@@ -61,16 +62,30 @@ export class PipelineStepRunnerService {
     private readonly context: PipelineContextService,
     private readonly persistence: PipelinePersistenceService,
     private readonly providerService: PipelineProviderService,
+    private readonly featureSync: FeatureSyncService,
     @Inject(STORAGE_PROVIDER) private readonly storage: IStorageProvider,
   ) {}
 
   async runStep1(featureId: string, providerName?: string, model?: string, promptAppend?: string) {
     await this.persistence.markStepStarted(featureId, 1);
+    // Capture old stories before re-running (for OUT_OF_SYNC detection on SSR features)
+    const featureBefore = await this.prisma.feature.findUnique({
+      where: { id: featureId },
+      select: { featureType: true, layer1Stories: true },
+    });
+    const oldStories: UserStory[] = featureBefore?.layer1Stories
+      ? (JSON.parse(featureBefore.layer1Stories as string) as UserStories).stories ?? []
+      : [];
     try {
       const provider = await this.providerService.resolveProvider(featureId, 1, providerName, model);
       const normalizedPromptAppend = this.providerService.normalizePromptAppend(promptAppend);
       const layer1 = await this.extractLayer1(featureId, provider, 0, null, undefined, normalizedPromptAppend);
-      return this.persistence.saveLayer1Result(featureId, layer1, await this.resolveLegacyAcceptanceCriteria(featureId));
+      const result = await this.persistence.saveLayer1Result(featureId, layer1, await this.resolveLegacyAcceptanceCriteria(featureId));
+      // Mark extracted features as OUT_OF_SYNC when parent SSR stories change
+      if (featureBefore?.featureType === 'SSR') {
+        await this.featureSync.markAffectedOutOfSync(featureId, oldStories, layer1.stories.stories ?? []);
+      }
+      return result;
     } catch (error) {
       const feature = await this.prisma.feature.findUnique({ where: { id: featureId }, select: { pipelineStatus: true } });
       if (feature?.pipelineStatus !== 'FAILED') {

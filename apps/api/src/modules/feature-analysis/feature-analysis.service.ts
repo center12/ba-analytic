@@ -7,6 +7,12 @@ import { PipelineProviderService } from './pipeline/pipeline-provider.service';
 import { PipelineStepRunnerService } from './pipeline/pipeline-step-runner.service';
 import type { SaveStepResultsPayload } from './pipeline/types/pipeline.types';
 import type { SSRData, UserStories, UserStory, SubFeatureItem } from '../ai/ai-provider.abstract';
+import {
+  buildExtractedFeatureName,
+  extractPrefixedId,
+  filterItemsByIds,
+  storyToMarkdown,
+} from './helpers/ssr-story.helpers';
 
 @Injectable()
 export class FeatureAnalysisService {
@@ -146,160 +152,13 @@ export class FeatureAnalysisService {
     const legacyAcceptanceCriteria = (feature.extractedRequirements as any)?.acceptanceCriteria as string[] | undefined;
 
     const features: SubFeatureItem[] = parsedStories.stories.map((story: UserStory) => ({
-      name: this.buildExtractedFeatureName(feature.code ?? feature.id, story.id, story.action),
+      name: buildExtractedFeatureName(feature.code ?? feature.id, story.id, story.action),
       description: story.benefit,
-      content: this.storyToMarkdown(story, parsedSSR, legacyAcceptanceCriteria ?? [], feature.name),
+      content: storyToMarkdown(story, parsedSSR, legacyAcceptanceCriteria ?? [], feature.name),
     }));
 
     return { features };
   }
 
-  private buildExtractedFeatureName(featureCode: string, storyId: string, fullName?: string): string {
-    const normalizedFullName = fullName?.trim();
-    return normalizedFullName ? `${featureCode}-${storyId}: ${normalizedFullName}` : `${featureCode}-${storyId}`;
-  }
-
-  private extractPrefixedId(text: string): string | null {
-    const match = text.match(/\b([A-Z]{2,}-\d+)\b/i);
-    return match ? match[1].toUpperCase() : null;
-  }
-
-  private filterItemsByIds(items: string[], ids: string[]): string[] {
-    const idSet = new Set(ids.map((id) => id.toUpperCase()));
-    return items.filter((item) => {
-      const extractedId = this.extractPrefixedId(item);
-      return extractedId ? idSet.has(extractedId) : false;
-    });
-  }
-
-  private storyToMarkdown(
-    story: UserStory,
-    ssr: SSRData | null,
-    legacyAcceptanceCriteria: string[],
-    parentFeatureName: string,
-  ): string {
-    const lines: string[] = [];
-    const relatedRuleIds = story.relatedRuleIds ?? [];
-    const acIds = story.acceptanceCriteria ?? [];
-    const allConstraints = ssr?.constraints ?? [];
-
-    // Separate VR-xx (validation) from AC-xx (acceptance criteria) within constraints
-    const validationRules = this.filterItemsByIds(
-      allConstraints.filter((item) => /\bVR-\d+\b/i.test(item)),
-      relatedRuleIds,
-    );
-
-    // AC lookup: prefer new-pipeline source (AC-xx items in ssr.constraints), fall back to legacy
-    const acConstraintItems = allConstraints.filter((item) => /\bAC-\d+\b/i.test(item));
-    const acFromConstraints = acIds.length > 0
-      ? this.filterItemsByIds(acConstraintItems, acIds)
-      : acConstraintItems;
-    const acFromLegacy = acIds.length > 0
-      ? this.filterItemsByIds(legacyAcceptanceCriteria, acIds)
-      : [];
-    const acceptanceCriteria = acFromConstraints.length > 0 ? acFromConstraints : acFromLegacy;
-
-    const functionalRequirements = this.filterItemsByIds(ssr?.functionalRequirements ?? [], relatedRuleIds);
-    const businessRules = this.filterItemsByIds(ssr?.businessRules ?? [], relatedRuleIds);
-    const systemRules = this.filterItemsByIds(ssr?.systemRules ?? [], relatedRuleIds);
-    const globalPolicies = this.filterItemsByIds(ssr?.globalPolicies ?? [], relatedRuleIds);
-
-    // ── Title & Overview ──────────────────────────────────────────────────────
-    lines.push(`# ${story.action}`, '');
-    lines.push('## Overview', '');
-    lines.push(`${story.actor} needs to ${story.action} so that ${story.benefit}.`, '');
-
-    // ── Actors table ──────────────────────────────────────────────────────────
-    lines.push('## Actors', '');
-    lines.push('| Actor | Role |');
-    lines.push('| :--- | :--- |');
-    lines.push(`| ${story.actor} | Performs this feature (priority: ${story.priority}) |`);
-    lines.push('');
-
-    // ── User Stories (standard format) ────────────────────────────────────────
-    lines.push('## User Stories', '');
-    lines.push(`* **${story.id}**: As a ${story.actor}, I want to ${story.action} so that ${story.benefit}.`);
-    lines.push('');
-
-    // ── Functional Requirements ───────────────────────────────────────────────
-    lines.push('## Functional Requirements', '');
-    if (functionalRequirements.length) {
-      functionalRequirements.forEach((item) => lines.push(`* ${item}`));
-    } else {
-      lines.push('*(none identified — see parent SSR)*');
-    }
-    lines.push('');
-
-    // ── Business Rules ────────────────────────────────────────────────────────
-    lines.push('## Business Rules', '');
-    if (businessRules.length) {
-      businessRules.forEach((item) => lines.push(`* ${item}`));
-    } else {
-      lines.push('*(none identified — see parent SSR)*');
-    }
-    lines.push('');
-
-    // ── Acceptance Criteria ───────────────────────────────────────────────────
-    lines.push('## Acceptance Criteria', '');
-    if (acceptanceCriteria.length) {
-      lines.push('| ID | Description |');
-      lines.push('| :--- | :--- |');
-      acceptanceCriteria.forEach((item) => {
-        const id = this.extractPrefixedId(item) ?? '—';
-        const desc = item.replace(/\b[A-Z]{2,}-\d+\b:?\s*/i, '').trim() || item;
-        lines.push(`| ${id} | ${desc} |`);
-      });
-    } else if (acIds.length) {
-      // IDs known but text unavailable — emit placeholder table rows so extraction picks up the IDs
-      lines.push('| ID | Given | When | Then |');
-      lines.push('| :--- | :--- | :--- | :--- |');
-      acIds.forEach((acId) => lines.push(`| ${acId} | *(see parent SSR)* | *(see parent SSR)* | *(see parent SSR)* |`));
-    } else {
-      lines.push('*(none specified)*');
-    }
-    lines.push('');
-
-    // ── Data Entities ─────────────────────────────────────────────────────────
-    if (ssr?.entities?.length) {
-      lines.push('## Data Entities', '');
-      lines.push('*(Referenced from parent SSR — see source document for full field definitions.)*', '');
-      ssr.entities.forEach((entity) => lines.push(`- ${entity}`));
-      lines.push('');
-    }
-
-    // ── Validation Rules ──────────────────────────────────────────────────────
-    lines.push('## Validation Rules', '');
-    if (validationRules.length) {
-      validationRules.forEach((item) => lines.push(`* ${item}`));
-    } else {
-      lines.push('*(none identified — see parent SSR)*');
-    }
-    lines.push('');
-
-    // ── System Rules ──────────────────────────────────────────────────────────
-    lines.push('## System Rules', '');
-    if (systemRules.length) {
-      systemRules.forEach((item) => lines.push(`* ${item}`));
-    } else {
-      lines.push('*(none identified — see parent SSR)*');
-    }
-    lines.push('');
-
-    // ── Global Policies ───────────────────────────────────────────────────────
-    if (globalPolicies.length) {
-      lines.push('## Global Policies', '');
-      globalPolicies.forEach((item) => lines.push(`* ${item}`));
-      lines.push('');
-    }
-
-    // ── Assumptions & Dependencies ────────────────────────────────────────────
-    lines.push('## Assumptions & Dependencies', '');
-    lines.push(`* **Dependencies**: Derived from SSR "${parentFeatureName}" — refer to the parent SSR for complete context.`);
-    if (relatedRuleIds.length) {
-      lines.push(`* **Assumptions**: Traceability to ${relatedRuleIds.join(', ')}.`);
-    }
-    lines.push('');
-
-    return lines.join('\n');
-  }
 }
+

@@ -1950,4 +1950,17 @@ export abstract class AIProvider {
    * a list of discrete features/user stories from it.
    */
   abstract extractSubFeaturesFromSSR(ssrContent: string): Promise<SubFeatureItem[]>;
+
+  /**
+   * Compare two versions of a BA document and return a human-readable
+   * changelog summary describing what changed between them.
+   */
+  abstract summarizeDocumentChanges(previousContent: string, newContent: string): Promise<DocumentChangeSummary>;
+}
+
+export interface DocumentChangeSummary {
+  summary: string;
+  added: string[];
+  removed: string[];
+  modified: string[];
 }

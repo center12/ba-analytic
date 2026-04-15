@@ -5,8 +5,9 @@ import { api, getStorageUrl, type Feature, type FeatureType, type SSRData, type 
 import { MarkdownPreview } from '@/components/ui/MarkdownPreview';
 import { toast } from '@/hooks/use-toast';
 import { useAppStore } from '@/store';
-import { Save, X, Upload, Eye, Edit2, Trash2, FileText, Copy, Play, RefreshCw, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
+import { Save, X, Upload, Eye, Edit2, Trash2, FileText, Copy, Play, RefreshCw, CheckCircle2, Loader2, ExternalLink, Send } from 'lucide-react';
 import { ImageLightbox } from './ImageLightbox';
+import { FeatureChangelogPanel } from './FeatureChangelogPanel';
 import { MultiSelect } from '@/components/ui/multi-select';
 import {
   SSR_DOCUMENT_TEMPLATE,
@@ -19,6 +20,8 @@ interface FeatureContentEditorProps {
   feature: Feature;
   allFeatures: Feature[];
   onClose: () => void;
+  /** Called after a successful publish save — parent uses this to open sync warnings dialog for SSR features. */
+  onPublish?: (featureId: string) => void;
 }
 
 function parseJsonField<T>(raw: string | null | undefined): T | null {
@@ -38,7 +41,7 @@ function getLayer1Counts(feature: Feature): { rules: number; stories: number } |
   return { rules, stories };
 }
 
-export function FeatureContentEditor({ feature, allFeatures, onClose }: FeatureContentEditorProps) {
+export function FeatureContentEditor({ feature, allFeatures, onClose, onPublish }: FeatureContentEditorProps) {
   const qc = useQueryClient();
   const imgRef = useRef<HTMLInputElement>(null);
   const activeProvider = useAppStore((s) => s.activeProvider);
@@ -60,6 +63,24 @@ export function FeatureContentEditor({ feature, allFeatures, onClose }: FeatureC
     },
     onError: (err: Error) => {
       toast({ variant: 'destructive', title: 'Failed to save', description: err.message });
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      // Save content first (in case featureType/relatedIds changed), then publish
+      await api.features.update(feature.id, { content, featureType, relatedFeatureIds: relatedIds });
+      return api.features.publish(feature.id);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['features', feature.projectId] });
+      qc.invalidateQueries({ queryKey: ['feature-changelog', feature.id] });
+      toast({ variant: 'success', title: 'Published', description: 'Document saved and published.' });
+      onPublish?.(feature.id);
+      onClose();
+    },
+    onError: (err: Error) => {
+      toast({ variant: 'destructive', title: 'Failed to publish', description: err.message });
     },
   });
 
@@ -114,6 +135,8 @@ export function FeatureContentEditor({ feature, allFeatures, onClose }: FeatureC
   const layer1Counts = getLayer1Counts(feature);
   const hasLayer1 = !!layer1Counts;
   const hasContent = !!content.trim();
+  const isPublished = feature.contentStatus === 'PUBLISHED';
+  const canRunStep1First = isPublished && hasContent;
 
   return (
     <div className="space-y-4 pt-2">
@@ -245,20 +268,28 @@ export function FeatureContentEditor({ feature, allFeatures, onClose }: FeatureC
           ) : (
             <div className="flex items-center gap-2">
               <button
-                disabled={step1Mutation.isPending}
+                disabled={step1Mutation.isPending || !canRunStep1First}
                 onClick={() => step1Mutation.mutate()}
                 className="flex items-center gap-1.5 rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                title={!canRunStep1First ? 'Publish the document first to enable pipeline' : undefined}
               >
                 {step1Mutation.isPending
                   ? <><Loader2 size={12} className="animate-spin" /> Extracting...</>
                   : <><Play size={12} /> Run Step 1</>}
               </button>
               <span className="text-xs text-muted-foreground">
-                Extract rules and user stories from this document.
+                {canRunStep1First
+                  ? 'Extract rules and user stories from this document.'
+                  : 'Publish the document first to enable the pipeline.'}
               </span>
             </div>
           )}
         </div>
+      )}
+
+      {/* Version history */}
+      {(feature.contentStatus === 'PUBLISHED' || (feature.publishedVersion ?? 0) > 0) && (
+        <FeatureChangelogPanel featureId={feature.id} />
       )}
 
       {/* Uploaded images */}
@@ -312,13 +343,25 @@ export function FeatureContentEditor({ feature, allFeatures, onClose }: FeatureC
       )}
 
       {/* Actions */}
-      <div className="flex gap-2 pt-1">
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          onClick={() => publishMutation.mutate()}
+          disabled={publishMutation.isPending || updateMutation.isPending}
+          className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-1.5 rounded text-sm hover:opacity-90 disabled:opacity-50"
+          title={featureType === 'SSR' ? 'Save and notify affected extracted features' : 'Save and mark as published'}
+        >
+          {publishMutation.isPending
+            ? <><Loader2 size={14} className="animate-spin" /> Publishing...</>
+            : <><Send size={14} /> Publish</>}
+        </button>
         <button
           onClick={() => updateMutation.mutate()}
-          disabled={updateMutation.isPending}
-          className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1.5 rounded text-sm hover:opacity-90 disabled:opacity-50"
+          disabled={updateMutation.isPending || publishMutation.isPending}
+          className="flex items-center gap-1 border px-3 py-1.5 rounded text-sm hover:bg-muted disabled:opacity-50"
         >
-          <Save size={14} /> {updateMutation.isPending ? 'Saving...' : 'Save'}
+          {updateMutation.isPending
+            ? <><Loader2 size={14} className="animate-spin" /> Saving...</>
+            : <><Save size={14} /> Save draft</>}
         </button>
         <button
           onClick={onClose}

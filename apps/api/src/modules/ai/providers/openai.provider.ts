@@ -811,6 +811,30 @@ ${baDocumentContent}`;
     return null;
   }
 
+  async summarizeDocumentChanges(previousContent: string, newContent: string): Promise<import('../ai-provider.abstract').DocumentChangeSummary> {
+    this.logger.log('[DocumentVersion] Generating changelog summary...');
+    const prompt = `You are a technical documentation analyst. Compare these two versions of a BA document and describe what changed.
+
+--- PREVIOUS VERSION ---
+${previousContent}
+
+--- NEW VERSION ---
+${newContent}
+
+Return a structured changelog. Use the same language as the document.`;
+    const { object } = await generateObject({
+      model: openai(this.modelVersion),
+      schema: z.object({
+        summary: z.string().describe('One-sentence overview of the change'),
+        added: z.array(z.string()).describe('New sections, requirements, or features added'),
+        removed: z.array(z.string()).describe('Sections, requirements, or features removed'),
+        modified: z.array(z.string()).describe('Existing items that were changed, with brief description'),
+      }),
+      prompt,
+    });
+    return object;
+  }
+
   async extractSubFeaturesFromSSR(ssrContent: string): Promise<import('../ai-provider.abstract').SubFeatureItem[]> {
     this.logger.log('[SSR Extract] Extracting sub-features from SSR content...');
     const prompt = `You are a business analyst. Given the following SSR (System/Software Requirements Specification) document, extract a list of distinct features or user stories that should be implemented.

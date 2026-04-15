@@ -5,10 +5,12 @@ import { ProjectController } from './project.controller';
 import { ProjectService } from './project.service';
 import { PrismaService } from '../../prisma.service';
 import { StorageModule } from '../storage/storage.module';
+import { FeatureAnalysisModule } from '../feature-analysis/feature-analysis.module';
 
 @Module({
   imports: [
     StorageModule,
+    FeatureAnalysisModule,
     MulterModule.register({
       storage: memoryStorage(),
       limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB global cap

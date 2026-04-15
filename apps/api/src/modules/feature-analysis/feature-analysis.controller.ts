@@ -13,11 +13,16 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { FeatureAnalysisService } from './feature-analysis.service';
+import { FeatureSyncService } from './feature-sync.service';
 import { UpdateFeatureAnalysisDto } from './dto/update-feature-analysis.dto';
+import { SyncActionDto } from './dto/feature-sync.dto';
 
 @Controller('feature-analysis')
 export class FeatureAnalysisController {
-  constructor(private readonly service: FeatureAnalysisService) {}
+  constructor(
+    private readonly service: FeatureAnalysisService,
+    private readonly featureSync: FeatureSyncService,
+  ) {}
 
   /**
    * GET /api/feature-analysis/feature/:featureId/step-prompt/:step
@@ -174,5 +179,58 @@ export class FeatureAnalysisController {
     @Query('model') model?: string,
   ) {
     return this.service.extractSubFeaturesForFeature(featureId, provider, model);
+  }
+
+  // ── SSR Sync Endpoints ────────────────────────────────────────────────────
+
+  /**
+   * GET /api/feature-analysis/ssr/:ssrId/sync-warnings
+   * Returns all OUT_OF_SYNC extracted features for a given SSR.
+   * Used by the frontend to show the sync warning dialog after Step 1 re-runs.
+   */
+  @Get('ssr/:ssrId/sync-warnings')
+  getSSRSyncWarnings(@Param('ssrId') ssrId: string) {
+    return this.featureSync.getSSRSyncWarnings(ssrId);
+  }
+
+  /**
+   * GET /api/feature-analysis/feature/:featureId/sync-status
+   * Returns the current sync state for an extracted feature.
+   */
+  @Get('feature/:featureId/sync-status')
+  getSyncStatus(@Param('featureId') featureId: string) {
+    return this.featureSync.getSyncStatus(featureId);
+  }
+
+  /**
+   * POST /api/feature-analysis/feature/:featureId/sync/update
+   * Re-syncs the extracted feature's content from its parent SSR.
+   * Sets syncStatus = IN_SYNC.
+   */
+  @Post('feature/:featureId/sync/update')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  syncUpdate(@Param('featureId') featureId: string) {
+    return this.featureSync.updateFromSSR(featureId);
+  }
+
+  /**
+   * POST /api/feature-analysis/feature/:featureId/sync/keep
+   * Marks the feature as intentionally diverged from the parent SSR.
+   * Sets syncStatus = DIVERGED and preserves current content.
+   */
+  @Post('feature/:featureId/sync/keep')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  syncKeep(@Param('featureId') featureId: string) {
+    return this.featureSync.markDiverged(featureId);
+  }
+
+  /**
+   * DELETE /api/feature-analysis/feature/:featureId/sync/remove
+   * Deletes the extracted feature and all its related data.
+   */
+  @Delete('feature/:featureId/sync/remove')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  syncRemove(@Param('featureId') featureId: string) {
+    return this.featureSync.remove(featureId);
   }
 }
