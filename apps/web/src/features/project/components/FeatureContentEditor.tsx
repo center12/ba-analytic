@@ -1,11 +1,11 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getStorageUrl, type Feature, type FeatureType, type SSRData, type UserStories } from '@/lib/api';
-import { MarkdownPreview } from '@/components/ui/MarkdownPreview';
+import { DocumentEditor } from '@/components/ui/DocumentEditor';
 import { toast } from '@/hooks/use-toast';
 import { useAppStore } from '@/store';
-import { Save, X, Upload, Eye, Edit2, Trash2, FileText, Copy, Play, RefreshCw, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
+import { Save, X, Trash2, FileText, Copy, Play, RefreshCw, CheckCircle2, Loader2, ExternalLink } from 'lucide-react';
 import { ImageLightbox } from './ImageLightbox';
 import { FeatureChangelogPanel } from './FeatureChangelogPanel';
 import { PublishButton } from './PublishButton';
@@ -44,11 +44,9 @@ function getLayer1Counts(feature: Feature): { rules: number; stories: number } |
 
 export function FeatureContentEditor({ feature, allFeatures, onClose, onPublish }: FeatureContentEditorProps) {
   const qc = useQueryClient();
-  const imgRef = useRef<HTMLInputElement>(null);
   const activeProvider = useAppStore((s) => s.activeProvider);
   const activeModel = useAppStore((s) => s.activeModel);
 
-  const [tab, setTab] = useState<'edit' | 'preview'>('edit');
   const [content, setContent] = useState(feature.content ?? '');
   const [featureType, setFeatureType] = useState<FeatureType>(feature.featureType ?? 'FEATURE');
   const [relatedIds, setRelatedIds] = useState<string[]>(feature.relatedFeatureIds ?? []);
@@ -70,10 +68,8 @@ export function FeatureContentEditor({ feature, allFeatures, onClose, onPublish 
 
   const uploadImgMutation = useMutation({
     mutationFn: (file: File) => api.features.uploadScreenshot(feature.id, file),
-    onSuccess: (screenshot) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['features', feature.projectId] });
-      const imgMd = `\n![image](${screenshot.storageKey})\n`;
-      setContent((prev) => prev + imgMd);
       toast({ variant: 'success', title: 'Image uploaded' });
     },
     onError: (err: Error) => {
@@ -107,7 +103,6 @@ export function FeatureContentEditor({ feature, allFeatures, onClose, onPublish 
       if (!window.confirm('Replace current content with the template?')) return;
     }
     setContent(template);
-    setTab('edit');
   };
 
   const handleCopyPrompt = async () => {
@@ -143,73 +138,38 @@ export function FeatureContentEditor({ feature, allFeatures, onClose, onPublish 
       </div>
 
       {/* Content editor */}
-      <div className="border rounded-lg overflow-hidden">
-        <div className="flex border-b bg-muted/30">
-          <button
-            onClick={() => setTab('edit')}
-            className={`flex items-center gap-1 px-3 py-1.5 text-xs ${tab === 'edit' ? 'bg-background font-medium' : 'hover:bg-muted/50'}`}
-          >
-            <Edit2 size={12} /> Edit
-          </button>
-          <button
-            onClick={() => setTab('preview')}
-            className={`flex items-center gap-1 px-3 py-1.5 text-xs ${tab === 'preview' ? 'bg-background font-medium' : 'hover:bg-muted/50'}`}
-          >
-            <Eye size={12} /> Preview
-          </button>
-          <div className="flex-1" />
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <button
             onClick={handleUseTemplate}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs hover:bg-muted/50 text-muted-foreground"
+            className="flex items-center gap-1 rounded border px-2.5 py-1.5 text-xs hover:bg-muted"
             title="Insert document template"
           >
             <FileText size={12} /> Template
           </button>
           <button
             onClick={handleCopyPrompt}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs hover:bg-muted/50 text-muted-foreground"
+            className="flex items-center gap-1 rounded border px-2.5 py-1.5 text-xs hover:bg-muted"
             title="Copy AI conversion prompt to clipboard"
           >
             <Copy size={12} /> Copy AI Prompt
           </button>
-          <button
-            onClick={() => imgRef.current?.click()}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs hover:bg-muted/50 text-muted-foreground"
-            title="Upload image"
-          >
-            <Upload size={12} /> Image
-          </button>
-          <input
-            ref={imgRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) uploadImgMutation.mutate(f);
-              e.target.value = '';
-            }}
-          />
         </div>
-        {tab === 'edit' ? (
-          <textarea
-            className="w-full px-3 py-2 bg-background font-mono text-sm resize-y min-h-[220px] outline-none"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder={
-              featureType === 'SSR'
-                ? '# System Requirements Specification\n\nPaste or write your SSR document here, or click "Template" to start from a template...'
-                : '# Feature Description\n\nDescribe the feature requirements here, or click "Template" to start from a template...'
-            }
-          />
-        ) : (
-          <div className="px-3 py-2 min-h-[220px]">
-            {content ? (
-              <MarkdownPreview content={content} className="text-sm" />
-            ) : (
-              <p className="text-sm text-muted-foreground italic">Nothing to preview yet.</p>
-            )}
-          </div>
+        <DocumentEditor
+          markdown={content}
+          onChange={setContent}
+          placeholder={
+            featureType === 'SSR'
+              ? '# System Requirements Specification\n\nPaste or write your SSR document here, or use "Template" to start from a structured SSR document.'
+              : '# Feature Description\n\nDescribe the feature requirements here, or use "Template" to start from a structured feature document.'
+          }
+          uploadImage={async (file) => {
+            const screenshot = await uploadImgMutation.mutateAsync(file);
+            return screenshot.storageKey;
+          }}
+        />
+        {uploadImgMutation.isPending && (
+          <p className="text-xs text-muted-foreground">Uploading image...</p>
         )}
       </div>
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type Project } from '@/lib/api';
+import { DocumentEditor } from '@/components/ui/DocumentEditor';
 import { MarkdownPreview } from '@/components/ui/MarkdownPreview';
 import { toast } from '@/hooks/use-toast';
 import { Edit2, Save, X, Copy } from 'lucide-react';
@@ -88,10 +89,9 @@ export function ProjectOverview({ project }: ProjectOverviewProps) {
             </button>
           </div>
         </div>
-        <textarea
-          className="w-full border rounded-md px-3 py-2 bg-background font-mono text-sm resize-y min-h-[240px]"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+        <DocumentEditor
+          markdown={draft}
+          onChange={setDraft}
           placeholder="Write your project overview in Markdown..."
         />
         <div className="flex gap-2">

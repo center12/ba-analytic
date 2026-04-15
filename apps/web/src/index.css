@@ -59,6 +59,18 @@
 }
 
 @layer components {
+  .mdx-editor-shell {
+    @apply overflow-hidden rounded-lg border bg-background;
+  }
+
+  .mdx-editor-shell .cm-editor {
+    @apply min-h-[220px] text-sm;
+  }
+
+  .mdx-editor-shell .cm-scroller {
+    @apply min-h-[220px] font-mono;
+  }
+
   .prose {
     @apply max-w-none text-foreground leading-7;
   }
