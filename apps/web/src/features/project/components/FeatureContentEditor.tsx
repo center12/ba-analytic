@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getStorageUrl, type Feature, type FeatureType, type SSRData, type UserStories } from '@/lib/api';
@@ -20,7 +20,7 @@ import {
 interface FeatureContentEditorProps {
   feature: Feature;
   allFeatures: Feature[];
-  onClose: () => void;
+  onClose?: () => void;
   /** Called after the publish changelog is reviewed and confirmed. */
   onPublish?: (featureId: string) => void;
 }
@@ -52,13 +52,19 @@ export function FeatureContentEditor({ feature, allFeatures, onClose, onPublish 
   const [relatedIds, setRelatedIds] = useState<string[]>(feature.relatedFeatureIds ?? []);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
+  useEffect(() => {
+    setContent(feature.content ?? '');
+    setFeatureType(feature.featureType ?? 'FEATURE');
+    setRelatedIds(feature.relatedFeatureIds ?? []);
+    setLightboxIndex(null);
+  }, [feature.id]);
+
   const updateMutation = useMutation({
     mutationFn: () =>
       api.features.update(feature.id, { content, featureType, relatedFeatureIds: relatedIds }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['features', feature.projectId] });
       toast({ variant: 'success', title: 'Feature saved' });
-      onClose();
     },
     onError: (err: Error) => {
       toast({ variant: 'destructive', title: 'Failed to save', description: err.message });
@@ -300,7 +306,7 @@ export function FeatureContentEditor({ feature, allFeatures, onClose, onPublish 
               onPublish(feature.id);
               return;
             }
-            onClose();
+            onClose?.();
           }}
         />
         <button
@@ -312,12 +318,14 @@ export function FeatureContentEditor({ feature, allFeatures, onClose, onPublish 
             ? <><Loader2 size={14} className="animate-spin" /> Saving...</>
             : <><Save size={14} /> Save draft</>}
         </button>
-        <button
-          onClick={onClose}
-          className="flex items-center gap-1 border px-3 py-1.5 rounded text-sm hover:bg-muted"
-        >
-          <X size={14} /> Cancel
-        </button>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1 border px-3 py-1.5 rounded text-sm hover:bg-muted"
+          >
+            <X size={14} /> Cancel
+          </button>
+        )}
       </div>
     </div>
   );

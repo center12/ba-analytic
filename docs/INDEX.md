@@ -5,7 +5,7 @@ _Last updated: 2026-04-15_
 |---------|-----|---------|
 | auth | [docs/features/auth.md](features/auth.md) | Login/logout and JWT token management |
 | user | [docs/features/user.md](features/user.md) | Admin interface for creating and listing users |
-| project | [docs/features/project.md](features/project.md) | CRUD for projects/features, feature content editing, screenshot upload, SSR sub-feature extraction, and pipeline config |
+| project | [docs/features/project.md](features/project.md) | Project workspace for overview docs, feature editing, SSR extraction, and pipeline defaults |
 | feature | [docs/features/feature.md](features/feature.md) | Feature detail page for running the 5-step AI pipeline, reviewing outputs, and accessing developer tasks |
 | feature-analysis | [docs/features/feature-analysis.md](features/feature-analysis.md) | Test case list with priority/status management and step-by-step detail view (embedded in FeatureDetailPage) |
 | test-case | [docs/features/test-case.md](features/test-case.md) | Display and manage AI-generated test cases |

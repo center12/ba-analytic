@@ -1,13 +1,15 @@
-import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type Feature } from '@/lib/api';
-import { ArrowLeft, PlusCircle, Layers, Trash2, ChevronUp, Sparkles, FileText, AlertTriangle, Pencil } from 'lucide-react';
+import { ArrowLeft, Menu, PlusCircle, Sparkles, AlertTriangle, Trash2, Workflow } from 'lucide-react';
 import { PipelineConfigEditor } from './components/PipelineConfigEditor';
 import { ProjectOverview } from './components/ProjectOverview';
 import { FeatureContentEditor } from './components/FeatureContentEditor';
 import { SSRExtractModal } from './components/SSRExtractModal';
 import { SSRSyncWarningDialog } from './components/SSRSyncWarningDialog';
+import { ProjectWorkspaceSidebar } from './components/ProjectWorkspaceSidebar';
+import { ProjectFeatureStatusBadges } from './components/ProjectFeatureStatusBadges';
 import { AppFeedbackDialog } from '@/features/feedback/components/AppFeedbackDialog';
 import { useSSRSyncWarnings } from './hooks/use-feature-sync';
 import {
@@ -20,14 +22,10 @@ import {
 } from '@/components/ui/dialog';
 import { useAppStore } from '@/store';
 
-const FEATURE_TYPE_BADGE: Record<string, { label: string; className: string }> = {
-  SSR: { label: 'SSR', className: 'bg-amber-100 text-amber-800 border-amber-300' },
-  FEATURE: { label: 'Feature', className: 'bg-blue-100 text-blue-800 border-blue-300' },
-};
-
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
   const activeProvider = useAppStore((s) => s.activeProvider);
   const activeModel = useAppStore((s) => s.activeModel);
@@ -36,7 +34,7 @@ export function ProjectDetailPage() {
   const [description, setDescription] = useState('');
   const [featureType, setFeatureType] = useState<'FEATURE' | 'SSR'>('FEATURE');
   const [showForm, setShowForm] = useState(false);
-  const [expandedFeatureId, setExpandedFeatureId] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [ssrExtractFeatureId, setSsrExtractFeatureId] = useState<string | null>(null);
   const [ssrSyncWarningId, setSsrSyncWarningId] = useState<string | null>(null);
   const [featureToDelete, setFeatureToDelete] = useState<Feature | null>(null);
@@ -48,7 +46,7 @@ export function ProjectDetailPage() {
     setSsrSyncWarningId(featureId);
   };
 
-  const { data: project } = useQuery({
+  const { data: project, isLoading: isProjectLoading } = useQuery({
     queryKey: ['projects', projectId],
     queryFn: () => api.projects.get(projectId!),
     enabled: !!projectId,
@@ -62,238 +60,304 @@ export function ProjectDetailPage() {
 
   const createMutation = useMutation({
     mutationFn: () => api.features.create(projectId!, { name, description, featureType }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['features', projectId] });
+    onSuccess: async (createdFeature) => {
+      await qc.invalidateQueries({ queryKey: ['features', projectId] });
       setName('');
       setDescription('');
       setFeatureType('FEATURE');
       setShowForm(false);
+      setSearchParams({ feature: createdFeature.id });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.features.delete(id),
-    onSuccess: (_, deletedFeatureId) => {
-      qc.invalidateQueries({ queryKey: ['features', projectId] });
+    onSuccess: async (_, deletedFeatureId) => {
+      await qc.invalidateQueries({ queryKey: ['features', projectId] });
       setFeatureToDelete((current) => (current?.id === deletedFeatureId ? null : current));
-      setExpandedFeatureId((current) => (current === deletedFeatureId ? null : current));
       setSsrExtractFeatureId((current) => (current === deletedFeatureId ? null : current));
+      setSsrSyncWarningId((current) => (current === deletedFeatureId ? null : current));
+      if (searchParams.get('feature') === deletedFeatureId) {
+        setSearchParams({ view: 'overview' }, { replace: true });
+      }
     },
   });
+
+  const selectedFeatureId = searchParams.get('feature');
+  const selectedFeature = useMemo(
+    () => features.find((feature) => feature.id === selectedFeatureId) ?? null,
+    [features, selectedFeatureId],
+  );
+
+  useEffect(() => {
+    if (!selectedFeatureId || isLoading) return;
+    if (selectedFeature) return;
+    setSearchParams({ view: 'overview' }, { replace: true });
+  }, [isLoading, selectedFeature, selectedFeatureId, setSearchParams]);
 
   const ssrExtractFeature = ssrExtractFeatureId
     ? features.find((f: Feature) => f.id === ssrExtractFeatureId)
     : null;
 
-  return (
-    <div className="max-w-4xl mx-auto p-8">
-      <Link to="/projects" className="flex items-center gap-1 text-muted-foreground hover:text-foreground mb-6 text-sm">
-        <ArrowLeft size={14} /> All Projects
-      </Link>
+  const selectedSsrOutOfSyncCount = selectedFeature?.featureType === 'SSR'
+    ? features.filter(
+      (child) =>
+        child.extractedFromSSRId === selectedFeature.id && child.syncStatus === 'OUT_OF_SYNC',
+    ).length
+    : 0;
 
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">{project?.name}</h1>
-          {project?.description && (
-            <p className="text-muted-foreground mt-1">{project.description}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <AppFeedbackDialog
-            pageTitle="Project Detail"
-            contextLabel={project?.name || 'Project'}
-          />
+  const selectOverview = () => {
+    setSearchParams({ view: 'overview' });
+    setMobileMenuOpen(false);
+  };
+
+  const selectFeature = (featureId: string) => {
+    setSearchParams({ feature: featureId });
+    setMobileMenuOpen(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-4 py-4 sm:px-6 lg:px-8">
           <button
-            onClick={() => setShowForm(!showForm)}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90"
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            className="inline-flex items-center justify-center rounded-md border p-2 hover:bg-muted lg:hidden"
+            aria-label="Open project menu"
           >
-            <PlusCircle size={18} /> New Feature
+            <Menu size={18} />
           </button>
+
+          <Link
+            to="/projects"
+            className="hidden items-center gap-1 text-sm text-muted-foreground hover:text-foreground sm:flex"
+          >
+            <ArrowLeft size={14} /> All Projects
+          </Link>
+
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+              Project Workspace
+            </p>
+            <h1 className="truncate text-2xl font-semibold">
+              {project?.name ?? (isProjectLoading ? 'Loading project...' : 'Project')}
+            </h1>
+            {project?.description && (
+              <p className="truncate text-sm text-muted-foreground">{project.description}</p>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <AppFeedbackDialog
+              pageTitle="Project Detail"
+              contextLabel={project?.name || 'Project'}
+              className="hidden sm:flex"
+            />
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:opacity-90"
+            >
+              <PlusCircle size={16} /> New Feature
+            </button>
+          </div>
         </div>
+      </header>
+
+      <div className="mx-auto flex max-w-[1600px] gap-6 px-4 py-6 sm:px-6 lg:px-8">
+        <aside className="hidden w-80 shrink-0 lg:block">
+          <div className="sticky top-6">
+            <ProjectWorkspaceSidebar
+              features={features}
+              selectedFeatureId={selectedFeature?.id}
+              onSelectFeature={selectFeature}
+              onSelectOverview={selectOverview}
+            />
+          </div>
+        </aside>
+
+        <main className="min-w-0 flex-1">
+          <div className="mx-auto max-w-4xl space-y-6">
+            {selectedFeature ? (
+              <>
+                <section className="rounded-xl border bg-card p-6">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 space-y-3">
+                      <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                        Feature
+                      </p>
+                      <div>
+                        <h2 className="text-2xl font-semibold">{selectedFeature.name}</h2>
+                        {selectedFeature.description && (
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {selectedFeature.description}
+                          </p>
+                        )}
+                      </div>
+                      <ProjectFeatureStatusBadges feature={selectedFeature} />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {selectedFeature.featureType === 'SSR' && selectedFeature.content && (
+                        <button
+                          type="button"
+                          onClick={() => setSsrExtractFeatureId(selectedFeature.id)}
+                          className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-amber-50 hover:border-amber-300 hover:text-amber-800"
+                        >
+                          <Sparkles size={12} /> Extract
+                        </button>
+                      )}
+                      {selectedFeature.featureType === 'SSR' && selectedSsrOutOfSyncCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSsrSyncWarningId(selectedFeature.id)}
+                          className="inline-flex items-center gap-1 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800 hover:bg-yellow-100"
+                        >
+                          <AlertTriangle size={12} /> {selectedSsrOutOfSyncCount} out of sync
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/projects/${projectId}/features/${selectedFeature.id}`)}
+                        className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-muted"
+                      >
+                        <Workflow size={12} /> Pipeline
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFeatureToDelete(selectedFeature)}
+                        className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-destructive"
+                      >
+                        <Trash2 size={12} /> Delete
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-xl border bg-card p-6">
+                  <FeatureContentEditor
+                    key={selectedFeature.id}
+                    feature={selectedFeature}
+                    allFeatures={features}
+                    onPublish={(featureId) => {
+                      if (selectedFeature.featureType === 'SSR') {
+                        handlePublishSsrId(featureId);
+                      }
+                    }}
+                  />
+                </section>
+              </>
+            ) : (
+              <>
+                <section className="rounded-xl border bg-card p-6">
+                  <div className="mb-6 space-y-2">
+                    <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                      Overview
+                    </p>
+                    <h2 className="text-2xl font-semibold">{project?.name ?? 'Project overview'}</h2>
+                    {project?.description && (
+                      <p className="text-sm text-muted-foreground">{project.description}</p>
+                    )}
+                  </div>
+
+                  {project ? (
+                    <ProjectOverview project={project} />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      {isProjectLoading ? 'Loading overview...' : 'Project not found.'}
+                    </p>
+                  )}
+                </section>
+
+                <details className="rounded-xl border bg-card">
+                  <summary className="cursor-pointer select-none px-6 py-4 text-sm font-semibold">
+                    Pipeline AI Configuration
+                  </summary>
+                  <div className="px-6 pb-6 pt-1">
+                    <PipelineConfigEditor projectId={projectId!} />
+                  </div>
+                </details>
+              </>
+            )}
+          </div>
+        </main>
       </div>
 
-      {/* Project Overview */}
-      {project && (
-        <div className="border rounded-lg p-5 mb-6">
-          <ProjectOverview project={project} />
-        </div>
-      )}
+      <Dialog open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+        <DialogContent className="left-0 top-0 h-full w-[86vw] max-w-[320px] translate-x-0 translate-y-0 gap-0 rounded-none border-r p-0 data-[state=closed]:slide-out-to-left data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-left data-[state=open]:slide-in-from-top-0 sm:rounded-none">
+          <ProjectWorkspaceSidebar
+            className="h-full rounded-none border-0"
+            features={features}
+            selectedFeatureId={selectedFeature?.id}
+            onSelectFeature={selectFeature}
+            onSelectOverview={selectOverview}
+          />
+        </DialogContent>
+      </Dialog>
 
-      {/* Pipeline AI Configuration */}
-      <details className="border rounded-lg mb-6">
-        <summary className="px-5 py-3 font-semibold cursor-pointer select-none text-sm">
-          Pipeline AI Configuration
-        </summary>
-        <div className="px-5 pb-4 pt-2">
-          <PipelineConfigEditor projectId={projectId!} />
-        </div>
-      </details>
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create Feature</DialogTitle>
+            <DialogDescription>
+              Add a new feature or SSR document to this project workspace.
+            </DialogDescription>
+          </DialogHeader>
 
-      {/* Create Feature Form */}
-      {showForm && (
-        <div className="bg-card border rounded-lg p-6 mb-6 space-y-4">
-          <h2 className="font-semibold text-lg">Create Feature</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Type:</span>
-            {(['FEATURE', 'SSR'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setFeatureType(t)}
-                className={`text-sm px-3 py-1 rounded-full border transition-colors ${
-                  featureType === t
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'hover:bg-muted'
-                }`}
-              >
-                {t === 'SSR' ? 'SSR Document' : 'Feature'}
-              </button>
-            ))}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Type:</span>
+              {(['FEATURE', 'SSR'] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setFeatureType(type)}
+                  className={`text-sm px-3 py-1 rounded-full border transition-colors ${
+                    featureType === type
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'hover:bg-muted'
+                  }`}
+                >
+                  {type === 'SSR' ? 'SSR Document' : 'Feature'}
+                </button>
+              ))}
+            </div>
+
+            <input
+              className="w-full rounded-md border bg-background px-3 py-2"
+              placeholder="Feature name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <textarea
+              className="w-full resize-none rounded-md border bg-background px-3 py-2"
+              placeholder="Description (optional)"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
           </div>
-          <input
-            className="w-full border rounded-md px-3 py-2 bg-background"
-            placeholder="Feature name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <textarea
-            className="w-full border rounded-md px-3 py-2 bg-background resize-none"
-            placeholder="Description (optional)"
-            rows={2}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <div className="flex gap-2">
+
+          <DialogFooter>
             <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className="rounded-md border px-4 py-2 hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
               onClick={() => createMutation.mutate()}
-              disabled={!name || createMutation.isPending}
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-md hover:opacity-90 disabled:opacity-50"
+              disabled={!name.trim() || createMutation.isPending}
+              className="rounded-md bg-primary px-4 py-2 text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
               {createMutation.isPending ? 'Creating...' : 'Create'}
             </button>
-            <button onClick={() => setShowForm(false)} className="border px-4 py-2 rounded-md hover:bg-muted">
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Feature List */}
-      {isLoading ? (
-        <p className="text-muted-foreground">Loading...</p>
-      ) : features.length === 0 ? (
-        <p className="text-muted-foreground text-center py-16">No features yet.</p>
-      ) : (
-        <div className="grid gap-3">
-          {features.map((f: Feature) => {
-            const badge = FEATURE_TYPE_BADGE[f.featureType ?? 'FEATURE'];
-            const isExpanded = expandedFeatureId === f.id;
-            const outOfSyncCount = f.featureType === 'SSR'
-              ? features.filter((child: Feature) => child.extractedFromSSRId === f.id && child.syncStatus === 'OUT_OF_SYNC').length
-              : 0;
-
-            return (
-              <div key={f.id} className="bg-card border rounded-lg overflow-hidden">
-                <div className="p-4 flex items-center gap-3">
-                  <Layers size={18} className="text-primary shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono rounded border bg-muted/40 px-1.5 py-0.5 text-muted-foreground">
-                        {f.code}
-                      </span>
-                      <span className="font-semibold truncate">{f.name}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full border ${badge.className}`}>
-                        {badge.label}
-                      </span>
-                      {f.contentStatus === 'PUBLISHED' ? (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 border border-green-200">
-                          Published v{f.publishedVersion}
-                        </span>
-                      ) : f.content ? (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center gap-1">
-                          <FileText size={10} /> Draft
-                        </span>
-                      ) : null}
-                      {f.syncStatus === 'OUT_OF_SYNC' && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center gap-1">
-                          <AlertTriangle size={10} /> Out of Sync
-                        </span>
-                      )}
-                      {f.syncStatus === 'DIVERGED' && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
-                          Diverged
-                        </span>
-                      )}
-                    </div>
-                    {f.description && (
-                      <p className="text-sm text-muted-foreground truncate">{f.description}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {f.featureType === 'SSR' && f.content && (
-                      <button
-                        onClick={() => setSsrExtractFeatureId(f.id)}
-                        className="flex items-center gap-1 text-xs border px-2 py-1 rounded hover:bg-amber-50 hover:border-amber-300 hover:text-amber-800 transition-colors"
-                        title="Extract features from this SSR"
-                      >
-                        <Sparkles size={12} /> Extract
-                      </button>
-                    )}
-                    {f.featureType === 'SSR' && outOfSyncCount > 0 && (
-                      <button
-                        onClick={() => setSsrSyncWarningId(f.id)}
-                        className="flex items-center gap-1 text-xs border border-yellow-300 px-2 py-1 rounded bg-yellow-50 text-yellow-800 hover:bg-yellow-100 transition-colors"
-                        title="Review out-of-sync extracted features"
-                      >
-                        <AlertTriangle size={12} /> {outOfSyncCount} out of sync
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setExpandedFeatureId(isExpanded ? null : f.id)}
-                      className="flex items-center gap-1 text-xs border px-2 py-1 rounded hover:bg-muted"
-                      title="Edit document content"
-                    >
-                      <Pencil size={12} />
-                      {isExpanded ? (
-                        <><ChevronUp size={12} /> Close</>
-                      ) : (
-                        'Edit'
-                      )}
-                    </button>
-                    <button
-                      onClick={() => navigate(`/projects/${projectId}/features/${f.id}`)}
-                      className="text-xs border px-2 py-1 rounded hover:bg-muted"
-                    >
-                      Pipeline
-                    </button>
-                    <button
-                      onClick={() => setFeatureToDelete(f)}
-                      className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                {isExpanded && (
-                  <div className="border-t px-4 pb-4">
-                    <FeatureContentEditor
-                      feature={f}
-                      allFeatures={features}
-                      onClose={() => setExpandedFeatureId(null)}
-                      onPublish={(featureId) => {
-                        setExpandedFeatureId(null);
-                        if (f.featureType === 'SSR') {
-                          handlePublishSsrId(featureId);
-                        }
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* SSR Extraction Modal */}
       {ssrExtractFeature && (
