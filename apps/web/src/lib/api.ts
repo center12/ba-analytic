@@ -1,6 +1,6 @@
 import { getStoredToken, removeStoredToken } from '@/features/auth/helpers/auth.helpers';
 
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const BASE_URL = '/api';
 
 export function getStorageUrl(storageKey: string): string {
   return `${BASE_URL}/storage/${storageKey}`;
