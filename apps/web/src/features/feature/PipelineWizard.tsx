@@ -20,6 +20,7 @@ import { toast } from '@/hooks/use-toast';
 import { MANUAL_TEMPLATES } from './constants/pipeline-wizard.constants';
 import { arrToText, deriveStatus, getLayer1Data, textToArr } from './helpers/pipeline-wizard.helpers';
 import { StepHeader } from './components/pipeline-wizard/StepHeader';
+import { TokenUsagePanel } from './components/pipeline-wizard/TokenUsagePanel';
 import { PipelineStep1 } from './components/pipeline-wizard/PipelineStep1';
 import { PipelineStep2 } from './components/pipeline-wizard/PipelineStep2';
 import { PipelineStep3 } from './components/pipeline-wizard/PipelineStep3';
@@ -180,6 +181,7 @@ export function PipelineWizard({ featureId }: Props) {
     qc.invalidateQueries({ queryKey: ['features', featureId] });
     qc.invalidateQueries({ queryKey: ['feature-analysis', featureId] });
     qc.invalidateQueries({ queryKey: ['dev-tasks', featureId] });
+    qc.invalidateQueries({ queryKey: ['feature-token-usage', featureId] });
   };
 
   const runMutation = useMutation({
@@ -477,7 +479,9 @@ export function PipelineWizard({ featureId }: Props) {
   ];
 
   return (
-    <div className="space-y-2 px-6 py-4">
+    <div className="py-4">
+      <TokenUsagePanel featureId={featureId} />
+      <div className="space-y-2 px-6 pt-3">
       {steps.map(({ num, title, render }) => (
         <div key={num} className="border rounded-lg bg-card text-sm">
           <StepHeader
@@ -490,6 +494,7 @@ export function PipelineWizard({ featureId }: Props) {
           {openStep === num && render()}
         </div>
       ))}
+      </div>
     </div>
   );
 }

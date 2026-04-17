@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Project } from '@/lib/api';
 import { DocumentEditor } from '@/components/ui/DocumentEditor';
 import { MarkdownPreview } from '@/components/ui/MarkdownPreview';
 import { toast } from '@/hooks/use-toast';
-import { Edit2, Save, X, Copy } from 'lucide-react';
+import { Edit2, Save, X, Copy, Coins } from 'lucide-react';
 
 const OVERVIEW_TEMPLATE = `# Project Overview
 
@@ -139,6 +139,61 @@ export function ProjectOverview({ project }: ProjectOverviewProps) {
           {' '}to convert an existing document.
         </p>
       )}
+      <ProjectTokenStats projectId={project.id} />
+    </div>
+  );
+}
+
+function ProjectTokenStats({ projectId }: { projectId: string }) {
+  const { data } = useQuery({
+    queryKey: ['project-token-usage', projectId],
+    queryFn: () => api.projects.getTokenUsage(projectId),
+    staleTime: 60_000,
+  });
+
+  if (!data || data.totals.totalTokens === 0) return null;
+
+  const { features, totals } = data;
+
+  return (
+    <div className="mt-6 border rounded-lg bg-muted/30 text-sm">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b">
+        <Coins className="h-4 w-4 text-muted-foreground" />
+        <span className="font-medium">Token Usage</span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          Total: <span className="font-semibold text-foreground">{totals.totalTokens.toLocaleString()}</span>
+        </span>
+      </div>
+      <div className="overflow-x-auto px-4 pb-3 pt-1">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="border-b text-muted-foreground">
+              <th className="py-1.5 pr-4 text-left font-medium">Feature</th>
+              <th className="py-1.5 pr-4 text-right font-medium">Prompt</th>
+              <th className="py-1.5 pr-4 text-right font-medium">Completion</th>
+              <th className="py-1.5 text-right font-medium">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {features.filter(f => f.totalTokens > 0).map(f => (
+              <tr key={f.featureId} className="border-b border-border/50 hover:bg-muted/40">
+                <td className="py-1.5 pr-4">{f.featureName}</td>
+                <td className="py-1.5 pr-4 text-right tabular-nums">{f.promptTokens.toLocaleString()}</td>
+                <td className="py-1.5 pr-4 text-right tabular-nums">{f.completionTokens.toLocaleString()}</td>
+                <td className="py-1.5 text-right tabular-nums font-medium">{f.totalTokens.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="font-semibold">
+              <td className="py-1.5 pr-4">Total</td>
+              <td className="py-1.5 pr-4 text-right tabular-nums">{totals.promptTokens.toLocaleString()}</td>
+              <td className="py-1.5 pr-4 text-right tabular-nums">{totals.completionTokens.toLocaleString()}</td>
+              <td className="py-1.5 text-right tabular-nums">{totals.totalTokens.toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
   );
 }

@@ -27,6 +27,7 @@ import { PipelineContextService } from './pipeline-context.service';
 import { PipelinePersistenceService } from './pipeline-persistence.service';
 import { PipelineProviderService } from './pipeline-provider.service';
 import { FeatureSyncService } from '../feature-sync.service';
+import { TokenUsageService } from '../token-usage.service';
 import type { Layer1ResumePartial } from './types/pipeline-context.types';
 import type {
   SaveStepResultsPayload,
@@ -63,6 +64,7 @@ export class PipelineStepRunnerService {
     private readonly persistence: PipelinePersistenceService,
     private readonly providerService: PipelineProviderService,
     private readonly featureSync: FeatureSyncService,
+    private readonly tokenUsage: TokenUsageService,
     @Inject(STORAGE_PROVIDER) private readonly storage: IStorageProvider,
   ) {}
 
@@ -79,8 +81,10 @@ export class PipelineStepRunnerService {
     try {
       const provider = await this.providerService.resolveProvider(featureId, 1, providerName, model);
       const normalizedPromptAppend = this.providerService.normalizePromptAppend(promptAppend);
+      provider.resetSessionUsage();
       const layer1 = await this.extractLayer1(featureId, provider, 0, null, undefined, normalizedPromptAppend);
       const result = await this.persistence.saveLayer1Result(featureId, layer1, await this.resolveLegacyAcceptanceCriteria(featureId));
+      await this.tokenUsage.saveStepUsage(featureId, 1, null, provider.getSessionUsage(), provider.providerName, provider.modelVersion);
       // Mark extracted features as OUT_OF_SYNC when parent SSR stories change
       if (featureBefore?.featureType === 'SSR') {
         await this.featureSync.markAffectedOutOfSync(featureId, oldStories, layer1.stories.stories ?? []);
@@ -173,12 +177,14 @@ export class PipelineStepRunnerService {
     }
 
     const provider = await this.providerService.resolveProvider(featureId, 1, providerName, model);
+    provider.resetSessionUsage();
     const mapping = normalizeMapping(
       await withRetry(() => provider.extractMapping(parsed.ssr as SSRData, parsed.stories as UserStories)),
       parsed.ssr as SSRData,
       parsed.stories as UserStories,
     );
     await this.persistence.saveLayer1Mapping(featureId, mapping);
+    await this.tokenUsage.saveStepUsage(featureId, 1, 'mapping', provider.getSessionUsage(), provider.providerName, provider.modelVersion);
     return { mapping };
   }
 
@@ -193,10 +199,12 @@ export class PipelineStepRunnerService {
     }
 
     const provider = await this.providerService.resolveProvider(featureId, 1, providerName, model);
+    provider.resetSessionUsage();
     const validation = await withRetry(() =>
       provider.extractValidation(parsed.ssr as SSRData, parsed.stories as UserStories, parsed.mapping as Mapping),
     );
     await this.persistence.saveLayer1Validation(featureId, validation);
+    await this.tokenUsage.saveStepUsage(featureId, 1, 'validation', provider.getSessionUsage(), provider.providerName, provider.modelVersion);
     return { validation };
   }
 
@@ -213,6 +221,7 @@ export class PipelineStepRunnerService {
       const normalizedPromptAppend = this.providerService.normalizePromptAppend(promptAppend);
       const context = await this.context.getStep2Context(featureId, override as any);
       this.logger.log('[Pipeline] Step 2 — planning scenarios');
+      provider.resetSessionUsage();
       const testScenarios = await withRetry(() =>
         provider.planTestScenarios(
           context.compressedRequirements,
@@ -222,6 +231,7 @@ export class PipelineStepRunnerService {
         ),
       );
       await this.persistence.saveTestScenarios(featureId, testScenarios);
+      await this.tokenUsage.saveStepUsage(featureId, 2, null, provider.getSessionUsage(), provider.providerName, provider.modelVersion);
       return { testScenarios };
     } catch (error) {
       await this.persistence.markStepFailed(featureId, 2);
@@ -238,6 +248,7 @@ export class PipelineStepRunnerService {
       const totalBatches = Math.ceil(context.testScenarios.length / SCENARIO_BATCH);
       this.logger.log(`[Pipeline] Step 3 — ${context.testScenarios.length} scenarios in ${totalBatches} batch(es)`);
 
+      provider.resetSessionUsage();
       const allGenerated: GeneratedTestCase[] = [];
       for (let i = 0; i < context.testScenarios.length; i += SCENARIO_BATCH) {
         const batch = context.testScenarios.slice(i, i + SCENARIO_BATCH);
@@ -250,6 +261,7 @@ export class PipelineStepRunnerService {
 
       const scenarioTraceMap = this.context.buildScenarioTraceMap(context.testScenarios);
       const created = await this.persistence.replaceGeneratedTestCases(featureId, allGenerated, scenarioTraceMap, provider);
+      await this.tokenUsage.saveStepUsage(featureId, 3, null, provider.getSessionUsage(), provider.providerName, provider.modelVersion);
       return { generated: created.length, featureAnalyses: created };
     } catch (error) {
       await this.persistence.markStepFailed(featureId, 3);
@@ -264,6 +276,7 @@ export class PipelineStepRunnerService {
       const normalizedPromptAppend = this.providerService.normalizePromptAppend(promptAppend);
       const context = await this.context.getStep4Context(featureId);
 
+      provider.resetSessionUsage();
       this.logger.log('[Pipeline] Step 4A — generating workflow + backend plan');
       const { workflow, backend } = await withRetry(() =>
         provider.generateDevPlanWorkflowBackend(
@@ -315,6 +328,7 @@ export class PipelineStepRunnerService {
 
       const devPlan: DevPlan = { workflow, backend, frontend, testing: { backend: backendTesting, frontend: frontendTesting } };
       await this.persistence.saveDevPlan(featureId, devPlan);
+      await this.tokenUsage.saveStepUsage(featureId, 4, null, provider.getSessionUsage(), provider.providerName, provider.modelVersion);
 
       this.logger.log(`[Pipeline] Step 4 done — ${workflow.length} workflow steps, ${backend.apiRoutes.length} routes, ${frontend.components.length} components`);
       return { devPlan };
@@ -344,6 +358,7 @@ export class PipelineStepRunnerService {
     const normalizedPromptAppend = this.providerService.normalizePromptAppend(promptAppend);
     const context = await this.context.getStep4Context(featureId);
 
+    provider.resetSessionUsage();
     this.logger.log('[Pipeline] Step 4A (manual) — generating workflow + backend');
     const { workflow, backend } = await withRetry(() =>
       provider.generateDevPlanWorkflowBackend(
@@ -357,6 +372,7 @@ export class PipelineStepRunnerService {
     );
 
     await this.persistence.saveWorkflowBackend(featureId, workflow, backend);
+    await this.tokenUsage.saveStepUsage(featureId, 4, 'workflow-backend', provider.getSessionUsage(), provider.providerName, provider.modelVersion);
     return { workflow, backend };
   }
 
@@ -370,6 +386,7 @@ export class PipelineStepRunnerService {
     const provider = await this.providerService.resolveProvider(featureId, 4, providerName, model);
     const normalizedPromptAppend = this.providerService.normalizePromptAppend(promptAppend);
 
+    provider.resetSessionUsage();
     this.logger.log('[Pipeline] Step 4B (manual) — generating frontend plan');
     const frontend = await withRetry(() =>
       provider.generateDevPlanFrontend(
@@ -384,6 +401,7 @@ export class PipelineStepRunnerService {
     );
 
     await this.persistence.saveFrontendPlan(featureId, frontend);
+    await this.tokenUsage.saveStepUsage(featureId, 4, 'frontend', provider.getSessionUsage(), provider.providerName, provider.modelVersion);
     return { frontend };
   }
 
@@ -400,6 +418,7 @@ export class PipelineStepRunnerService {
     const provider = await this.providerService.resolveProvider(featureId, 4, providerName, model);
     const normalizedPromptAppend = this.providerService.normalizePromptAppend(promptAppend);
 
+    provider.resetSessionUsage();
     this.logger.log('[Pipeline] Step 4C-BE (manual) — generating backend testing plan');
     const backendTesting = await withRetry(() =>
       provider.generateDevPlanBackendTesting(
@@ -412,6 +431,7 @@ export class PipelineStepRunnerService {
     );
 
     await this.persistence.mergeTestingPlanSection(featureId, (feature as any).devPlanTesting, 'backend', backendTesting);
+    await this.tokenUsage.saveStepUsage(featureId, 4, 'testing-backend', provider.getSessionUsage(), provider.providerName, provider.modelVersion);
     return { backendTesting };
   }
 
@@ -430,6 +450,7 @@ export class PipelineStepRunnerService {
     const provider = await this.providerService.resolveProvider(featureId, 4, providerName, model);
     const normalizedPromptAppend = this.providerService.normalizePromptAppend(promptAppend);
 
+    provider.resetSessionUsage();
     this.logger.log('[Pipeline] Step 4C-FE (manual) — generating frontend testing plan');
     const frontendTesting = await withRetry(() =>
       provider.generateDevPlanFrontendTesting(
@@ -443,6 +464,7 @@ export class PipelineStepRunnerService {
     );
 
     await this.persistence.mergeTestingPlanSection(featureId, (feature as any).devPlanTesting, 'frontend', frontendTesting);
+    await this.tokenUsage.saveStepUsage(featureId, 4, 'testing-frontend', provider.getSessionUsage(), provider.providerName, provider.modelVersion);
     return { frontendTesting };
   }
 
@@ -458,6 +480,7 @@ export class PipelineStepRunnerService {
       const normalizedPromptAppend = this.providerService.normalizePromptAppend(promptAppend);
       const context = await this.context.getStep5Context(featureId);
 
+      provider.resetSessionUsage();
       this.logger.log('[Pipeline] Step 5 — generating dev prompts');
       const devPrompt = await withRetry(() =>
         provider.generateDevPrompt(
@@ -472,6 +495,7 @@ export class PipelineStepRunnerService {
       );
 
       await this.persistence.saveDevPrompt(featureId, devPrompt);
+      await this.tokenUsage.saveStepUsage(featureId, 5, null, provider.getSessionUsage(), provider.providerName, provider.modelVersion);
       const taskRowsCount = devPrompt.api.length + devPrompt.frontend.length + devPrompt.testing.length;
       this.logger.log(`[Pipeline] Step 5 — created ${taskRowsCount} dev task(s) (${devPrompt.api.length} API, ${devPrompt.frontend.length} Frontend, ${devPrompt.testing.length} Testing)`);
       return { devPrompt };
@@ -494,6 +518,7 @@ export class PipelineStepRunnerService {
       const normalizedPromptAppend = this.providerService.normalizePromptAppend(promptAppend);
       const context = await this.context.getStep5Context(featureId);
 
+      provider.resetSessionUsage();
       this.logger.log(`[Pipeline] Step 5 (${normalizedSection}) — generating section prompts`);
       const devPrompt = await withRetry(() =>
         provider.generateDevPrompt(
@@ -509,6 +534,7 @@ export class PipelineStepRunnerService {
 
       const sectionTasks = devPrompt[normalizedSection] ?? [];
       await this.persistence.saveDevPromptSection(featureId, normalizedSection, sectionTasks);
+      await this.tokenUsage.saveStepUsage(featureId, 5, normalizedSection, provider.getSessionUsage(), provider.providerName, provider.modelVersion);
       this.logger.log(`[Pipeline] Step 5 (${normalizedSection}) — created ${sectionTasks.length} task(s)`);
       return { section: normalizedSection === 'api' ? 'backend' : normalizedSection, tasksGenerated: sectionTasks.length };
     } catch (error) {

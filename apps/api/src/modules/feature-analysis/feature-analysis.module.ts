@@ -13,6 +13,7 @@ import { PipelinePersistenceService } from './pipeline/pipeline-persistence.serv
 import { PipelinePromptPreviewService } from './pipeline/pipeline-prompt-preview.service';
 import { PipelineProviderService } from './pipeline/pipeline-provider.service';
 import { PipelineStepRunnerService } from './pipeline/pipeline-step-runner.service';
+import { TokenUsageService } from './token-usage.service';
 
 @Module({
   imports: [AIModule, StorageModule],
@@ -29,7 +30,8 @@ import { PipelineStepRunnerService } from './pipeline/pipeline-step-runner.servi
     PipelinePromptPreviewService,
     DocumentVersionService,
     PrismaService,
+    TokenUsageService,
   ],
-  exports: [ChangeDetectionService, FeatureSyncService, DocumentVersionService, PipelineStepRunnerService],
+  exports: [ChangeDetectionService, FeatureSyncService, DocumentVersionService, PipelineStepRunnerService, TokenUsageService],
 })
 export class FeatureAnalysisModule {}

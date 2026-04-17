@@ -391,6 +391,7 @@ export class OpenAIProvider extends AIProvider {
       prompt: prompt1,
     });
     this.logger.log(`[Layer 1] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 1]', response.headers);
     return object as CombinedExtraction;
   }
@@ -408,6 +409,7 @@ export class OpenAIProvider extends AIProvider {
       prompt: promptSynth,
     });
     this.logger.log(`[Layer 1 synthesis] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 1 synthesis]', response.headers);
     return object as CombinedExtraction;
   }
@@ -424,6 +426,7 @@ export class OpenAIProvider extends AIProvider {
       prompt,
     });
     this.logger.log(`[Layer 1A] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 1A]', response.headers);
     return object as SSRData;
   }
@@ -438,6 +441,7 @@ export class OpenAIProvider extends AIProvider {
       prompt,
     });
     this.logger.log(`[Layer 1A synthesis] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 1A synthesis]', response.headers);
     return object as SSRData;
   }
@@ -452,6 +456,7 @@ export class OpenAIProvider extends AIProvider {
       prompt,
     });
     this.logger.log(`[Layer 1B] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 1B]', response.headers);
     return object as UserStories;
   }
@@ -466,6 +471,7 @@ export class OpenAIProvider extends AIProvider {
       prompt,
     });
     this.logger.log(`[Layer 1B synthesis] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 1B synthesis]', response.headers);
     return object as UserStories;
   }
@@ -480,6 +486,7 @@ export class OpenAIProvider extends AIProvider {
       prompt,
     });
     this.logger.log(`[Layer 1AB] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 1AB]', response.headers);
     return object as Layer1ABPartial;
   }
@@ -494,6 +501,7 @@ export class OpenAIProvider extends AIProvider {
       prompt,
     });
     this.logger.log(`[Layer 1AB synthesis] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 1AB synthesis]', response.headers);
     return object as Layer1ABPartial;
   }
@@ -508,6 +516,7 @@ export class OpenAIProvider extends AIProvider {
       prompt,
     });
     this.logger.log(`[Layer 1C] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 1C]', response.headers);
     return object as Mapping;
   }
@@ -522,6 +531,7 @@ export class OpenAIProvider extends AIProvider {
       prompt,
     });
     this.logger.log(`[Layer 1D] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 1D]', response.headers);
     return object as ValidationResult;
   }
@@ -549,6 +559,7 @@ Be thorough — missing a requirement means missing test coverage.`;
       prompt: prompt1a,
     });
     this.logger.log(`[Layer 1A] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 1A]', response.headers);
     return object as ExtractedRequirements;
   }
@@ -590,6 +601,7 @@ ${baDocumentContent}`;
       prompt: prompt1b,
     });
     this.logger.log(`[Layer 1B] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 1B]', response.headers);
     return object as ExtractedBehaviors;
   }
@@ -611,6 +623,7 @@ ${baDocumentContent}`;
       prompt: prompt2,
     });
     this.logger.log(`[Layer 2] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 2]', response.headers);
     return object.scenarios as TestScenario[];
   }
@@ -632,6 +645,7 @@ ${baDocumentContent}`;
       prompt: prompt3,
     });
     this.logger.log(`[Layer 3] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Layer 3]', response.headers);
     return object.testCases as GeneratedTestCase[];
   }
@@ -658,6 +672,7 @@ ${baDocumentContent}`;
       prompt: prompt4a,
     });
     this.logger.log(`[Step 4A] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Step 4A]', response.headers);
     return object as { workflow: WorkflowStep[]; backend: BackendPlan };
   }
@@ -685,6 +700,7 @@ ${baDocumentContent}`;
       prompt: prompt4b,
     });
     this.logger.log(`[Step 4B] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Step 4B]', response.headers);
     return object as FrontendPlan;
   }
@@ -710,6 +726,7 @@ ${baDocumentContent}`;
       prompt,
     });
     this.logger.log(`[Step 4C-BE] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Step 4C-BE]', response.headers);
     return object as BackendTestingPlan;
   }
@@ -734,6 +751,7 @@ ${baDocumentContent}`;
       prompt,
     });
     this.logger.log(`[Step 4C-FE] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Step 4C-FE]', response.headers);
     return object as FrontendTestingPlan;
   }
@@ -761,6 +779,7 @@ ${baDocumentContent}`;
       prompt: prompt4,
     });
     this.logger.log(`[Step 5] tokens — prompt: ${usage.promptTokens}, completion: ${usage.completionTokens}, total: ${usage.totalTokens}`);
+    this.trackUsage(usage);
     this.logRateLimit('[Step 5]', response.headers);
     return object as DevPrompt;
   }

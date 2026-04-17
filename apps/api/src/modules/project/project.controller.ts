@@ -23,6 +23,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { ProjectService } from './project.service';
+import { TokenUsageService } from '../feature-analysis/token-usage.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { CreateFeatureDto, UpdateFeatureDto } from './dto/create-feature.dto';
@@ -31,7 +32,10 @@ import { UpsertPipelineConfigDto } from './dto/upsert-pipeline-config.dto';
 @ApiTags('Projects')
 @Controller('projects')
 export class ProjectController {
-  constructor(private readonly service: ProjectService) {}
+  constructor(
+    private readonly service: ProjectService,
+    private readonly tokenUsage: TokenUsageService,
+  ) {}
 
   // ── Projects ──────────────────────────────────────────────────────────────
 
@@ -202,5 +206,13 @@ export class ProjectController {
     @Param('step', ParseIntPipe) step: number,
   ) {
     return this.service.deleteProjectPipelineConfigStep(projectId, step);
+  }
+
+  @ApiOperation({ summary: 'Get aggregated token usage for all features in a project' })
+  @ApiParam({ name: 'projectId', description: 'Project identifier.' })
+  @ApiOkResponse({ description: 'Token usage per feature returned.' })
+  @Get(':projectId/token-usage')
+  getProjectTokenUsage(@Param('projectId') projectId: string) {
+    return this.tokenUsage.getProjectTokenUsage(projectId);
   }
 }

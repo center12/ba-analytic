@@ -95,6 +95,7 @@ model Feature {
   chatSessions          ChatSession[]
   developerTasks        DeveloperTask[]
   featureChangelogs     FeatureChangelog[]
+  pipelineTokenUsage    PipelineTokenUsage[]
 
   @@unique([projectId, code])
   @@index([extractedFromSSRId])
@@ -232,4 +233,22 @@ model DeveloperTask {
   userStoryIds  Json?           // Array of US-xx IDs this task implements
   createdAt     DateTime        @default(now())
   feature       Feature         @relation(fields: [featureId], references: [id], onDelete: Cascade)
+}
+
+model PipelineTokenUsage {
+  id               String   @id @default(cuid())
+  featureId        String
+  step             Int
+  section          String   // '*' for full-step runs; named section for partial runs
+  promptTokens     Int
+  completionTokens Int
+  totalTokens      Int
+  provider         String
+  model            String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  feature          Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@unique([featureId, step, section])
+  @@index([featureId])
 }

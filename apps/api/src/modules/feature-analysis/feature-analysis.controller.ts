@@ -23,6 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { FeatureAnalysisService } from './feature-analysis.service';
 import { FeatureSyncService } from './feature-sync.service';
+import { TokenUsageService } from './token-usage.service';
 import { UpdateFeatureAnalysisDto } from './dto/update-feature-analysis.dto';
 import { SSRSyncWarningsResponseDto, SyncStatusDto } from './dto/feature-sync.dto';
 import { PromptAppendDto, RunFeatureAnalysisStepDto } from './dto/run-feature-analysis-step.dto';
@@ -33,6 +34,7 @@ export class FeatureAnalysisController {
   constructor(
     private readonly service: FeatureAnalysisService,
     private readonly featureSync: FeatureSyncService,
+    private readonly tokenUsage: TokenUsageService,
   ) {}
 
   /**
@@ -345,5 +347,17 @@ export class FeatureAnalysisController {
   @HttpCode(HttpStatus.NO_CONTENT)
   syncRemove(@Param('featureId') featureId: string) {
     return this.featureSync.remove(featureId);
+  }
+
+  /**
+   * GET /api/feature-analysis/feature/:featureId/token-usage
+   * Returns token usage per pipeline step for the feature.
+   */
+  @ApiOperation({ summary: 'Get token usage per pipeline step for a feature' })
+  @ApiParam({ name: 'featureId', description: 'Feature identifier.' })
+  @ApiOkResponse({ description: 'Token usage per step returned.' })
+  @Get('feature/:featureId/token-usage')
+  getFeatureTokenUsage(@Param('featureId') featureId: string) {
+    return this.tokenUsage.getFeatureTokenUsage(featureId);
   }
 }

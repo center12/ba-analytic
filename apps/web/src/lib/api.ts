@@ -75,6 +75,37 @@ async function requestBlob(path: string, init?: RequestInit): Promise<Blob> {
   return res.blob();
 }
 
+// ── Token Usage ──────────────────────────────────────────────────────────────
+
+export interface TokenUsageSummary {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface StepTokenUsage extends TokenUsageSummary {
+  step: number;
+  section: string | null;
+  provider: string;
+  model: string;
+  createdAt: string;
+}
+
+export interface FeatureTokenUsageResult {
+  steps: StepTokenUsage[];
+  totals: TokenUsageSummary;
+}
+
+export interface FeatureUsageSummary extends TokenUsageSummary {
+  featureId: string;
+  featureName: string;
+}
+
+export interface ProjectTokenUsageResult {
+  features: FeatureUsageSummary[];
+  totals: TokenUsageSummary;
+}
+
 // ── Projects ──────────────────────────────────────────────────────────────
 
 export const api = {
@@ -113,6 +144,9 @@ export const api = {
 
     deletePipelineConfigStep: (projectId: string, step: number) =>
       request<void>(`/projects/${projectId}/pipeline-config/${step}`, { method: 'DELETE' }),
+
+    getTokenUsage: (projectId: string) =>
+      request<ProjectTokenUsageResult>(`/projects/${projectId}/token-usage`),
   },
 
   features: {
@@ -316,6 +350,9 @@ export const api = {
 
     syncRemove: (featureId: string) =>
       request<void>(`/feature-analysis/feature/${featureId}/sync/remove`, { method: 'DELETE' }),
+
+    getTokenUsage: (featureId: string) =>
+      request<FeatureTokenUsageResult>(`/feature-analysis/feature/${featureId}/token-usage`),
   },
 
   chat: {

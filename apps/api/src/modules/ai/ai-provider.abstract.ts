@@ -1750,6 +1750,12 @@ Return ONLY valid JSON (no markdown, no explanation):
  * Abstract base class for all AI providers.
  * Concrete implementations: GeminiProvider, ClaudeProvider, OpenAIProvider.
  */
+export interface TokenUsageSummary {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 export abstract class AIProvider {
   abstract readonly providerName: string;
   abstract readonly modelVersion: string;
@@ -1765,6 +1771,19 @@ export abstract class AIProvider {
     (clone as any).modelVersion = model;
     return clone;
   }
+
+  // ── Token usage accumulator ──────────────────────────────────────────────────
+
+  protected _sessionUsage: TokenUsageSummary = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+
+  protected trackUsage(usage: { promptTokens: number; completionTokens: number; totalTokens: number }): void {
+    this._sessionUsage.promptTokens     += usage.promptTokens;
+    this._sessionUsage.completionTokens += usage.completionTokens;
+    this._sessionUsage.totalTokens      += usage.totalTokens;
+  }
+
+  getSessionUsage(): TokenUsageSummary { return { ...this._sessionUsage }; }
+  resetSessionUsage(): void { this._sessionUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }; }
 
   // ── New Layer 1 (4-sublayer) methods ────────────────────────────────────────
 
