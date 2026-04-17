@@ -4,6 +4,15 @@ import { useNavigate } from 'react-router-dom';
 import { api, type Project } from '@/lib/api';
 import { PlusCircle, FolderOpen, Trash2, Users, LogOut, List } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 export function ProjectsPage() {
   const navigate = useNavigate();
@@ -12,6 +21,7 @@ export function ProjectsPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects'],
@@ -30,7 +40,10 @@ export function ProjectsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.projects.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      setProjectToDelete(null);
+    },
   });
 
   return (
@@ -131,7 +144,7 @@ export function ProjectsPage() {
                 </div>
               </button>
               <button
-                onClick={() => deleteMutation.mutate(p.id)}
+                onClick={() => setProjectToDelete(p)}
                 className="text-muted-foreground hover:text-destructive p-2 rounded"
               >
                 <Trash2 size={16} />
@@ -140,6 +153,28 @@ export function ProjectsPage() {
           ))}
         </div>
       )}
+      <Dialog open={!!projectToDelete} onOpenChange={(open) => { if (!open) setProjectToDelete(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Project</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <span className="font-semibold">{projectToDelete?.name}</span>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProjectToDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() => projectToDelete && deleteMutation.mutate(projectToDelete.id)}
+            >
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
